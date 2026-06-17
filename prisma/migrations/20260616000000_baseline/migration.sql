@@ -2,16 +2,56 @@
 CREATE SCHEMA IF NOT EXISTS "finance";
 
 -- CreateEnum
-CREATE TYPE "finance"."AccountType" AS ENUM ('CHECKING', 'SAVINGS', 'INVESTMENT', 'CASH');
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type t
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE t.typname = 'AccountType' AND n.nspname = 'finance'
+    ) THEN
+        CREATE TYPE "finance"."AccountType" AS ENUM ('CHECKING', 'SAVINGS', 'INVESTMENT', 'CASH');
+    END IF;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "finance"."TransactionType" AS ENUM ('INFLOW', 'OUTFLOW');
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type t
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE t.typname = 'TransactionType' AND n.nspname = 'finance'
+    ) THEN
+        CREATE TYPE "finance"."TransactionType" AS ENUM ('INFLOW', 'OUTFLOW');
+    END IF;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "finance"."RecurrenceInterval" AS ENUM ('WEEKLY', 'MONTHLY', 'YEARLY');
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type t
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE t.typname = 'RecurrenceInterval' AND n.nspname = 'finance'
+    ) THEN
+        CREATE TYPE "finance"."RecurrenceInterval" AS ENUM ('WEEKLY', 'MONTHLY', 'YEARLY');
+    END IF;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "finance"."DebtStatus" AS ENUM ('PENDING', 'PARTIAL', 'PAID');
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type t
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE t.typname = 'DebtStatus' AND n.nspname = 'finance'
+    ) THEN
+        CREATE TYPE "finance"."DebtStatus" AS ENUM ('PENDING', 'PARTIAL', 'PAID');
+    END IF;
+END $$;
 
 -- CreateTable
 CREATE TABLE "finance"."users" (
@@ -152,212 +192,6 @@ CREATE TABLE "finance"."debt_payments" (
     CONSTRAINT "debt_payments_pkey" PRIMARY KEY ("id")
 );
 
--- Migrate data from legacy camelCase tables to snake_case tables.
-INSERT INTO "finance"."users" (
-    "id",
-    "name",
-    "email",
-    "email_verified",
-    "image",
-    "password_hash",
-    "preferred_currency",
-    "created_at"
-)
-SELECT
-    "id",
-    "name",
-    "email",
-    "emailVerified",
-    "image",
-    "passwordHash",
-    "preferredCurrency",
-    "createdAt"
-FROM "User";
-
-INSERT INTO "finance"."accounts" (
-    "id",
-    "user_id",
-    "type",
-    "provider",
-    "provider_account_id",
-    "refresh_token",
-    "access_token",
-    "expires_at",
-    "token_type",
-    "scope",
-    "id_token",
-    "session_state"
-)
-SELECT
-    "id",
-    "userId",
-    "type",
-    "provider",
-    "providerAccountId",
-    "refresh_token",
-    "access_token",
-    "expires_at",
-    "token_type",
-    "scope",
-    "id_token",
-    "session_state"
-FROM "Account";
-
-INSERT INTO "finance"."sessions" (
-    "id",
-    "session_token",
-    "user_id",
-    "expires"
-)
-SELECT
-    "id",
-    "sessionToken",
-    "userId",
-    "expires"
-FROM "Session";
-
-INSERT INTO "finance"."verification_tokens" (
-    "identifier",
-    "token",
-    "expires"
-)
-SELECT
-    "identifier",
-    "token",
-    "expires"
-FROM "VerificationToken";
-
-INSERT INTO "finance"."financial_accounts" (
-    "id",
-    "name",
-    "type",
-    "currency",
-    "initial_balance",
-    "user_id",
-    "created_at"
-)
-SELECT
-    "id",
-    "name",
-    CASE WHEN "type"::text = 'CREDIT_CARD' THEN 'CASH' ELSE "type"::text END::"finance"."AccountType",
-    "currency",
-    "initialBalance",
-    "userId",
-    "createdAt"
-FROM "FinancialAccount";
-
-INSERT INTO "finance"."balance_snapshots" (
-    "id",
-    "amount",
-    "created_at",
-    "account_id"
-)
-SELECT
-    "id",
-    "amount",
-    "createdAt",
-    "accountId"
-FROM "BalanceSnapshot";
-
-INSERT INTO "finance"."categories" (
-    "id",
-    "name",
-    "color",
-    "user_id"
-)
-SELECT
-    "id",
-    "name",
-    "color",
-    "userId"
-FROM "Category";
-
-INSERT INTO "finance"."transactions" (
-    "id",
-    "amount",
-    "type",
-    "date",
-    "description",
-    "fx_rate_at_creation",
-    "account_id",
-    "category_id",
-    "user_id",
-    "created_at"
-)
-SELECT
-    "id",
-    "amount",
-    "type"::text::"finance"."TransactionType",
-    "date",
-    "description",
-    "fxRateAtCreation",
-    "accountId",
-    "categoryId",
-    "userId",
-    "createdAt"
-FROM "Transaction";
-
-INSERT INTO "finance"."recurring_expenses" (
-    "id",
-    "name",
-    "amount",
-    "currency",
-    "interval",
-    "next_due_date",
-    "active",
-    "category_id",
-    "user_id"
-)
-SELECT
-    "id",
-    "name",
-    "amount",
-    "currency",
-    "interval"::text::"finance"."RecurrenceInterval",
-    "nextDueDate",
-    "active",
-    "categoryId",
-    "userId"
-FROM "RecurringExpense";
-
-INSERT INTO "finance"."debts" (
-    "id",
-    "debtor_name",
-    "description",
-    "total_amount",
-    "currency",
-    "due_date",
-    "status",
-    "user_id",
-    "created_at"
-)
-SELECT
-    "id",
-    "debtorName",
-    "description",
-    "totalAmount",
-    "currency",
-    "dueDate",
-    "status"::text::"finance"."DebtStatus",
-    "userId",
-    "createdAt"
-FROM "Debt";
-
-INSERT INTO "finance"."debt_payments" (
-    "id",
-    "amount",
-    "payment_date",
-    "fx_rate_at_creation",
-    "debt_id"
-)
-SELECT
-    "id",
-    "amount",
-    "paymentDate",
-    "fxRateAtCreation",
-    "debtId"
-FROM "DebtPayment";
-
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "finance"."users"("email");
 
@@ -441,27 +275,3 @@ ALTER TABLE "finance"."debts" ADD CONSTRAINT "debts_user_id_fkey" FOREIGN KEY ("
 
 -- AddForeignKey
 ALTER TABLE "finance"."debt_payments" ADD CONSTRAINT "debt_payments_debt_id_fkey" FOREIGN KEY ("debt_id") REFERENCES "finance"."debts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- Remove legacy camelCase tables and enums after successful migration.
-DROP TABLE IF EXISTS "finance"."DebtPayment";
-DROP TABLE IF EXISTS "finance"."Debt";
-DROP TABLE IF EXISTS "finance"."RecurringExpense";
-DROP TABLE IF EXISTS "finance"."Transaction";
-DROP TABLE IF EXISTS "finance"."Category";
-DROP TABLE IF EXISTS "finance"."BalanceSnapshot";
-DROP TABLE IF EXISTS "finance"."FinancialAccount";
-DROP TABLE IF EXISTS "finance"."VerificationToken";
-DROP TABLE IF EXISTS "finance"."Session";
-DROP TABLE IF EXISTS "finance"."Account";
-DROP TABLE IF EXISTS "finance"."User";
-DROP TABLE IF EXISTS "DebtPayment";
-DROP TABLE IF EXISTS "Debt";
-DROP TABLE IF EXISTS "RecurringExpense";
-DROP TABLE IF EXISTS "Transaction";
-DROP TABLE IF EXISTS "Category";
-DROP TABLE IF EXISTS "BalanceSnapshot";
-DROP TABLE IF EXISTS "FinancialAccount";
-DROP TABLE IF EXISTS "VerificationToken";
-DROP TABLE IF EXISTS "Session";
-DROP TABLE IF EXISTS "Account";
-DROP TABLE IF EXISTS "User";

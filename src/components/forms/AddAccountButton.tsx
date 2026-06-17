@@ -16,15 +16,8 @@ import { notifications } from "@mantine/notifications";
 import { Plus } from "lucide-react";
 
 import { accountSchema } from "@/lib/validations";
+import { ACCOUNT_TYPES } from "@/lib/accountTypes";
 import { createAccount } from "@/actions/accounts";
-
-const ACCOUNT_TYPES = [
-  { value: "CHECKING", label: "Conta corrente" },
-  { value: "SAVINGS", label: "Poupança" },
-  { value: "INVESTMENT", label: "Investimento" },
-  { value: "CREDIT_CARD", label: "Cartão de crédito" },
-  { value: "CASH", label: "Dinheiro" },
-];
 
 export function AddAccountButton() {
   const [opened, { open, close }] = useDisclosure(false);
