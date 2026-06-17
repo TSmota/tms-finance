@@ -32,6 +32,44 @@ export async function createCategory(input: unknown): Promise<CategoryActionResu
 
   revalidatePath("/dashboard/monthly-costs");
   revalidatePath("/dashboard/recurring");
+  revalidatePath("/dashboard/categories");
+
+  return { ok: true };
+}
+
+/**
+ * Updates an existing category for the authenticated user.
+ *
+ * @param id The ID of the category to update.
+ * @param input The updated category data.
+ * @returns The result of the category update action.
+ */
+export async function updateCategory(id: string, input: unknown): Promise<CategoryActionResult> {
+  const user = await requireUser();
+  const parsed = categorySchema.safeParse(input);
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Entrada inválida",
+    };
+  }
+
+  const { count } = await prisma.category.updateMany({
+    where: { id, userId: user.id },
+    data: parsed.data,
+  });
+
+  if (count === 0) {
+    return {
+      ok: false,
+      error: "Categoria não encontrada",
+    };
+  }
+
+  revalidatePath("/dashboard/monthly-costs");
+  revalidatePath("/dashboard/recurring");
+  revalidatePath("/dashboard/categories");
 
   return { ok: true };
 }
@@ -57,6 +95,7 @@ export async function deleteCategory(id: string): Promise<CategoryActionResult> 
 
   revalidatePath("/dashboard/monthly-costs");
   revalidatePath("/dashboard/recurring");
+  revalidatePath("/dashboard/categories");
   
   return { ok: true };
 }

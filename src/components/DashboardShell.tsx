@@ -4,30 +4,32 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
-  AppShell,
-  Burger,
-  Group,
-  NavLink,
-  ScrollArea,
-  Text,
-  Menu,
-  Avatar,
-  UnstyledButton,
+    AppShell,
+    Burger,
+    Group,
+    NavLink,
+    ScrollArea,
+    Text,
+    Menu,
+    Avatar,
+    UnstyledButton,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import {
-  LayoutDashboard,
-  Receipt,
-  Repeat,
-  Wallet,
-  HandCoins,
-  LogOut,
+    LayoutDashboard,
+    Receipt,
+    Repeat,
+    Wallet,
+    Tags,
+    HandCoins,
+    LogOut,
 } from "lucide-react";
 import { User } from "next-auth";
 
 const links = [
   { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
   { href: "/dashboard/monthly-costs", label: "Custos mensais", icon: Receipt },
+  { href: "/dashboard/categories", label: "Categorias", icon: Tags },
   { href: "/dashboard/recurring", label: "Recorrentes", icon: Repeat },
   { href: "/dashboard/accounts", label: "Contas", icon: Wallet },
   { href: "/dashboard/debts", label: "Dívidas", icon: HandCoins },
