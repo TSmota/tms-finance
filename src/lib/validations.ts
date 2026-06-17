@@ -13,7 +13,7 @@ export const registerSchema = z.object({
 
 export const accountSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
-  type: z.enum(["CHECKING", "SAVINGS", "INVESTMENT", "CREDIT_CARD", "CASH"]),
+  type: z.enum(["CHECKING", "SAVINGS", "INVESTMENT", "CASH"]),
   currency: z.string().length(3, "Use um código de moeda com 3 letras").toUpperCase(),
   initialBalance: z.coerce.number().default(0),
 });
@@ -31,7 +31,6 @@ export const transactionSchema = z.object({
 export const categorySchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Cor inválida"),
-  isRecurring: z.boolean().default(false),
 });
 
 export const recurringExpenseSchema = z.object({

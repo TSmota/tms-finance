@@ -35,7 +35,7 @@ async function main() {
     data: { name: "Mercado", color: "#40c057", userId: user.id },
   });
   const subscriptions = await prisma.category.create({
-    data: { name: "Assinaturas", color: "#7950f2", isRecurring: true, userId: user.id },
+    data: { name: "Assinaturas", color: "#7950f2", userId: user.id },
   });
   const salary = await prisma.category.create({
     data: { name: "Salário", color: "#228be6", userId: user.id },

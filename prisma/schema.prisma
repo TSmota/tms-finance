@@ -11,7 +11,6 @@ enum AccountType {
   CHECKING
   SAVINGS
   INVESTMENT
-  CREDIT_CARD
   CASH
 
   @@schema("finance")
@@ -44,11 +43,11 @@ model User {
   id                String             @id @default(cuid())
   name              String?
   email             String             @unique
-  emailVerified     DateTime?
+  emailVerified     DateTime?          @map("email_verified")
   image             String?
-  passwordHash      String?
-  preferredCurrency String             @default("BRL")
-  createdAt         DateTime           @default(now())
+  passwordHash      String?            @map("password_hash")
+  preferredCurrency String             @default("BRL") @map("preferred_currency")
+  createdAt         DateTime           @default(now()) @map("created_at")
   accounts          Account[]
   sessions          Session[]
   financialAccounts FinancialAccount[]
@@ -57,15 +56,16 @@ model User {
   recurringExpenses RecurringExpense[]
   debts             Debt[]
 
+  @@map("users")
   @@schema("finance")
 }
 
 model Account {
   id                String  @id @default(cuid())
-  userId            String
+  userId            String  @map("user_id")
   type              String
   provider          String
-  providerAccountId String
+  providerAccountId String  @map("provider_account_id")
   refresh_token     String? @db.Text
   access_token      String? @db.Text
   expires_at        Int?
@@ -77,16 +77,18 @@ model Account {
 
   @@unique([provider, providerAccountId])
   @@index([userId])
+  @@map("accounts")
   @@schema("finance")
 }
 
 model Session {
   id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@map("sessions")
   @@schema("finance")
 }
 
@@ -96,33 +98,36 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+  @@map("verification_tokens")
   @@schema("finance")
 }
 
 model FinancialAccount {
-  id             String         @id @default(cuid())
+  id             String            @id @default(cuid())
   name           String
   type           AccountType
   currency       String
-  initialBalance Decimal        @default(0) @db.Decimal(18, 2)
-  userId         String
-  createdAt      DateTime       @default(now())
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  initialBalance Decimal           @default(0) @db.Decimal(18, 2) @map("initial_balance")
+  userId         String            @map("user_id")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions   Transaction[]
   snapshots      BalanceSnapshot[]
 
   @@index([userId])
+  @@map("financial_accounts")
   @@schema("finance")
 }
 
 model BalanceSnapshot {
   id        String           @id @default(cuid())
   amount    Decimal          @db.Decimal(18, 2)
-  createdAt DateTime         @default(now())
-  accountId String
+  createdAt DateTime         @default(now()) @map("created_at")
+  accountId String           @map("account_id")
   account   FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
+  @@map("balance_snapshots")
   @@schema("finance")
 }
 
@@ -130,13 +135,13 @@ model Category {
   id                String             @id @default(cuid())
   name              String
   color             String             @default("#868e96")
-  isRecurring       Boolean            @default(false)
-  userId            String
+  userId            String             @map("user_id")
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions      Transaction[]
   recurringExpenses RecurringExpense[]
 
   @@index([userId])
+  @@map("categories")
   @@schema("finance")
 }
 
@@ -146,11 +151,11 @@ model Transaction {
   type             TransactionType
   date             DateTime
   description      String
-  fxRateAtCreation Decimal          @default(1) @db.Decimal(18, 6)
-  accountId        String
-  categoryId       String?
-  userId           String
-  createdAt        DateTime         @default(now())
+  fxRateAtCreation Decimal          @default(1) @db.Decimal(18, 6) @map("fx_rate_at_creation")
+  accountId        String           @map("account_id")
+  categoryId       String?          @map("category_id")
+  userId           String           @map("user_id")
+  createdAt        DateTime         @default(now()) @map("created_at")
   account          FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   category         Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -158,6 +163,7 @@ model Transaction {
   @@index([userId, date])
   @@index([accountId])
   @@index([categoryId])
+  @@map("transactions")
   @@schema("finance")
 }
 
@@ -167,43 +173,46 @@ model RecurringExpense {
   amount      Decimal            @db.Decimal(18, 2)
   currency    String
   interval    RecurrenceInterval @default(MONTHLY)
-  nextDueDate DateTime
+  nextDueDate DateTime           @map("next_due_date")
   active      Boolean            @default(true)
-  categoryId  String?
-  userId      String
+  categoryId  String?            @map("category_id")
+  userId      String             @map("user_id")
   category    Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([categoryId])
+  @@map("recurring_expenses")
   @@schema("finance")
 }
 
 model Debt {
   id          String        @id @default(cuid())
-  debtorName  String
+  debtorName  String        @map("debtor_name")
   description String?
-  totalAmount Decimal       @db.Decimal(18, 2)
+  totalAmount Decimal       @db.Decimal(18, 2) @map("total_amount")
   currency    String
-  dueDate     DateTime?
+  dueDate     DateTime?     @map("due_date")
   status      DebtStatus    @default(PENDING)
-  userId      String
-  createdAt   DateTime      @default(now())
+  userId      String        @map("user_id")
+  createdAt   DateTime      @default(now()) @map("created_at")
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   payments    DebtPayment[]
 
   @@index([userId])
+  @@map("debts")
   @@schema("finance")
 }
 
 model DebtPayment {
   id               String   @id @default(cuid())
   amount           Decimal  @db.Decimal(18, 2)
-  paymentDate      DateTime
-  fxRateAtCreation Decimal  @default(1) @db.Decimal(18, 6)
-  debtId           String
+  paymentDate      DateTime @map("payment_date")
+  fxRateAtCreation Decimal  @default(1) @db.Decimal(18, 6) @map("fx_rate_at_creation")
+  debtId           String   @map("debt_id")
   debt             Debt     @relation(fields: [debtId], references: [id], onDelete: Cascade)
 
   @@index([debtId])
+  @@map("debt_payments")
   @@schema("finance")
 }
