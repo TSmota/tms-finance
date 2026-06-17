@@ -38,7 +38,6 @@ export const recurringExpenseSchema = z.object({
   amount: z.coerce.number().positive("O valor deve ser positivo"),
   currency: z.string().length(3, "Use um código de moeda com 3 letras").toUpperCase(),
   interval: z.enum(["WEEKLY", "MONTHLY", "YEARLY"]),
-  nextDueDate: z.coerce.date(),
   active: z.boolean().default(true),
   categoryId: z.string().optional().nullable(),
 });

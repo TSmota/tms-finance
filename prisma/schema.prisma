@@ -173,7 +173,6 @@ model RecurringExpense {
   amount      Decimal            @db.Decimal(18, 2)
   currency    String
   interval    RecurrenceInterval @default(MONTHLY)
-  nextDueDate DateTime           @map("next_due_date")
   active      Boolean            @default(true)
   categoryId  String?            @map("category_id")
   userId      String             @map("user_id")

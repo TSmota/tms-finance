@@ -1,18 +1,18 @@
 import {
-  Card,
-  Grid,
-  GridCol,
-  Group,
-  Stack,
-  Text,
-  Title,
-  Badge,
-  Table,
-  TableThead,
-  TableTbody,
-  TableTr,
-  TableTh,
-  TableTd,
+    Card,
+    Grid,
+    GridCol,
+    Group,
+    Stack,
+    Text,
+    Title,
+    Badge,
+    Table,
+    TableThead,
+    TableTbody,
+    TableTr,
+    TableTh,
+    TableTd,
 } from "@mantine/core";
 
 import { requireUser } from "@/lib/session";
@@ -30,7 +30,7 @@ export default async function DashboardPage() {
     await Promise.all([
       getAccountBalances(user.id, user.preferredCurrency),
       getRecentTransactions(user.id),
-      getMonthlyTransactions(user.id, now.getFullYear(), now.getMonth()),
+      getMonthlyTransactions(user.id, now.getFullYear(), now.getMonth(), user.preferredCurrency),
       getAccountsList(user.id),
       getCategories(user.id),
     ]);
@@ -90,6 +90,14 @@ export default async function DashboardPage() {
             <Text fw={700} size="xl" mt="xs" c="red">
               {formatCurrency(monthly.expenses, user.preferredCurrency)}
             </Text>
+            <Text size="xs" c="dimmed" mt={4}>
+              Inclui {formatCurrency(monthly.projectedRecurringExpenses, user.preferredCurrency)} de recorrências projetadas.
+            </Text>
+            {!monthly.recurringProjectionComplete && (
+              <Text size="xs" c="orange" mt={4}>
+                Algumas recorrências não foram convertidas para {user.preferredCurrency}.
+              </Text>
+            )}
           </Card>
         </GridCol>
       </Grid>

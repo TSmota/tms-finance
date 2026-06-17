@@ -13,10 +13,18 @@ interface MonthlyChartsProps {
   byCategory: CategoryData[];
   income: number;
   expenses: number;
+  actualExpenses: number;
+  projectedRecurringExpenses: number;
 }
 
 export function MonthlyCharts(props: MonthlyChartsProps) {
-  const { byCategory, income, expenses } = props;
+  const {
+    byCategory,
+    income,
+    expenses,
+    actualExpenses,
+    projectedRecurringExpenses,
+  } = props;
 
   const pieData = byCategory.map((category) => ({
     name: category.name,
@@ -54,13 +62,16 @@ export function MonthlyCharts(props: MonthlyChartsProps) {
             {
               label: "Este mês",
               Receitas: Number(income.toFixed(2)),
-              Despesas: Number(expenses.toFixed(2)),
+              "Despesas realizadas": Number(actualExpenses.toFixed(2)),
+              "Despesas recorrentes (estimativa mensal)": Number(projectedRecurringExpenses.toFixed(2)),
+              "Despesas totais": Number(expenses.toFixed(2)),
             },
           ]}
           dataKey="label"
           series={[
             { name: "Receitas", color: "teal.6" },
-            { name: "Despesas", color: "red.6" },
+            { name: "Despesas realizadas", color: "red.6" },
+            { name: "Despesas recorrentes (estimativa mensal)", color: "orange.6" },
           ]}
         />
       </Card>

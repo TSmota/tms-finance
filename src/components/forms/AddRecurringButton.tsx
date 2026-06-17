@@ -10,7 +10,6 @@ import {
   Switch,
   TextInput,
 } from "@mantine/core";
-import { DatePickerInput } from "@mantine/dates";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import { useDisclosure } from "@mantine/hooks";
@@ -42,7 +41,6 @@ export function AddRecurringButton(props: AddRecurringButtonProps) {
       amount: 0,
       currency: "BRL",
       interval: "MONTHLY",
-      nextDueDate: new Date(),
       active: true,
       categoryId: "",
     },
@@ -97,11 +95,6 @@ export function AddRecurringButton(props: AddRecurringButtonProps) {
               ]}
               key={form.key("interval")}
               {...form.getInputProps("interval")}
-            />
-            <DatePickerInput
-              label="Próximo vencimento"
-              key={form.key("nextDueDate")}
-              {...form.getInputProps("nextDueDate")}
             />
             <Select
               label="Categoria"

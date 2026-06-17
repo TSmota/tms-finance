@@ -1,23 +1,23 @@
 import {
-  Card,
-  Group,
-  Stack,
-  Table,
-  TableThead,
-  TableTbody,
-  TableTr,
-  TableTh,
-  TableTd,
-  Text,
-  Title,
-  Badge,
+    Card,
+    Group,
+    Stack,
+    Table,
+    TableThead,
+    TableTbody,
+    TableTr,
+    TableTh,
+    TableTd,
+    Text,
+    Title,
+    Badge,
 } from "@mantine/core";
 
 import { requireUser } from "@/lib/session";
 import {
-  getMonthlyTransactions,
-  getAccountsList,
-  getCategories,
+    getMonthlyTransactions,
+    getAccountsList,
+    getCategories,
 } from "@/lib/queries";
 import { formatCurrency } from "@/lib/balance";
 import { MonthSelector } from "@/components/MonthSelector";
@@ -43,7 +43,7 @@ export default async function MonthlyCostsPage({ searchParams }: MonthlyCostsPag
   }
 
   const [data, accounts, categories] = await Promise.all([
-    getMonthlyTransactions(user.id, year, monthIndex),
+    getMonthlyTransactions(user.id, year, monthIndex, user.preferredCurrency),
     getAccountsList(user.id),
     getCategories(user.id),
   ]);
@@ -77,7 +77,23 @@ export default async function MonthlyCostsPage({ searchParams }: MonthlyCostsPag
         byCategory={data.byCategory}
         income={data.income}
         expenses={data.expenses}
+        actualExpenses={data.actualExpenses}
+        projectedRecurringExpenses={data.projectedRecurringExpenses}
       />
+
+      <Card withBorder radius="md" padding="lg">
+        <Text size="sm" c="dimmed">
+          Despesas projetadas recorrentes ({user.preferredCurrency})
+        </Text>
+        <Text fw={700} size="xl" mt="xs" c="orange">
+          {formatCurrency(data.projectedRecurringExpenses, user.preferredCurrency)}
+        </Text>
+        {!data.recurringProjectionComplete && (
+          <Text size="xs" c="orange" mt={4}>
+            Não inclui recorrências com conversão cambial indisponível.
+          </Text>
+        )}
+      </Card>
 
       <Card withBorder radius="md" padding="lg">
         <Title order={4} mb="md">

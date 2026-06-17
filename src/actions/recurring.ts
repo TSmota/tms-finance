@@ -33,7 +33,6 @@ export async function createRecurringExpense(input: unknown): Promise<RecurringA
       amount: data.amount.toFixed(2),
       currency: data.currency,
       interval: data.interval,
-      nextDueDate: data.nextDueDate,
       active: data.active,
       categoryId: data.categoryId || null,
       userId: user.id,

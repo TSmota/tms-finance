@@ -1,16 +1,16 @@
 import {
-  Card,
-  Group,
-  Stack,
-  Table,
-  TableThead,
-  TableTbody,
-  TableTr,
-  TableTh,
-  TableTd,
-  Text,
-  Title,
-  Badge,
+    Card,
+    Group,
+    Stack,
+    Table,
+    TableThead,
+    TableTbody,
+    TableTr,
+    TableTh,
+    TableTd,
+    Text,
+    Title,
+    Badge,
 } from "@mantine/core";
 
 import { requireUser } from "@/lib/session";
@@ -83,7 +83,6 @@ export default async function RecurringPage() {
                 <TableTh>Nome</TableTh>
                 <TableTh>Categoria</TableTh>
                 <TableTh>Intervalo</TableTh>
-                <TableTh>Próximo vencimento</TableTh>
                 <TableTh ta="right">Valor</TableTh>
                 <TableTh ta="center">Ativa</TableTh>
               </TableTr>
@@ -109,9 +108,6 @@ export default async function RecurringPage() {
                   <TableTd>
                     {INTERVAL_LABELS[recurringExpense.interval] ??
                       recurringExpense.interval}
-                  </TableTd>
-                  <TableTd>
-                    {recurringExpense.nextDueDate.toLocaleDateString("pt-BR")}
                   </TableTd>
                   <TableTd ta="right">
                     {formatCurrency(recurringExpense.amount, recurringExpense.currency)}
