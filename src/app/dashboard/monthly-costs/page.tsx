@@ -1,17 +1,4 @@
-import {
-    Card,
-    Group,
-    Stack,
-    Table,
-    TableThead,
-    TableTbody,
-    TableTr,
-    TableTh,
-    TableTd,
-    Text,
-    Title,
-    Badge,
-} from "@mantine/core";
+import { Card, Group, Stack, Text, Title } from "@mantine/core";
 
 import { requireUser } from "@/lib/session";
 import {
@@ -23,7 +10,8 @@ import { formatCurrency } from "@/lib/balance";
 import { MonthSelector } from "@/components/MonthSelector";
 import { MonthlyCharts } from "@/components/MonthlyCharts";
 import { AddTransactionButton } from "@/components/forms/AddTransactionButton";
-import { EmptyState } from "@/components/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { TransactionsTable, type TransactionRow } from "@/components/TransactionsTable";
 
 interface MonthlyCostsPageProps {
   searchParams: Promise<{ month?: string }>;
@@ -57,17 +45,36 @@ export default async function MonthlyCostsPage({ searchParams }: MonthlyCostsPag
     label: category.name,
   }));
 
+  const rows: TransactionRow[] = data.transactions.map((transaction) => ({
+    id: transaction.id,
+    date: transaction.date,
+    description: transaction.description,
+    type: transaction.type,
+    amount: transaction.amount,
+    accountId: transaction.accountId,
+    accountName: transaction.accountName,
+    accountCurrency: transaction.accountCurrency,
+    categoryId: transaction.categoryId,
+    categoryName: transaction.categoryName,
+    categoryColor: transaction.categoryColor,
+    displayAmount: transaction.convertedAmount,
+    displayCurrency: user.preferredCurrency,
+  }));
+
   return (
     <Stack gap="lg">
-      <Group justify="space-between" align="flex-end">
-        <Title order={2}>Custos mensais</Title>
-        {accounts.length > 0 && (
-          <AddTransactionButton
-            accounts={accountOptions}
-            categories={categoryOptions}
-          />
-        )}
-      </Group>
+      <PageHeader
+        title="Custos mensais"
+        subtitle="Receitas e despesas do mês selecionado"
+        action={
+          accounts.length > 0 && (
+            <AddTransactionButton
+              accounts={accountOptions}
+              categories={categoryOptions}
+            />
+          )
+        }
+      />
 
       <Group align="flex-end">
         <MonthSelector />
@@ -99,50 +106,12 @@ export default async function MonthlyCostsPage({ searchParams }: MonthlyCostsPag
         <Title order={4} mb="md">
           Transações
         </Title>
-        {data.transactions.length === 0 ? (
-          <EmptyState message="Nenhuma transação neste mês." />
-        ) : (
-          <Table highlightOnHover>
-            <TableThead>
-              <TableTr>
-                <TableTh>Data</TableTh>
-                <TableTh>Descrição</TableTh>
-                <TableTh>Categoria</TableTh>
-                <TableTh>Conta</TableTh>
-                <TableTh ta="right">Valor</TableTh>
-              </TableTr>
-            </TableThead>
-            <TableTbody>
-              {data.transactions.map((transaction) => (
-                <TableTr key={transaction.id}>
-                  <TableTd>{transaction.date.toLocaleDateString("pt-BR")}</TableTd>
-                  <TableTd>{transaction.description}</TableTd>
-                  <TableTd>
-                    {transaction.categoryName ? (
-                      <Badge color={transaction.categoryColor} variant="light">
-                        {transaction.categoryName}
-                      </Badge>
-                    ) : (
-                      <Text c="dimmed" size="sm">
-                        —
-                      </Text>
-                    )}
-                  </TableTd>
-                  <TableTd>{transaction.accountName}</TableTd>
-                  <TableTd ta="right">
-                    <Text
-                      c={transaction.type === "INFLOW" ? "teal" : "red"}
-                      fw={500}
-                    >
-                      {transaction.type === "INFLOW" ? "+" : "-"}
-                      {formatCurrency(transaction.convertedAmount, user.preferredCurrency)}
-                    </Text>
-                  </TableTd>
-                </TableTr>
-              ))}
-            </TableTbody>
-          </Table>
-        )}
+        <TransactionsTable
+          transactions={rows}
+          accounts={accountOptions}
+          categories={categoryOptions}
+          emptyMessage="Nenhuma transação neste mês."
+        />
       </Card>
     </Stack>
   );

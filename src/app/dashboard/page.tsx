@@ -1,26 +1,16 @@
-import {
-    Card,
-    Grid,
-    GridCol,
-    Group,
-    Stack,
-    Text,
-    Title,
-    Badge,
-    Table,
-    TableThead,
-    TableTbody,
-    TableTr,
-    TableTh,
-    TableTd,
-} from "@mantine/core";
+import { Card, Grid, GridCol, Stack, Text, Title } from "@mantine/core";
 
 import { requireUser } from "@/lib/session";
 import { getAccountBalances, formatCurrency } from "@/lib/balance";
-import { getRecentTransactions, getMonthlyTransactions } from "@/lib/queries";
+import {
+    getRecentTransactions,
+    getMonthlyTransactions,
+    getAccountsList,
+    getCategories,
+} from "@/lib/queries";
 import { AddTransactionButton } from "@/components/forms/AddTransactionButton";
-import { getAccountsList, getCategories } from "@/lib/queries";
-import { EmptyState } from "@/components/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { TransactionsTable, type TransactionRow } from "@/components/TransactionsTable";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -44,17 +34,36 @@ export default async function DashboardPage() {
     label: category.name,
   }));
 
+  const rows: TransactionRow[] = recent.map((transaction) => ({
+    id: transaction.id,
+    date: transaction.date,
+    description: transaction.description,
+    type: transaction.type as "INFLOW" | "OUTFLOW",
+    amount: transaction.amount,
+    accountId: transaction.accountId,
+    accountName: transaction.accountName,
+    accountCurrency: transaction.accountCurrency,
+    categoryId: transaction.categoryId,
+    categoryName: transaction.categoryName,
+    categoryColor: transaction.categoryColor,
+    displayAmount: transaction.amount,
+    displayCurrency: transaction.accountCurrency,
+  }));
+
   return (
     <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={2}>Painel</Title>
-        {accounts.length > 0 && (
-          <AddTransactionButton
-            accounts={accountOptions}
-            categories={categoryOptions}
-          />
-        )}
-      </Group>
+      <PageHeader
+        title="Painel"
+        subtitle="Visão geral das suas finanças"
+        action={
+          accounts.length > 0 && (
+            <AddTransactionButton
+              accounts={accountOptions}
+              categories={categoryOptions}
+            />
+          )
+        }
+      />
 
       <Grid>
         <GridCol span={{ base: 12, sm: 4 }}>
@@ -106,53 +115,11 @@ export default async function DashboardPage() {
         <Title order={4} mb="md">
           Atividade recente
         </Title>
-        {recent.length === 0 ? (
-          <EmptyState message="Nenhuma transação ainda. Adicione a primeira para começar." />
-        ) : (
-          <Table highlightOnHover>
-            <TableThead>
-              <TableTr>
-                <TableTh>Data</TableTh>
-                <TableTh>Descrição</TableTh>
-                <TableTh>Categoria</TableTh>
-                <TableTh>Conta</TableTh>
-                <TableTh ta="right">Valor</TableTh>
-              </TableTr>
-            </TableThead>
-            <TableTbody>
-              {recent.map((transaction) => (
-                <TableTr key={transaction.id}>
-                  <TableTd>{transaction.date.toLocaleDateString("pt-BR")}</TableTd>
-                  <TableTd>{transaction.description}</TableTd>
-                  <TableTd>
-                    {transaction.categoryName ? (
-                      <Badge color={transaction.categoryColor} variant="light">
-                        {transaction.categoryName}
-                      </Badge>
-                    ) : (
-                      <Text c="dimmed" size="sm">
-                        —
-                      </Text>
-                    )}
-                  </TableTd>
-                  <TableTd>{transaction.accountName}</TableTd>
-                  <TableTd ta="right">
-                    <Text
-                      c={transaction.type === "INFLOW" ? "teal" : "red"}
-                      fw={500}
-                    >
-                      {transaction.type === "INFLOW" ? "+" : "-"}
-                      {formatCurrency(
-                        transaction.amount,
-                        transaction.accountCurrency,
-                      )}
-                    </Text>
-                  </TableTd>
-                </TableTr>
-              ))}
-            </TableTbody>
-          </Table>
-        )}
+        <TransactionsTable
+          transactions={rows}
+          accounts={accountOptions}
+          categories={categoryOptions}
+        />
       </Card>
     </Stack>
   );
