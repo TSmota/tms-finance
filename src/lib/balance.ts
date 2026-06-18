@@ -1,17 +1,9 @@
 import { getExchangeRate } from "@/lib/fxService";
 import { prisma } from "@/lib/db";
+import { formatCurrency, toNumber } from "@/lib/currency";
 
-/**
- * Converts a value to a number, treating non-finite values as 0.
- *
- * @param value The value to convert to a number. Non-finite values will be treated as 0.
- * @returns The converted number.
- */
-export function toNumber(value: unknown): number {
-  const number = Number(value);
-
-  return Number.isFinite(number) ? number : 0;
-}
+// Re-exported for backward compatibility; defined in the client-safe currency module.
+export { formatCurrency, toNumber };
 
 export interface AccountBalance {
   /** The unique identifier of the account. */
@@ -117,23 +109,4 @@ export async function getAccountBalances(userId: string, preferredCurrency: stri
   });
 
   return { accounts: results, netWorth, netWorthComplete };
-}
-
-/**
- * Formats a numeric amount as a currency string using the specified currency code.
- * If the currency code is invalid or formatting fails, it falls back to a simple string format.
- * 
- * @param amount The numeric amount to format.
- * @param currency The ISO 4217 currency code.
- * @returns A string representing the formatted currency amount.
- */
-export function formatCurrency(amount: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency,
-    }).format(amount);
-  } catch {
-    return `${currency} ${amount.toFixed(2)}`;
-  }
 }
