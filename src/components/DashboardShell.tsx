@@ -95,9 +95,9 @@ export function DashboardShell(props: DashboardShellProps) {
           {links.map((link) => {
             const Icon = link.icon;
             const active =
-              link.href === "/dashboard"
-                ? pathname === link.href
-                : pathname.startsWith(link.href);
+              pathname === link.href ||
+              (link.href !== "/dashboard" &&
+                pathname.startsWith(`${link.href}/`));
             return (
               <NavLink
                 key={link.href}

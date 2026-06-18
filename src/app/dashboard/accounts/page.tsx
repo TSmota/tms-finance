@@ -1,4 +1,4 @@
-import { Card, Grid, GridCol, Group, Stack, Text, Title } from "@mantine/core";
+import { Card, Grid, GridCol, Group, Stack, Text } from "@mantine/core";
 
 import { requireUser } from "@/lib/session";
 import { getAccountBalances, formatCurrency } from "@/lib/balance";
@@ -6,8 +6,9 @@ import { getAccountsList } from "@/lib/queries";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/accountTypes";
 import { AddAccountButton } from "@/components/forms/AddAccountButton";
 import { EmptyState } from "@/components/EmptyState";
-import { EditAccountButton } from "../../../components/forms/EditAccountButton";
-import { DeleteAccountButton } from "../../../components/forms/DeleteAccountButton";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EditAccountButton } from "@/components/forms/EditAccountButton";
+import { DeleteAccountButton } from "@/components/forms/DeleteAccountButton";
 
 export default async function AccountsPage() {
   const user = await requireUser();
@@ -19,10 +20,11 @@ export default async function AccountsPage() {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={2}>Contas e investimentos</Title>
-        <AddAccountButton />
-      </Group>
+      <PageHeader
+        title="Contas e investimentos"
+        subtitle="Saldos das suas contas e investimentos"
+        action={<AddAccountButton />}
+      />
 
       <Card withBorder radius="md" padding="lg">
         <Text size="sm" c="dimmed">

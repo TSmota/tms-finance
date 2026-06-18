@@ -9,13 +9,13 @@ import {
     TableTh,
     TableThead,
     TableTr,
-    Title,
 } from "@mantine/core";
 
 import { AddCategoryButton } from "@/components/forms/AddCategoryButton";
 import { DeleteCategoryButton } from "@/components/forms/DeleteCategoryButton";
 import { EditCategoryButton } from "@/components/forms/EditCategoryButton";
 import { EmptyState } from "@/components/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { getCategories } from "@/lib/queries";
 import { requireUser } from "@/lib/session";
 
@@ -25,10 +25,11 @@ export default async function CategoriesPage() {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={2}>Categorias</Title>
-        <AddCategoryButton />
-      </Group>
+      <PageHeader
+        title="Categorias"
+        subtitle="Organize suas transações por categoria"
+        action={<AddCategoryButton />}
+      />
 
       <Card withBorder radius="md" padding="lg">
         {categories.length === 0 ? (

@@ -9,7 +9,6 @@ import {
     TableTh,
     TableTd,
     Text,
-    Title,
     Badge,
 } from "@mantine/core";
 
@@ -20,6 +19,7 @@ import { AddRecurringButton } from "@/components/forms/AddRecurringButton";
 import { AddCategoryButton } from "@/components/forms/AddCategoryButton";
 import { RecurringToggle } from "@/components/RecurringToggle";
 import { EmptyState } from "@/components/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 const INTERVAL_LABELS: Record<string, string> = {
   WEEKLY: "Semanal",
@@ -56,13 +56,16 @@ export default async function RecurringPage() {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={2}>Despesas recorrentes</Title>
-        <Group>
-          <AddCategoryButton />
-          <AddRecurringButton categories={categoryOptions} />
-        </Group>
-      </Group>
+      <PageHeader
+        title="Despesas recorrentes"
+        subtitle="Assinaturas e contas que se repetem"
+        action={
+          <Group>
+            <AddCategoryButton />
+            <AddRecurringButton categories={categoryOptions} />
+          </Group>
+        }
+      />
 
       <Card withBorder radius="md" padding="lg">
         <Text size="sm" c="dimmed">

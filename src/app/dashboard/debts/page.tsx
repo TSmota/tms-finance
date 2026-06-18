@@ -6,7 +6,6 @@ import {
   Progress,
   Stack,
   Text,
-  Title,
   Badge,
 } from "@mantine/core";
 
@@ -14,30 +13,21 @@ import { requireUser } from "@/lib/session";
 import { getDebts } from "@/lib/queries";
 import { formatCurrency } from "@/lib/balance";
 import { EmptyState } from "@/components/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { AddDebtButton } from "@/components/forms/AddDebtButton";
 import { AddPaymentButton } from "@/components/forms/AddPaymentButton";
-
-const STATUS_COLORS: Record<string, string> = {
-  PAID: "teal",
-  PARTIAL: "yellow",
-  PENDING: "gray",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  PAID: "Pago",
-  PARTIAL: "Parcial",
-  PENDING: "Pendente",
-};
+import { DEBT_STATUS_COLORS, DEBT_STATUS_LABELS } from "@/lib/statusColors";
 
 export default async function DebtsPage() {
   const user = await requireUser();
   const debts = await getDebts(user.id);
   return (
     <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={2}>Dívidas</Title>
-        <AddDebtButton />
-      </Group>
+      <PageHeader
+        title="Dívidas"
+        subtitle="Valores a receber e seu progresso"
+        action={<AddDebtButton />}
+      />
 
       {debts.length === 0 ? (
         <Card withBorder radius="md" padding="lg">
@@ -53,8 +43,8 @@ export default async function DebtsPage() {
                 <Card withBorder radius="md" padding="lg" h="100%">
                   <Group justify="space-between" mb="xs">
                     <Text fw={600}>{debt.debtorName}</Text>
-                    <Badge color={STATUS_COLORS[debt.status]}>
-                      {STATUS_LABELS[debt.status]}
+                    <Badge color={DEBT_STATUS_COLORS[debt.status]}>
+                      {DEBT_STATUS_LABELS[debt.status]}
                     </Badge>
                   </Group>
                   {debt.description && (
@@ -68,7 +58,7 @@ export default async function DebtsPage() {
                   </Text>
                   <Progress
                     value={paidPercentage}
-                    color={STATUS_COLORS[debt.status]}
+                    color={DEBT_STATUS_COLORS[debt.status]}
                     mt="xs"
                     mb="xs"
                   />
