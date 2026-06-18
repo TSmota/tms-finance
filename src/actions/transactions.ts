@@ -80,8 +80,81 @@ export async function createTransaction(input: unknown): Promise<TransactionActi
 }
 
 /**
+ * Updates an existing financial transaction for the authenticated user,
+ * recomputing the exchange rate against the user's preferred currency.
+ *
+ * @param id The ID of the transaction to update.
+ * @param input The updated transaction data.
+ * @returns The result of the transaction update action.
+ */
+export async function updateTransaction(
+  id: string,
+  input: unknown,
+): Promise<TransactionActionResult> {
+  const user = await requireUser();
+  const parsed = transactionSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Entrada inválida",
+    };
+  }
+
+  const data = parsed.data;
+  const account = await prisma.financialAccount.findFirst({
+    where: { id: data.accountId, userId: user.id },
+  });
+  if (!account) {
+    return { ok: false, error: "Conta não encontrada" };
+  }
+
+  let fxRate = 1;
+  try {
+    fxRate = await getExchangeRate({
+      from: account.currency,
+      to: user.preferredCurrency,
+      date: data.date,
+      manualRate: data.manualFxRate,
+    });
+  } catch (err) {
+    if (err instanceof FxUnavailableError) {
+      return {
+        ok: false,
+        needsManualFxRate: true,
+        error: "Taxa de câmbio indisponível. Informe manualmente.",
+      };
+    }
+    throw err;
+  }
+
+  const { count } = await prisma.transaction.updateMany({
+    where: { id, userId: user.id },
+    data: {
+      amount: data.amount.toFixed(2),
+      type: data.type,
+      date: data.date,
+      description: data.description,
+      fxRateAtCreation: fxRate.toString(),
+      accountId: data.accountId,
+      categoryId: data.categoryId || null,
+    },
+  });
+
+  if (count === 0) {
+    return { ok: false, error: "Transação não encontrada" };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/monthly-costs");
+  revalidatePath("/dashboard/accounts");
+
+  return { ok: true };
+}
+
+/**
  * Deletes an existing financial transaction for the authenticated user.
- * 
+ *
  * @param id The ID of the transaction to delete.
  * @returns The result of the transaction deletion action.
  */

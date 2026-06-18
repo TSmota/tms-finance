@@ -38,8 +38,10 @@ export async function getRecentTransactions(userId: string, take = 8) {
     amount: toNumber(transaction.amount),
     convertedAmount:
       toNumber(transaction.amount) * toNumber(transaction.fxRateAtCreation),
+    accountId: transaction.accountId,
     accountName: transaction.account.name,
     accountCurrency: transaction.account.currency,
+    categoryId: transaction.categoryId,
     categoryName: transaction.category?.name ?? null,
     categoryColor: transaction.category?.color ?? "#868e96",
   }));
@@ -58,8 +60,12 @@ export interface MonthlyData {
     description: string;
     type: "INFLOW" | "OUTFLOW";
     date: Date;
+    amount: number;
     convertedAmount: number;
+    accountId: string;
     accountName: string;
+    accountCurrency: string;
+    categoryId: string | null;
     categoryName: string | null;
     categoryColor: string;
   }[];
@@ -118,8 +124,12 @@ export async function getMonthlyTransactions(
       description: transaction.description,
       type: transaction.type as "INFLOW" | "OUTFLOW",
       date: transaction.date,
+      amount: toNumber(transaction.amount),
       convertedAmount: converted,
+      accountId: transaction.accountId,
       accountName: transaction.account.name,
+      accountCurrency: transaction.account.currency,
+      categoryId: transaction.categoryId,
       categoryName: transaction.category?.name ?? null,
       categoryColor: transaction.category?.color ?? "#868e96",
     };
