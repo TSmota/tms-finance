@@ -1,22 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import {
-    ActionIcon,
-    Button,
-    ColorInput,
-    Modal,
-    Stack,
-    TextInput,
-} from "@mantine/core";
+import { ActionIcon, ColorInput, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
-import { useDisclosure } from "@mantine/hooks";
-import { notifications } from "@mantine/notifications";
 import { Pencil } from "lucide-react";
 
 import { updateCategory } from "@/actions/categories";
 import { categorySchema } from "@/lib/validations";
+import { FormModal } from "@/components/ui/FormModal";
+import { useActionModal } from "@/components/ui/useActionModal";
 
 interface EditCategoryButtonProps {
   id: string;
@@ -26,15 +18,13 @@ interface EditCategoryButtonProps {
 
 export function EditCategoryButton(props: EditCategoryButtonProps) {
   const { id, name, color } = props;
-  const [opened, { open, close }] = useDisclosure(false);
-  const [loading, setLoading] = useState(false);
+  const { opened, open, close, loading, run } = useActionModal({
+    successMessage: "Categoria atualizada",
+  });
 
   const form = useForm({
     mode: "uncontrolled",
-    initialValues: {
-      name,
-      color,
-    },
+    initialValues: { name, color },
     validate: zod4Resolver(categorySchema),
   });
 
@@ -44,17 +34,7 @@ export function EditCategoryButton(props: EditCategoryButtonProps) {
   };
 
   const handleSubmit = form.onSubmit(async (values) => {
-    setLoading(true);
-    const result = await updateCategory(id, values);
-    setLoading(false);
-
-    if (!result.ok) {
-      notifications.show({ color: "red", message: result.error ?? "Falha ao salvar" });
-      return;
-    }
-
-    notifications.show({ color: "teal", message: "Categoria atualizada" });
-    close();
+    await run(() => updateCategory(id, values));
   });
 
   return (
@@ -68,25 +48,24 @@ export function EditCategoryButton(props: EditCategoryButtonProps) {
         <Pencil size={16} />
       </ActionIcon>
 
-      <Modal opened={opened} onClose={close} title="Editar categoria" centered>
-        <form onSubmit={handleSubmit}>
-          <Stack>
-            <TextInput
-              label="Nome"
-              key={form.key("name")}
-              {...form.getInputProps("name")}
-            />
-            <ColorInput
-              label="Cor"
-              key={form.key("color")}
-              {...form.getInputProps("color")}
-            />
-            <Button type="submit" loading={loading}>
-              Salvar
-            </Button>
-          </Stack>
-        </form>
-      </Modal>
+      <FormModal
+        opened={opened}
+        onClose={close}
+        title="Editar categoria"
+        onSubmit={handleSubmit}
+        loading={loading}
+      >
+        <TextInput
+          label="Nome"
+          key={form.key("name")}
+          {...form.getInputProps("name")}
+        />
+        <ColorInput
+          label="Cor"
+          key={form.key("color")}
+          {...form.getInputProps("color")}
+        />
+      </FormModal>
     </>
   );
 }

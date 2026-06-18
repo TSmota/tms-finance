@@ -1,25 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import {
-    Button,
-    ColorInput,
-    Modal,
-    Stack,
-    TextInput,
-} from "@mantine/core";
+import { Button, ColorInput, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
-import { useDisclosure } from "@mantine/hooks";
-import { notifications } from "@mantine/notifications";
 import { Plus } from "lucide-react";
 
 import { categorySchema } from "@/lib/validations";
 import { createCategory } from "@/actions/categories";
+import { FormModal } from "@/components/ui/FormModal";
+import { useActionModal } from "@/components/ui/useActionModal";
 
 export function AddCategoryButton() {
-  const [opened, { open, close }] = useDisclosure(false);
-  const [loading, setLoading] = useState(false);
+  const { opened, open, close, loading, run } = useActionModal({
+    successMessage: "Categoria criada",
+  });
 
   const form = useForm({
     mode: "uncontrolled",
@@ -31,42 +25,32 @@ export function AddCategoryButton() {
   });
 
   const handleSubmit = form.onSubmit(async (values) => {
-    setLoading(true);
-    const res = await createCategory(values);
-    setLoading(false);
-    if (!res.ok) {
-      notifications.show({ color: "red", message: res.error ?? "Falha ao salvar" });
-      return;
-    }
-    notifications.show({ color: "teal", message: "Categoria criada" });
-    form.reset();
-    close();
+    await run(() => createCategory(values), { onSuccess: () => form.reset() });
   });
 
   return (
     <>
-      <Button variant="default" leftSection={<Plus size={16} />} onClick={open}>
+      <Button leftSection={<Plus size={16} />} onClick={open}>
         Adicionar categoria
       </Button>
-      <Modal opened={opened} onClose={close} title="Adicionar categoria" centered>
-        <form onSubmit={handleSubmit}>
-          <Stack>
-            <TextInput
-              label="Nome"
-              key={form.key("name")}
-              {...form.getInputProps("name")}
-            />
-            <ColorInput
-              label="Cor"
-              key={form.key("color")}
-              {...form.getInputProps("color")}
-            />
-            <Button type="submit" loading={loading}>
-              Salvar
-            </Button>
-          </Stack>
-        </form>
-      </Modal>
+      <FormModal
+        opened={opened}
+        onClose={close}
+        title="Adicionar categoria"
+        onSubmit={handleSubmit}
+        loading={loading}
+      >
+        <TextInput
+          label="Nome"
+          key={form.key("name")}
+          {...form.getInputProps("name")}
+        />
+        <ColorInput
+          label="Cor"
+          key={form.key("color")}
+          {...form.getInputProps("color")}
+        />
+      </FormModal>
     </>
   );
 }
