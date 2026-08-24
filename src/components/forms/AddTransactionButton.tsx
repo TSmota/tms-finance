@@ -1,64 +1,75 @@
 "use client";
 
 import { useState } from "react";
-import { Alert, Button, NumberInput, Select, TextInput } from "@mantine/core";
-import { DatePickerInput } from "@mantine/dates";
+import { Button } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
-import { Plus, TriangleAlert } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import { transactionSchema } from "@/lib/validations";
+import type { CurrencyCode } from "@/lib/currency";
+import { todayCalendarDate } from "@/lib/dates";
 import { createTransaction } from "@/actions/transactions";
 import { FormModal } from "@/components/ui/FormModal";
 import { useActionModal } from "@/components/ui/useActionModal";
-
-interface Option {
-  value: string;
-  label: string;
-}
+import { TransactionFields, type TransactionFormValues } from "./TransactionFields";
+import type { AccountOption, Option } from "./options";
 
 interface AddTransactionButtonProps {
-  accounts: Option[];
+  accounts: AccountOption[];
   categories: Option[];
+  /** Último recurso do campo de moeda: a moeda base do usuário. */
+  baseCurrency: CurrencyCode;
 }
 
 export function AddTransactionButton(props: AddTransactionButtonProps) {
-  const { accounts, categories } = props;
+  const { accounts, categories, baseCurrency } = props;
 
   const { opened, open, close, loading, run } = useActionModal({
     successMessage: "Transação adicionada",
   });
   const [showManualFx, setShowManualFx] = useState(false);
 
-  const form = useForm({
+  const initialValues: TransactionFormValues = {
+    accountId: accounts[0]?.value ?? "",
+    categoryId: "",
+    type: "EXPENSE",
+    amount: 0,
+    currency: accounts[0]?.currency ?? baseCurrency,
+    date: todayCalendarDate(),
+    description: "",
+    manualFxRate: undefined,
+  };
+
+  const form = useForm<TransactionFormValues>({
     mode: "uncontrolled",
-    initialValues: {
-      accountId: accounts[0]?.value ?? "",
-      categoryId: "",
-      type: "OUTFLOW",
-      amount: 0,
-      date: new Date(),
-      description: "",
-      manualFxRate: undefined as number | undefined,
-    },
+    initialValues,
     validate: zod4Resolver(transactionSchema),
   });
+
+  const handleOpen = () => {
+    form.setValues(initialValues);
+    setShowManualFx(false);
+    open();
+  };
 
   const handleSubmit = form.onSubmit(async (values) => {
     await run(() => createTransaction(values), {
       onSuccess: () => {
-        form.reset();
+        form.setValues(initialValues);
         setShowManualFx(false);
       },
-      onError: (res) => {
-        if (res.needsManualFxRate) setShowManualFx(true);
+      onError: (result) => {
+        if (result.needsManualFxRate) {
+          setShowManualFx(true);
+        }
       },
     });
   });
 
   return (
     <>
-      <Button leftSection={<Plus size={16} />} onClick={open}>
+      <Button leftSection={<Plus size={16} />} onClick={handleOpen}>
         Adicionar transação
       </Button>
       <FormModal
@@ -68,65 +79,12 @@ export function AddTransactionButton(props: AddTransactionButtonProps) {
         onSubmit={handleSubmit}
         loading={loading}
       >
-        <Select
-          label="Conta"
-          data={accounts}
-          key={form.key("accountId")}
-          {...form.getInputProps("accountId")}
+        <TransactionFields
+          form={form}
+          accounts={accounts}
+          categories={categories}
+          showManualFx={showManualFx}
         />
-        <Select
-          label="Tipo"
-          data={[
-            { value: "OUTFLOW", label: "Despesa" },
-            { value: "INFLOW", label: "Receita" },
-          ]}
-          key={form.key("type")}
-          {...form.getInputProps("type")}
-        />
-        <NumberInput
-          label="Valor"
-          decimalScale={2}
-          min={0}
-          key={form.key("amount")}
-          {...form.getInputProps("amount")}
-        />
-        <DatePickerInput
-          label="Data"
-          key={form.key("date")}
-          {...form.getInputProps("date")}
-        />
-        <Select
-          label="Categoria"
-          placeholder="Opcional"
-          clearable
-          data={categories}
-          key={form.key("categoryId")}
-          {...form.getInputProps("categoryId")}
-        />
-        <TextInput
-          label="Descrição"
-          key={form.key("description")}
-          {...form.getInputProps("description")}
-        />
-        {showManualFx && (
-          <>
-            <Alert
-              color="yellow"
-              icon={<TriangleAlert size={16} />}
-              title="Taxa de câmbio manual"
-            >
-              O serviço de câmbio está indisponível. Informe manualmente a taxa
-              para sua moeda preferida.
-            </Alert>
-            <NumberInput
-              label="Taxa de câmbio manual"
-              decimalScale={6}
-              min={0}
-              key={form.key("manualFxRate")}
-              {...form.getInputProps("manualFxRate")}
-            />
-          </>
-        )}
       </FormModal>
     </>
   );

@@ -1,78 +1,69 @@
 "use client";
 
-import { Card, SimpleGrid, Text } from "@mantine/core";
-import { PieChart, BarChart } from "@mantine/charts";
+import { Card, SimpleGrid, Stack, Text } from "@mantine/core";
+import { BarChart } from "@mantine/charts";
 
-interface CategoryData {
-  name: string;
-  color: string;
-  value: number;
-}
+import type { CategorySlice } from "@/lib/categoryRollup";
+import { formatCurrency } from "@/lib/currency";
+import { CategoryPie } from "@/components/CategoryPie";
 
 interface MonthlyChartsProps {
-  byCategory: CategoryData[];
+  /** Gasto por categoria raiz, já com rollup de subcategoria. */
+  byCategory: CategorySlice[];
+  /** Soma de `byCategory` — despesas de conta + compras no cartão. */
+  spendingTotal: number;
   income: number;
+  /** Saída de caixa do mês, incluindo pagamento de fatura. */
   expenses: number;
-  actualExpenses: number;
-  projectedRecurringExpenses: number;
+  /** Parte de `spendingTotal` que foi no cartão e ainda não saiu da conta. */
+  cardSpending: number;
+  currency: string;
 }
 
 export function MonthlyCharts(props: MonthlyChartsProps) {
-  const {
-    byCategory,
-    income,
-    expenses,
-    actualExpenses,
-    projectedRecurringExpenses,
-  } = props;
-
-  const pieData = byCategory.map((category) => ({
-    name: category.name,
-    value: Number(category.value.toFixed(2)),
-    color: category.color,
-  }));
+  const { byCategory, spendingTotal, income, expenses, cardSpending, currency } = props;
 
   return (
     <SimpleGrid cols={{ base: 1, md: 2 }}>
       <Card withBorder radius="md" padding="lg">
-        <Text fw={600} mb="md">
-          Despesas por categoria
-        </Text>
-        {pieData.length === 0 ? (
-          <Text c="dimmed" size="sm">
-            Nenhuma despesa neste mês.
+        <Stack gap={2} mb="md">
+          <Text fw={600}>Gasto por categoria</Text>
+          <Text size="xs" c="dimmed">
+            {cardSpending > 0
+              ? `Inclui ${formatCurrency(cardSpending, currency)} no cartão, que ainda não saiu da conta`
+              : "Despesas de conta e compras no cartão, pela data do gasto"}
           </Text>
-        ) : (
-          <PieChart
-            data={pieData}
-            withTooltip
-            tooltipDataSource="segment"
-            size={220}
-          />
-        )}
+        </Stack>
+        <CategoryPie
+          slices={byCategory}
+          total={spendingTotal}
+          currency={currency}
+          emptyMessage="Nenhum gasto neste mês."
+        />
       </Card>
 
       <Card withBorder radius="md" padding="lg">
-        <Text fw={600} mb="md">
-          Receitas vs. despesas
-        </Text>
+        <Stack gap={2} mb="md">
+          <Text fw={600}>Entradas e saídas de caixa</Text>
+          <Text size="xs" c="dimmed">
+            O que de fato entrou e saiu das contas
+          </Text>
+        </Stack>
         <BarChart
-          h={250}
+          h={220}
           data={[
             {
               label: "Este mês",
               Receitas: Number(income.toFixed(2)),
-              "Despesas realizadas": Number(actualExpenses.toFixed(2)),
-              "Despesas recorrentes (estimativa mensal)": Number(projectedRecurringExpenses.toFixed(2)),
-              "Despesas totais": Number(expenses.toFixed(2)),
+              Despesas: Number(expenses.toFixed(2)),
             },
           ]}
           dataKey="label"
           series={[
             { name: "Receitas", color: "teal.6" },
-            { name: "Despesas realizadas", color: "red.6" },
-            { name: "Despesas recorrentes (estimativa mensal)", color: "orange.6" },
+            { name: "Despesas", color: "red.6" },
           ]}
+          withLegend
         />
       </Card>
     </SimpleGrid>

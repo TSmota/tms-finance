@@ -14,9 +14,8 @@ interface FormModalProps {
 }
 
 /**
- * Presentational wrapper for modal-based forms: renders a centered Modal with a
- * vertical stack of fields and a loading-aware submit button. Pair with
- * `useActionModal` for open/close state and submission handling.
+ * Casca visual dos formulários em modal: campos empilhados e botão de envio
+ * ciente do carregamento. Use com `useActionModal`, que cuida do estado.
  */
 export function FormModal(props: FormModalProps) {
   const {

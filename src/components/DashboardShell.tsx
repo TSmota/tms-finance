@@ -4,39 +4,44 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
-    AppShell,
-    Burger,
-    Group,
-    NavLink,
-    ScrollArea,
-    Text,
-    Menu,
-    Avatar,
-    UnstyledButton,
+  AppShell,
+  Burger,
+  Group,
+  NavLink,
+  ScrollArea,
+  Text,
+  Menu,
+  Avatar,
+  UnstyledButton,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import {
-    LayoutDashboard,
-    Receipt,
-    Repeat,
-    Wallet,
-    Tags,
-    HandCoins,
-    LogOut,
+  LayoutDashboard,
+  Receipt,
+  CreditCard,
+  Repeat,
+  Wallet,
+  Tags,
+  Users,
+  HandCoins,
+  Settings,
+  LogOut,
 } from "lucide-react";
-import { User } from "next-auth";
 
 const links = [
   { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
-  { href: "/dashboard/monthly-costs", label: "Custos mensais", icon: Receipt },
-  { href: "/dashboard/categories", label: "Categorias", icon: Tags },
+  { href: "/dashboard/transactions", label: "Transações", icon: Receipt },
+  { href: "/dashboard/cards", label: "Cartões", icon: CreditCard },
   { href: "/dashboard/recurring", label: "Recorrentes", icon: Repeat },
   { href: "/dashboard/accounts", label: "Contas", icon: Wallet },
+  { href: "/dashboard/categories", label: "Categorias", icon: Tags },
+  { href: "/dashboard/people", label: "Pessoas", icon: Users },
   { href: "/dashboard/debts", label: "Dívidas", icon: HandCoins },
+  { href: "/dashboard/settings", label: "Configurações", icon: Settings },
 ];
 
 interface DashboardShellProps {
-  user: User;
+  user: { name: string | null; email: string };
   children: React.ReactNode;
 }
 

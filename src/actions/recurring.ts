@@ -2,91 +2,108 @@
 
 import { revalidatePath } from "next/cache";
 
-import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { recurringExpenseSchema } from "@/lib/validations";
-import { ActionResult } from "./types";
-
-export type RecurringActionResult = ActionResult;
+import { confirmOccurrenceSchema, recurringExpenseSchema } from "@/lib/validations";
+import * as service from "@/lib/recurring";
+import { parseFlag, parseId, runAction } from "./guard";
+import type { ActionResult } from "./types";
 
 /**
- * Creates a new recurring expense for the authenticated user.
- * 
- * @param input The input data for the new recurring expense.
- * @returns The result of the recurring expense creation action.
+ * Recorrentes e confirmação de pendências.
+ *
+ * A materialização das ocorrências não tem action: acontece no carregamento das
+ * páginas mensais, que é o gatilho da geração lazy.
  */
-export async function createRecurringExpense(input: unknown): Promise<RecurringActionResult> {
+function revalidateAll() {
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/recurring");
+  revalidatePath("/dashboard/transactions");
+  revalidatePath("/dashboard/accounts");
+  revalidatePath("/dashboard/cards");
+  revalidatePath("/dashboard/cards/[id]", "page");
+}
+
+export async function createRecurringExpense(input: unknown): Promise<ActionResult> {
   const user = await requireUser();
   const parsed = recurringExpenseSchema.safeParse(input);
 
   if (!parsed.success) {
-    return {
-      ok: false,
-      error: parsed.error.issues[0]?.message ?? "Entrada inválida",
-    };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Entrada inválida" };
   }
 
-  const data = parsed.data;
-  await prisma.recurringExpense.create({
-    data: {
-      name: data.name,
-      amount: data.amount.toFixed(2),
-      currency: data.currency,
-      interval: data.interval,
-      active: data.active,
-      categoryId: data.categoryId || null,
-      userId: user.id,
-    },
-  });
+  const result = await runAction(() => service.createRecurringExpense(user.id, parsed.data));
 
-  revalidatePath("/dashboard/recurring");
+  if (result.ok) {
+    revalidateAll();
+  }
 
-  return { ok: true };
+  return result;
 }
 
-/**
- * Toggles the active status of an existing recurring expense for the authenticated user.
- * 
- * @param id The ID of the recurring expense to toggle.
- * @returns The result of the toggle action.
- */
-export async function toggleRecurringActive(id: string): Promise<RecurringActionResult> {
+export async function updateRecurringExpense(
+  id: string,
+  input: unknown,
+): Promise<ActionResult> {
   const user = await requireUser();
-  const item = await prisma.recurringExpense.findFirst({
-    where: { id, userId: user.id },
-  });
+  const parsed = recurringExpenseSchema.safeParse(input);
 
-  if (!item) {
-    return { ok: false, error: "Despesa recorrente não encontrada" };
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Entrada inválida" };
   }
 
-  await prisma.recurringExpense.updateMany({
-    where: { id, userId: user.id },
-    data: { active: !item.active },
-  });
+  const result = await runAction(() =>
+    service.updateRecurringExpense(user.id, parseId(id), parsed.data),
+  );
 
-  revalidatePath("/dashboard/recurring");
+  if (result.ok) {
+    revalidateAll();
+  }
 
-  return { ok: true };
+  return result;
 }
 
-/**
- * Deletes an existing recurring expense for the authenticated user.
- * 
- * @param id The ID of the recurring expense to delete.
- * @returns The result of the delete action.
- */
-export async function deleteRecurringExpense(id: string): Promise<RecurringActionResult> {
+export async function deleteRecurringExpense(id: string): Promise<ActionResult> {
   const user = await requireUser();
-  const { count } = await prisma.recurringExpense.deleteMany({
-    where: { id, userId: user.id },
-  });
+  const result = await runAction(() => service.deleteRecurringExpense(user.id, parseId(id)));
 
-  if (count === 0) {
-    return { ok: false, error: "Despesa recorrente não encontrada" };
+  if (result.ok) {
+    revalidateAll();
   }
 
-  revalidatePath("/dashboard/recurring");
-  
-  return { ok: true };
+  return result;
+}
+
+export async function setRecurringActive(id: string, active: boolean): Promise<ActionResult> {
+  const user = await requireUser();
+  const result = await runAction(() =>
+    service.setRecurringActive(user.id, parseId(id), parseFlag(active)),
+  );
+
+  if (result.ok) {
+    revalidateAll();
+  }
+
+  return result;
+}
+
+export async function confirmPendingTransaction(
+  transactionId: string,
+  input: unknown,
+): Promise<ActionResult> {
+  const user = await requireUser();
+  const parsed = confirmOccurrenceSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Entrada inválida" };
+  }
+
+  const result = await runAction(() =>
+    service.confirmPendingTransaction(user.id, parseId(transactionId), parsed.data),
+  );
+
+  if (result.ok) {
+    revalidateAll();
+  }
+
+  return result;
 }

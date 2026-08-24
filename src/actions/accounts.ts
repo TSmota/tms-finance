@@ -2,99 +2,61 @@
 
 import { revalidatePath } from "next/cache";
 
-import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { accountSchema } from "@/lib/validations";
+import * as service from "@/lib/accounts";
+import { parseId, runAction } from "./guard";
 import type { ActionResult } from "./types";
 
-export type AccountActionResult = ActionResult;
+const AFFECTED_PATHS = ["/dashboard", "/dashboard/accounts", "/dashboard/transactions"];
 
-/**
- * Creates a new financial account for the authenticated user.
- * 
- * @param input The input data for the new account.
- * @returns The result of the account creation action.
- */
-export async function createAccount(input: unknown): Promise<AccountActionResult> {
+function revalidateAll() {
+  for (const path of AFFECTED_PATHS) {
+    revalidatePath(path);
+  }
+}
+
+export async function createAccount(input: unknown): Promise<ActionResult> {
   const user = await requireUser();
   const parsed = accountSchema.safeParse(input);
 
   if (!parsed.success) {
-    return {
-      ok: false,
-      error: parsed.error.issues[0]?.message ?? "Entrada inválida",
-    };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Entrada inválida" };
   }
 
-  const { name, type, currency, initialBalance } = parsed.data;
+  const result = await runAction(() => service.createAccount(user.id, parsed.data));
 
-  await prisma.financialAccount.create({
-    data: {
-      name,
-      type,
-      currency,
-      initialBalance: initialBalance.toFixed(2),
-      userId: user.id,
-    },
-  });
+  if (result.ok) {
+    revalidateAll();
+  }
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/accounts");
-
-  return { ok: true };
+  return result;
 }
 
-/**
- * Updates an existing financial account for the authenticated user.
- * 
- * @param id The ID of the account to update.
- * @param input The updated account data.
- * @returns The result of the account update action.
- */
-export async function updateAccount(id: string, input: unknown): Promise<AccountActionResult> {
+export async function updateAccount(id: string, input: unknown): Promise<ActionResult> {
   const user = await requireUser();
   const parsed = accountSchema.safeParse(input);
 
   if (!parsed.success) {
-    return { 
-      ok: false, 
-      error: parsed.error.issues[0]?.message ?? "Entrada inválida",
-    };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Entrada inválida" };
   }
 
-  const { name, type, currency, initialBalance } = parsed.data;
-  const { count } = await prisma.financialAccount.updateMany({
-    where: { id, userId: user.id },
-    data: { name, type, currency, initialBalance: initialBalance.toFixed(2) },
-  });
+  const result = await runAction(() => service.updateAccount(user.id, parseId(id), parsed.data));
 
-  if (count === 0) {
-    return { ok: false, error: "Conta não encontrada" };
+  if (result.ok) {
+    revalidateAll();
   }
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/accounts");
-  return { ok: true };
+  return result;
 }
 
-/**
- * Deletes an existing financial account for the authenticated user.
- * 
- * @param id The ID of the account to delete.
- * @returns The result of the account deletion action.
- */
-export async function deleteAccount(id: string): Promise<AccountActionResult> {
+export async function deleteAccount(id: string): Promise<ActionResult> {
   const user = await requireUser();
-  const { count } = await prisma.financialAccount.deleteMany({
-    where: { id, userId: user.id },
-  });
+  const result = await runAction(() => service.deleteAccount(user.id, parseId(id)));
 
-  if (count === 0) {
-    return { ok: false, error: "Conta não encontrada" };
+  if (result.ok) {
+    revalidateAll();
   }
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/accounts");
-  
-  return { ok: true };
+  return result;
 }
