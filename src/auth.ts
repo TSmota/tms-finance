@@ -19,21 +19,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         const parsed = loginSchema.safeParse(credentials);
-        if (!parsed.success) return null;
+        if (!parsed.success) {
+          return null;
+        }
 
         const { email, password } = parsed.data;
         const user = await prisma.user.findUnique({ where: { email } });
-        if (!user?.passwordHash) return null;
+        if (!user?.passwordHash) {
+          return null;
+        }
 
         const valid = await bcrypt.compare(password, user.passwordHash);
-        if (!valid) return null;
+        if (!valid) {
+          return null;
+        }
 
+        // Sem `baseCurrency`: o JWT não a carrega mais, porque a cópia ficava
+        // velha depois da troca em `/dashboard/settings`. Ver `auth.config.ts`.
         return {
           id: user.id,
           name: user.name,
           email: user.email,
           image: user.image,
-          preferredCurrency: user.preferredCurrency,
         };
       },
     }),

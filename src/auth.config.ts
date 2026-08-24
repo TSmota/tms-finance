@@ -2,8 +2,8 @@ import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 
 /**
- * Edge-safe Auth.js configuration shared between middleware and the full
- * server-side `auth.ts`. It must not import Prisma or bcrypt (Node-only).
+ * Configuração do Auth.js compartilhada entre o proxy e o `auth.ts` completo.
+ * Não pode importar Prisma nem bcrypt, que são Node-only.
  */
 export const authConfig = {
   pages: {
@@ -18,14 +18,22 @@ export const authConfig = {
       const isLoggedIn = Boolean(auth?.user);
       const isOnDashboard = nextUrl.pathname.startsWith("/dashboard");
 
-      if (isOnDashboard) return isLoggedIn;
+      if (isOnDashboard) {
+        return isLoggedIn;
+      }
 
       return true;
     },
+    /**
+     * Só o `id` entra no token.
+     *
+     * O JWT é auto-contido e só é reescrito no login, então uma `baseCurrency`
+     * copiada aqui ficaria velha assim que o usuário a trocasse. Quem precisa
+     * do valor lê do banco.
+     */
     jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.preferredCurrency = user.preferredCurrency ?? "BRL";
       }
 
       return token;
@@ -35,12 +43,6 @@ export const authConfig = {
         session.user.id = token.id;
       }
 
-      if (typeof token.preferredCurrency === "string") {
-        session.user.preferredCurrency = token.preferredCurrency;
-      } else {
-        session.user.preferredCurrency = "BRL";
-      }
-      
       return session;
     },
   },
