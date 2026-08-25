@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { unstable_rethrow } from "next/navigation";
 import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 
@@ -47,6 +48,19 @@ export function useActionModal(options: { successMessage: string }) {
       close();
 
       return true;
+    } catch (error) {
+      // `redirect()` e `notFound()` sinalizam por exceção — deixe subir.
+      unstable_rethrow(error);
+
+      // `runAction` já traduz erro de domínio em `{ ok: false }`; chegar aqui
+      // significa falha de rede ou de serialização da server action.
+      console.error("Falha ao executar server action:", error);
+      notifications.show({
+        color: "red",
+        message: "Ocorreu um erro inesperado. Tente novamente.",
+      });
+
+      return false;
     } finally {
       // `finally` para que uma exceção inesperada não deixe o botão travado
       // em estado de carregamento para sempre.
