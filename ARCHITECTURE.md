@@ -506,8 +506,16 @@ server antes de rodar os testes.
 
 ## 11. Deploy
 
-`"build": "prisma migrate deploy && prisma generate && next build"`. Isso cobre
-a Vercel e o `npm run build` local, sem `vercel.json`.
+Dois scripts de build, porque os dois ambientes querem coisas diferentes:
+
+- `"build": "next build"` — o do dia a dia e o do quality gate. Não toca no
+  banco: `npm run build` precisa funcionar sem `DATABASE_URL` alcançável.
+- `"vercel-build": "prisma migrate deploy && prisma generate && next build"` —
+  a Vercel prefere este script quando ele existe, então a migração roda lá e só
+  lá, sem `vercel.json`.
+
+Depois de mexer no schema, rode `npm run db:generate` localmente: o `build` não
+gera mais o client por você.
 
 Cuidados do lado da Vercel:
 
