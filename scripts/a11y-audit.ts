@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 /**
  * Auditoria de acessibilidade com axe-core num Chrome de verdade. Sai com 1 se
@@ -97,6 +99,30 @@ function resolveChrome(): string {
   );
 }
 
+/**
+ * Orçamento da subida do Chrome. Eram 10s, e o runner do CI — que ainda segura
+ * `next start`, Postgres e o seed — estourava esse teto de forma intermitente.
+ * O laço sai assim que fica pronto, então folga aqui não custa tempo.
+ */
+const CHROME_TIMEOUT = 60_000;
+
+/** Repete `passo` a cada 250ms até devolver não-nulo, ou `null` no estouro. */
+async function until<T>(passo: () => Promise<T | null>): Promise<T | null> {
+  const limite = Date.now() + CHROME_TIMEOUT;
+
+  while (Date.now() < limite) {
+    const valor = await passo();
+
+    if (valor !== null) {
+      return valor;
+    }
+
+    await new Promise((r) => setTimeout(r, 250));
+  }
+
+  return null;
+}
+
 interface Cdp {
   evaluate: (expression: string) => Promise<unknown>;
   goto: (url: string) => Promise<void>;
@@ -104,18 +130,8 @@ interface Cdp {
 }
 
 /** Cliente CDP mínimo: o Puppeteer resolveria, mas por ~300 MB de dependência. */
-async function connect(port: number): Promise<Cdp> {
-  const targets = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()) as {
-    type: string;
-    webSocketDebuggerUrl: string;
-  }[];
-  const page = targets.find((t) => t.type === "page");
-
-  if (!page) {
-    throw new Error("Chrome subiu sem nenhuma aba.");
-  }
-
-  const ws = new WebSocket(page.webSocketDebuggerUrl);
+async function connect(wsUrl: string): Promise<Cdp> {
+  const ws = new WebSocket(wsUrl);
   await new Promise<void>((resolve, reject) => {
     ws.onopen = () => resolve();
     ws.onerror = () => reject(new Error("Falha ao abrir o WebSocket do CDP."));
@@ -317,34 +333,69 @@ async function waitForNavigation(cdp: Cdp, origem: string): Promise<string> {
 
 async function main() {
   const chrome = resolveChrome();
-  const port = 9222 + Math.floor(process.uptime() * 1000) % 300;
+  const perfil = mkdtempSync(join(tmpdir(), "a11y-chrome-"));
+  const log = join(perfil, "chrome.log");
 
+  // Porta 0: quem escolhe é o Chrome, que publica a escolhida em
+  // `DevToolsActivePort`. A versão anterior chutava a partir de
+  // `process.uptime()` — quase determinístico, e sem diagnóstico se desse
+  // choque. A saída vai para arquivo pelo mesmo motivo: com `/dev/null` a
+  // falha chegava ao CI sem uma linha do Chrome.
   const proc = execFileSync("bash", [
     "-lc",
     `nohup "${chrome}" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage ` +
-      `--remote-debugging-port=${port} --remote-debugging-address=127.0.0.1 ` +
-      `--user-data-dir=$(mktemp -d) about:blank > /dev/null 2>&1 & echo $!`,
+      `--remote-debugging-port=0 --remote-debugging-address=127.0.0.1 ` +
+      `--user-data-dir="${perfil}" about:blank > "${log}" 2>&1 & echo $!`,
   ])
     .toString()
     .trim();
 
-  // Espera o endpoint do CDP responder antes de conectar.
-  let ready = false;
-  for (let i = 0; i < 40 && !ready; i += 1) {
-    await new Promise((r) => setTimeout(r, 250));
-    try {
-      await fetch(`http://127.0.0.1:${port}/json/version`);
-      ready = true;
-    } catch {
-      // ainda subindo
+  const saidaDoChrome = () => {
+    const texto = existsSync(log) ? readFileSync(log, "utf8").trim() : "";
+    return texto ? `\n\nSaída do Chrome:\n${texto.split("\n").slice(-15).join("\n")}` : "";
+  };
+
+  const port = await until(async () => {
+    const arquivo = join(perfil, "DevToolsActivePort");
+
+    if (!existsSync(arquivo)) {
+      return null;
     }
+
+    const linha = readFileSync(arquivo, "utf8").split("\n")[0]?.trim();
+
+    return linha ? Number(linha) : null;
+  });
+
+  if (port === null) {
+    throw new Error(
+      `Chrome não publicou DevToolsActivePort em ${CHROME_TIMEOUT / 1000}s.${saidaDoChrome()}`,
+    );
   }
 
-  if (!ready) {
-    throw new Error("Chrome não abriu o endpoint do CDP.");
+  // Esperar a aba, e não `/json/version`: aquele responde antes de existir
+  // alvo do tipo `page`, e conectar nessa janela pegava um alvo prestes a ser
+  // trocado — o CDP respondia "Inspected target navigated or closed".
+  const alvo = await until(async () => {
+    try {
+      const targets = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()) as {
+        type: string;
+        webSocketDebuggerUrl?: string;
+      }[];
+
+      return targets.find((t) => t.type === "page" && t.webSocketDebuggerUrl)?.webSocketDebuggerUrl ?? null;
+    } catch {
+      return null; // ainda subindo
+    }
+  });
+
+  if (alvo === null) {
+    throw new Error(
+      `Chrome não publicou nenhuma aba em ${CHROME_TIMEOUT / 1000}s.${saidaDoChrome()}`,
+    );
   }
 
-  const cdp = await connect(port);
+  const cdp = await connect(alvo);
   let falhas = 0;
 
   try {
