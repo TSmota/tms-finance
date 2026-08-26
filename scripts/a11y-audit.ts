@@ -1,0 +1,338 @@
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+
+/**
+ * Auditoria de acessibilidade com axe-core num Chrome de verdade. Sai com 1 se
+ * houver violação. Fica fora do Vitest porque contraste precisa de layout —
+ * ver ARCHITECTURE — Testes.
+ *
+ *   npm run dev            # em outro terminal
+ *   npm run test:a11y
+ */
+
+const BASE = process.env.A11Y_BASE_URL ?? "http://localhost:3000";
+const EMAIL = process.env.A11Y_EMAIL ?? "demo@tms.finance";
+const PASSWORD = process.env.A11Y_PASSWORD ?? "demo1234";
+
+/** WCAG 2.2 nível AA. */
+const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
+
+/** As de detalhe entram por `discoverDetailRoutes`, porque dependem de id. */
+const ROUTES = [
+  "/login",
+  "/register",
+  "/dashboard",
+  "/dashboard/transactions",
+  "/dashboard/cards",
+  "/dashboard/recurring",
+  "/dashboard/accounts",
+  "/dashboard/categories",
+  "/dashboard/people",
+  "/dashboard/debts",
+  "/dashboard/settings",
+];
+
+/**
+ * Em WSL, sem um Chrome **Linux** instalado o resolvedor do Puppeteer acha o
+ * `chrome.exe` do Windows via `wslpath`: o processo sobe, mas o pipe do CDP não
+ * atravessa a fronteira e a conexão morre com "Target closed".
+ */
+function resolveChrome(): string {
+  const candidates = [
+    process.env.CHROME_PATH,
+    "/opt/google/chrome/chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+  ].filter((c): c is string => Boolean(c));
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  try {
+    const found = execFileSync("bash", [
+      "-lc",
+      "ls ~/.cache/puppeteer/chrome/*/chrome-linux64/chrome 2>/dev/null | head -1",
+    ])
+      .toString()
+      .trim();
+
+    if (found && existsSync(found)) {
+      return found;
+    }
+  } catch {
+    // cai no erro abaixo
+  }
+
+  throw new Error(
+    "Chrome não encontrado. Instale o google-chrome-stable ou aponte CHROME_PATH.",
+  );
+}
+
+interface Cdp {
+  evaluate: (expression: string) => Promise<unknown>;
+  goto: (url: string) => Promise<void>;
+  close: () => void;
+}
+
+/** Cliente CDP mínimo: o Puppeteer resolveria, mas por ~300 MB de dependência. */
+async function connect(port: number): Promise<Cdp> {
+  const targets = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()) as {
+    type: string;
+    webSocketDebuggerUrl: string;
+  }[];
+  const page = targets.find((t) => t.type === "page");
+
+  if (!page) {
+    throw new Error("Chrome subiu sem nenhuma aba.");
+  }
+
+  const ws = new WebSocket(page.webSocketDebuggerUrl);
+  await new Promise<void>((resolve, reject) => {
+    ws.onopen = () => resolve();
+    ws.onerror = () => reject(new Error("Falha ao abrir o WebSocket do CDP."));
+  });
+
+  let nextId = 0;
+  const pending = new Map<
+    number,
+    { resolve: (value: Record<string, unknown>) => void; reject: (error: Error) => void }
+  >();
+
+  ws.onmessage = (event) => {
+    const message = JSON.parse(String(event.data));
+    const entry = pending.get(message.id);
+
+    if (!entry) {
+      return;
+    }
+
+    pending.delete(message.id);
+    if (message.error) {
+      entry.reject(new Error(JSON.stringify(message.error)));
+    } else {
+      entry.resolve(message.result);
+    }
+  };
+
+  const send = (
+    method: string,
+    params: Record<string, unknown> = {},
+  ): Promise<Record<string, unknown>> =>
+    new Promise((resolve, reject) => {
+      const id = (nextId += 1);
+      pending.set(id, { resolve, reject });
+      ws.send(JSON.stringify({ id, method, params }));
+    });
+
+  await send("Page.enable");
+  await send("Runtime.enable");
+
+  const evaluate = async (expression: string): Promise<unknown> => {
+    const result = (await send("Runtime.evaluate", {
+      expression,
+      awaitPromise: true,
+      returnByValue: true,
+    })) as {
+      exceptionDetails?: { exception?: { description?: string } };
+      result: { value: unknown };
+    };
+
+    if (result.exceptionDetails) {
+      throw new Error(
+        result.exceptionDetails.exception?.description ?? "Erro ao avaliar script na página.",
+      );
+    }
+
+    return result.result.value;
+  };
+
+  const goto = async (url: string) => {
+    await send("Page.navigate", { url });
+
+    // O axe antes da hidratação mede o HTML do servidor, não a tela real.
+    for (let i = 0; i < 80; i += 1) {
+      await new Promise((r) => setTimeout(r, 250));
+      try {
+        if (await evaluate("document.readyState === 'complete'")) {
+          break;
+        }
+      } catch {
+        // contexto destruído no meio da navegação
+      }
+    }
+
+    await new Promise((r) => setTimeout(r, 1200));
+  };
+
+  return { evaluate, goto, close: () => ws.close() };
+}
+
+const AXE_SOURCE = readFileSync("node_modules/axe-core/axe.min.js", "utf8");
+
+interface Violation {
+  id: string;
+  impact: string;
+  help: string;
+  nodes: { target: string; html: string; resumo: string }[];
+}
+
+async function auditRoute(cdp: Cdp, route: string): Promise<Violation[]> {
+  await cdp.goto(`${BASE}${route}`);
+
+  const injected = await cdp.evaluate("typeof window.axe !== 'undefined'");
+  if (!injected) {
+    await cdp.evaluate(AXE_SOURCE);
+  }
+
+  const raw = (await cdp.evaluate(`
+    axe.run(document, {
+      resultTypes: ['violations'],
+      runOnly: { type: 'tag', values: ${JSON.stringify(TAGS)} }
+    }).then((r) => JSON.stringify(r.violations.map((v) => ({
+      id: v.id,
+      impact: v.impact,
+      help: v.help,
+      nodes: v.nodes.slice(0, 5).map((n) => ({
+        target: n.target.join(' '),
+        html: (n.html || '').slice(0, 160),
+        resumo: (n.failureSummary || '').replace(/\\s+/g, ' ').slice(0, 200)
+      }))
+    }))))
+  `)) as string;
+
+  return JSON.parse(raw) as Violation[];
+}
+
+/** Descobre uma rota de detalhe de cartão e uma de dívida, se houver dados. */
+async function discoverDetailRoutes(cdp: Cdp): Promise<string[]> {
+  const found: string[] = [];
+
+  for (const [lista, prefixo] of [
+    ["/dashboard/cards", "/dashboard/cards/"],
+    ["/dashboard/debts", "/dashboard/debts/"],
+  ] as const) {
+    await cdp.goto(`${BASE}${lista}`);
+    const href = (await cdp.evaluate(
+      `document.querySelector('a[href^="${prefixo}"]')?.getAttribute('href') ?? ''`,
+    )) as string;
+
+    if (href) {
+      found.push(href);
+    }
+  }
+
+  return found;
+}
+
+async function main() {
+  const chrome = resolveChrome();
+  const port = 9222 + Math.floor(process.uptime() * 1000) % 300;
+
+  const proc = execFileSync("bash", [
+    "-lc",
+    `nohup "${chrome}" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage ` +
+      `--remote-debugging-port=${port} --remote-debugging-address=127.0.0.1 ` +
+      `--user-data-dir=$(mktemp -d) about:blank > /dev/null 2>&1 & echo $!`,
+  ])
+    .toString()
+    .trim();
+
+  // Espera o endpoint do CDP responder antes de conectar.
+  let ready = false;
+  for (let i = 0; i < 40 && !ready; i += 1) {
+    await new Promise((r) => setTimeout(r, 250));
+    try {
+      await fetch(`http://127.0.0.1:${port}/json/version`);
+      ready = true;
+    } catch {
+      // ainda subindo
+    }
+  }
+
+  if (!ready) {
+    throw new Error("Chrome não abriu o endpoint do CDP.");
+  }
+
+  const cdp = await connect(port);
+  let falhas = 0;
+
+  try {
+    // Sem sessão, todas as rotas redirecionam para /login e a auditoria mediria
+    // a mesma tela onze vezes — passando.
+    await cdp.goto(`${BASE}/login`);
+    await cdp.evaluate(`(async () => {
+      const inputs = Array.from(document.querySelectorAll('input'));
+      const senha = inputs.find((i) => i.type === 'password');
+      // O TextInput do Mantine não emite \`type\`: identifica por exclusão.
+      const email = inputs.find((i) => i !== senha);
+
+      if (!email || !senha) {
+        throw new Error('Formulário de login não encontrado em ' + location.pathname);
+      }
+
+      const setValue = (el, value) => {
+        // React ignora \`el.value = x\`: o value tracker engole, e onChange não dispara.
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        setter.call(el, value);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+
+      setValue(email, ${JSON.stringify(EMAIL)});
+      setValue(senha, ${JSON.stringify(PASSWORD)});
+      document.querySelector('button[type="submit"]').click();
+      await new Promise((r) => setTimeout(r, 3000));
+    })()`);
+
+    const url = (await cdp.evaluate("location.pathname")) as string;
+    if (url === "/login") {
+      throw new Error(
+        `Login falhou com ${EMAIL}. Rode 'npm run db:seed' ou ajuste A11Y_EMAIL/A11Y_PASSWORD.`,
+      );
+    }
+
+    const rotas = [...ROUTES, ...(await discoverDetailRoutes(cdp))];
+
+    for (const rota of rotas) {
+      const violacoes = await auditRoute(cdp, rota);
+      const total = violacoes.reduce((soma, v) => soma + v.nodes.length, 0);
+
+      if (total === 0) {
+        console.log(`  ok   ${rota}`);
+        continue;
+      }
+
+      falhas += total;
+      console.log(`  FALHA ${rota} — ${total} violação(ões)`);
+      for (const v of violacoes) {
+        console.log(`        [${v.impact}] ${v.id}: ${v.help}`);
+        for (const node of v.nodes) {
+          console.log(`          ${node.target}`);
+          console.log(`          ${node.resumo}`);
+        }
+      }
+    }
+
+    console.log(
+      falhas === 0
+        ? `\n${rotas.length} rotas auditadas, nenhuma violação.`
+        : `\n${falhas} violação(ões) em ${rotas.length} rotas auditadas.`,
+    );
+  } finally {
+    cdp.close();
+    try {
+      process.kill(Number(proc));
+    } catch {
+      // já morreu
+    }
+  }
+
+  process.exit(falhas === 0 ? 0 : 1);
+}
+
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});
