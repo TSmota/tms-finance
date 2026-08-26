@@ -460,6 +460,62 @@ deste projeto está em collation `C.UTF-8`, que ordena por byte: "Água" e "Óle
 caem depois de "Zebra". Fazer na aplicação também elimina a dependência da
 collation do banco de produção.
 
+### Acessibilidade
+
+Alvo: **WCAG 2.2 nível AA**. O portal estava com 53 violações só no painel; hoje
+as 13 rotas fecham em zero, medidas com axe-core em Chrome real.
+
+O contraste é resolvido nos **tokens**, não tela a tela. Três decisões carregam
+quase tudo, e as três estão em [src/theme.ts](src/theme.ts) e
+[src/app/globals.css](src/app/globals.css):
+
+| Onde | O quê | Por quê |
+| --- | --- | --- |
+| `primaryShade: { light: 9 }` | teal 9 no claro | O teal 6 rendia **2.55:1** como texto sobre branco *e* como fundo de botão com rótulo branco — era a violação mais repetida |
+| `colors` | tom 9 escurecido em teal, orange, green, yellow, lime | O tom 9 de fábrica não alcança AA nessas cinco: orange dá 4.30, green 4.37, yellow 3.00 |
+| `--mantine-color-dimmed` | gray-6 → gray-7 | `c="dimmed"` é o token mais usado do portal, e gray-6 rende 3.32:1 |
+
+**As sobrescritas de `-light-color` em `globals.css` precisam casar a
+especificidade do Mantine.** Ele define os tokens em
+`:root[data-mantine-color-scheme="light"]`, que é 0,2,0; um `:root` seco é 0,1,0
+e perde, mesmo importado depois. Custou uma rodada de medição descobrir isso.
+
+**Cor escolhida pelo usuário não pode carregar texto por conta própria.** As
+categorias vêm de um `ColorInput`, então são hex arbitrário: nenhuma paleta fixa
+cobre uma cor desconhecida. Com `variant="light"` o Mantine pintava o texto com
+a própria cor sobre um fundo tingido dela — 2.17:1 num verde comum.
+[CategoryBadge](src/components/ui/CategoryBadge.tsx) é a fonte única da regra:
+`variant="filled"` e a decisão vai para o `autoContrast`.
+
+**O `luminanceThreshold` do Mantine é 0.3, e está errado.** Ele decide entre
+rótulo preto e branco. Branco sobre luminância L rende `1.05 / (L + 0.05)`;
+preto rende `(L + 0.05) / 0.05`. Os dois se cruzam em `(L + 0.05)² = 1.05 × 0.05`,
+ou seja **L ≈ 0.179**. Com 0.3 a escolha pende para branco cedo demais: o laranja
+`#f76707` (L = 0.295) ganhava rótulo branco a 3.04:1 quando preto dava 6.9. No
+cruzamento o pior caso vale 4.58:1 — daí o limiar garantir AA para *qualquer*
+hex.
+
+**`aria-hidden` sobre gráfico do Recharts é armadilha.** O Recharts marca o
+`<svg>` como `role="application"` e deixa ele e o grupo das fatias com
+`tabindex="0"`. Envolver isso em `aria-hidden` troca ruído de leitor de tela por
+uma violação pior — `aria-hidden-focus`, o foco pousando num nó que não é
+anunciado. A saída é desligar a camada na origem: `accessibilityLayer: false` via
+`pieChartProps` / `barChartProps`, mais `rootTabIndex: -1` em `pieProps` — note
+`rootTabIndex`, não `tabIndex`, que é o prop com que o `Pie` monta o `<g>`.
+`inert` resolveria também, mas mataria o tooltip de hover junto.
+
+O `<caption>` da tabela e os rótulos só-para-leitor usam `.visually-hidden` de
+`globals.css`. Ícone decorativo leva `aria-hidden`; botão só com ícone leva
+`aria-label`.
+
+**O modo escuro não está ligado** — não há toggle e o padrão é `light`. Os
+tokens já foram corrigidos para ele (31 violações → 1), mas o resíduo é
+estrutural: o Mantine resolve `--button-color` **inline, no SSR**, para o esquema
+configurado, então alternar o atributo em runtime não recalcula. Ligar o escuro
+de verdade é recurso, não correção de acessibilidade, e não foi feito.
+
+---
+
 ---
 
 ## 10. Testes
@@ -471,6 +527,20 @@ estética:
 |---|---|---|---|
 | `unit` | `src/**/*.test.ts`, ao lado do código | nenhum | lógica pura: dinheiro, calendário, divisão de parcelas, derivação de status |
 | `integration` | `tests/integration/**` | `tms_finance_test` real | serviços de `src/lib` contra Postgres, sem mock do Next |
+
+Fora do Vitest, há um terceiro nível:
+
+| Comando | Onde | Precisa de | O que testa |
+|---|---|---|---|
+| `npm run test:a11y` | [scripts/a11y-audit.ts](scripts/a11y-audit.ts) | dev server + Chrome | axe-core nas 13 rotas, contra WCAG 2.2 AA |
+
+**Por que fora do Vitest:** a regra `color-contrast` do axe compara a cor
+computada do texto com a do fundo pintado atrás dele — precisa de layout e de
+cascata resolvida, e o jsdom não tem nenhum dos dois. Um teste de contraste em
+jsdom **passa sempre**, o que é pior que não ter teste. O par barato dele é
+[src/theme.test.ts](src/theme.test.ts), que roda em milissegundos, trava os
+tokens do tema e roda no `npm test` normal. Os dois se cobrem: o unitário pega
+regressão de token, o script pega combinação nova numa tela.
 
 Regras:
 
@@ -744,8 +814,10 @@ de a moeda base ser a única moeda mutável está na §5.
 
 Lacunas reais, não escondidas:
 
-- Não há teste automatizado de UI. A verificação de navegador é manual, via
-  driver CDP. As armadilhas da §8 são a razão pela qual ela não é opcional.
+- Não há teste automatizado de UI **funcional**. `npm run test:a11y` cobre
+  acessibilidade nas 13 rotas com axe-core em Chrome real, mas não exercita
+  fluxo: submissão, estado de erro e as armadilhas da §8 seguem dependendo de
+  verificação manual no navegador, e por isso ela não é opcional.
 - `deletePerson` remove o histórico de dívidas quitadas junto (cascade). Os
   lançamentos no fluxo de caixa permanecem, mas o agrupamento por dívida é
   perdido. Recusamos apenas quando há posição em aberto.

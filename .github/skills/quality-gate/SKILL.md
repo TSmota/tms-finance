@@ -21,7 +21,14 @@ disable-model-invocation: false
    ```
 
 3. Não corrija falhas não relacionadas. Registre-as separadamente com o comando e a mensagem relevante.
-4. Se houve mudança de UI, invoque `/ui-validation` depois das verificações estáticas.
+4. Se houve mudança de UI, rode a auditoria de acessibilidade — ela precisa do dev server, então reinicie-o depois do passo 2:
+
+   ```bash
+   npm run dev &        # em outro terminal
+   npm run test:a11y    # axe-core nas 13 rotas, WCAG 2.2 AA; sai 1 se houver violação
+   ```
+
+   Em seguida invoque `/ui-validation` para o que o axe não alcança: fluxo, estados e as armadilhas de Server Component.
 5. Confirme no diff que não houve alteração incidental, segredo, artefato ou migration não intencional.
 
 ## Resultado

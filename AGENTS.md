@@ -53,3 +53,8 @@ npm run typecheck && npm run lint && npm test && npm run build
 Pare o `npm run dev` antes da suíte (ARCHITECTURE — Testes) e abra cada tela
 nova no navegador: as armadilhas de ARCHITECTURE — Server Components são
 invisíveis a esses quatro comandos.
+
+Mexeu em UI? Rode também `npm run test:a11y` — axe-core nas 13 rotas contra
+WCAG 2.2 AA. Ele precisa do dev server no ar, então roda **depois** dos quatro
+acima, não junto. O porquê de contraste não caber no Vitest está em
+ARCHITECTURE — Testes.
