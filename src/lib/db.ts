@@ -14,10 +14,17 @@ const globalForPrisma = globalThis as unknown as {
  * Em serverless o número de instâncias é que cresce, então o teto por instância
  * precisa ser pequeno; `DB_POOL_MAX` existe para o processo de longa duração,
  * onde o oposto vale.
+ *
+ * O parse cai no default em vez de repassar o que veio do ambiente: o `pg`
+ * resolve `max` com `||`, então `0` e `NaN` — o que `Number("")` e
+ * `Number("dez")` produzem — viram silenciosamente os 10 que este bloco existe
+ * para evitar.
  */
+const poolMax = Number.parseInt(process.env.DB_POOL_MAX ?? "", 10);
+
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
-  max: Number(process.env.DB_POOL_MAX ?? 5),
+  max: Number.isInteger(poolMax) && poolMax > 0 ? poolMax : 5,
   connectionTimeoutMillis: 5_000,
   idleTimeoutMillis: 10_000,
 });
