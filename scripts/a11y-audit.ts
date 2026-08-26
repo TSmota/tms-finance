@@ -99,11 +99,7 @@ function resolveChrome(): string {
   );
 }
 
-/**
- * Orçamento da subida do Chrome. Eram 10s, e o runner do CI — que ainda segura
- * `next start`, Postgres e o seed — estourava esse teto de forma intermitente.
- * O laço sai assim que fica pronto, então folga aqui não custa tempo.
- */
+/** Orçamento da subida do Chrome. O laço sai assim que fica pronto. */
 const CHROME_TIMEOUT = 60_000;
 
 /** Repete `passo` a cada 250ms até devolver não-nulo, ou `null` no estouro. */
@@ -336,11 +332,8 @@ async function main() {
   const perfil = mkdtempSync(join(tmpdir(), "a11y-chrome-"));
   const log = join(perfil, "chrome.log");
 
-  // Porta 0: quem escolhe é o Chrome, que publica a escolhida em
-  // `DevToolsActivePort`. A versão anterior chutava a partir de
-  // `process.uptime()` — quase determinístico, e sem diagnóstico se desse
-  // choque. A saída vai para arquivo pelo mesmo motivo: com `/dev/null` a
-  // falha chegava ao CI sem uma linha do Chrome.
+  // Porta 0 e saída em arquivo: ARCHITECTURE — Acessibilidade explica por que
+  // chutar porta e descartar a saída faziam este job piscar no CI.
   const proc = execFileSync("bash", [
     "-lc",
     `nohup "${chrome}" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage ` +
@@ -373,9 +366,7 @@ async function main() {
     );
   }
 
-  // Esperar a aba, e não `/json/version`: aquele responde antes de existir
-  // alvo do tipo `page`, e conectar nessa janela pegava um alvo prestes a ser
-  // trocado — o CDP respondia "Inspected target navigated or closed".
+  // A aba, e não `/json/version`: aquele responde antes de existir alvo `page`.
   const alvo = await until(async () => {
     try {
       const targets = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()) as {

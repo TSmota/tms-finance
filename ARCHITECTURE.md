@@ -663,6 +663,21 @@ target navigated or closed` no lugar da causa. Por isso a espera pelo pós-login
 mora fora da página, e o script exige chegar ao `/dashboard`, não apenas sair
 do `/login`.
 
+**A subida do Chrome é handshake, não espera cega.** A porta vem de
+`--remote-debugging-port=0` e é lida do `DevToolsActivePort` que o Chrome
+escreve no perfil. A versão anterior chutava (`9222 + uptime % 300`), o que não
+é sorteio nenhum: `process.uptime()` naquele ponto é sempre pequeno, então uma
+tentativa nova reincidia quase na mesma porta, e um choque virava `Chrome não
+abriu o endpoint do CDP`. E a prontidão se mede pela **aba**, não por
+`/json/version` — aquele responde antes de existir alvo do tipo `page`, e
+conectar nessa janela pega um alvo prestes a ser trocado, devolvendo o mesmo
+`-32000` do parágrafo acima por causa completamente diferente. O orçamento é de
+60s porque o runner do CI ainda segura `next start`, Postgres e seed; o laço sai
+assim que fica pronto, então a folga não custa tempo. A saída do Chrome vai para
+arquivo, e as últimas linhas entram na mensagem de erro: com `/dev/null` a falha
+chegava ao CI sem uma linha de diagnóstico, que foi como esse job passou a
+piscar sem ninguém saber por quê.
+
 **Por que fora do Vitest:** a regra `color-contrast` do axe compara a cor
 computada do texto com a do fundo pintado atrás dele — precisa de layout e de
 cascata resolvida, e o jsdom não tem nenhum dos dois. Um teste de contraste em
