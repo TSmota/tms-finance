@@ -2,6 +2,7 @@ import type { Currency } from "@prisma/client";
 
 import { isCurrencyCode } from "@/lib/currency";
 import { parseAgentScopes, type AgentScope } from "@/lib/agentScopes";
+import { UUID_PATTERN } from "@/lib/uuid";
 
 /**
  * Identidade resolvida do agente, para o resto da casca MCP.
@@ -18,8 +19,6 @@ export interface AgentContext {
   /** Moeda de referência dos relatórios. */
   baseCurrency: Currency;
 }
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface AuthInfoLike {
   clientId?: unknown;
