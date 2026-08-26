@@ -15,7 +15,7 @@ import { requireUser } from "@/lib/session";
 import { listDebts, type DebtListItem } from "@/lib/debts";
 import { listPersonOptions } from "@/lib/people";
 import { loadFormOptions } from "@/lib/formOptions";
-import { formatCurrency, DEFAULT_CATEGORY_COLOR, type CurrencyCode } from "@/lib/currency";
+import { formatCurrency, type CurrencyCode } from "@/lib/currency";
 import {
   DEBT_STATUS_COLORS,
   DEBT_STATUS_LABELS,
@@ -32,6 +32,7 @@ import { LinkButton } from "@/components/ui/AppLink";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { DebtFormValues } from "@/components/forms/DebtFields";
+import { CategoryBadge } from "@/components/ui/CategoryBadge";
 
 interface DebtsPageProps {
   /** `?person=<uuid>` filtra por pessoa, vindo da tela de pessoas. */
@@ -128,7 +129,7 @@ export default async function DebtsPage({ searchParams }: DebtsPageProps) {
             <Stack key={type} gap="xs">
               <Group gap="xs">
                 <TypeIcon type={type} />
-                <Title order={5} c="dimmed">
+                <Title order={2} size="h5" c="dimmed">
                   {DEBT_TYPE_POSITION[type]}
                 </Title>
                 <Badge variant="light" color="gray" size="sm">
@@ -192,9 +193,7 @@ function DebtCard({ debt, people, categories, accounts }: DebtCardProps) {
       </Group>
 
       <Group gap="xs" mb="sm">
-        <Badge color={debt.categoryColor ?? DEFAULT_CATEGORY_COLOR} variant="light">
-          {debt.categoryName}
-        </Badge>
+        <CategoryBadge name={debt.categoryName} color={debt.categoryColor} />
         {debt.dueDate && (
           <Text size="xs" c="dimmed">
             vence {formatDay(debt.dueDate)}
@@ -214,6 +213,7 @@ function DebtCard({ debt, people, categories, accounts }: DebtCardProps) {
         color={debt.status === "PAID" ? "teal" : "blue"}
         mt="sm"
         mb={4}
+        aria-label={`Quitação de ${debt.personName}`}
       />
       <Text size="xs" c="dimmed">
         {formatCurrency(debt.settledAmount, debt.currency)} de{" "}

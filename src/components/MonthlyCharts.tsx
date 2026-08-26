@@ -49,6 +49,10 @@ export function MonthlyCharts(props: MonthlyChartsProps) {
             O que de fato entrou e saiu das contas
           </Text>
         </Stack>
+        {/* O gráfico não tem legenda em texto como o `CategoryPie`. */}
+        <Text className="visually-hidden">
+          {`Receitas: ${formatCurrency(income, currency)}. Despesas: ${formatCurrency(expenses, currency)}.`}
+        </Text>
         <BarChart
           h={220}
           data={[
@@ -60,10 +64,11 @@ export function MonthlyCharts(props: MonthlyChartsProps) {
           ]}
           dataKey="label"
           series={[
-            { name: "Receitas", color: "teal.6" },
-            { name: "Despesas", color: "red.6" },
+            { name: "Receitas", color: "teal.9" },
+            { name: "Despesas", color: "red.9" },
           ]}
           withLegend
+          barChartProps={{ accessibilityLayer: false }}
         />
       </Card>
     </SimpleGrid>

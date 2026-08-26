@@ -111,7 +111,7 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
       />
 
       <Card withBorder radius="md" padding="lg">
-        <Title order={4} mb="md">
+        <Title order={2} size="h4" mb="md">
           Lançamentos
         </Title>
         <TransactionsTable

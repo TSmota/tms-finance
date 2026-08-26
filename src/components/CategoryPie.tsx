@@ -57,12 +57,21 @@ export function CategoryPie(props: CategoryPieProps) {
   return (
     <Group align="center" gap="lg" wrap="nowrap">
       {withChart && (
+        /*
+          A legenda ao lado já traz os dados em texto. `aria-hidden` aqui seria
+          violação: o Recharts deixa o `<svg>` focável, e o foco pousaria num nó
+          que o leitor não anuncia. Desligar a camada resolve na origem e
+          preserva o tooltip de hover.
+        */
         <PieChart
           data={data}
           withTooltip
           tooltipDataSource="segment"
           size={180}
           strokeWidth={0}
+          pieChartProps={{ accessibilityLayer: false }}
+          /* `rootTabIndex`, não `tabIndex`: é o prop com que o `Pie` monta o `<g>`. */
+          pieProps={{ rootTabIndex: -1 }}
         />
       )}
       <Stack gap={6} flex={1} miw={0}>

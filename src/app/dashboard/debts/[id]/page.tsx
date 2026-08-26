@@ -23,7 +23,7 @@ import { NotFoundError } from "@/lib/errors";
 import { getDebtDetail } from "@/lib/debts";
 import { listPersonOptions } from "@/lib/people";
 import { loadFormOptions } from "@/lib/formOptions";
-import { DEFAULT_CATEGORY_COLOR, formatCurrency, type CurrencyCode } from "@/lib/currency";
+import { formatCurrency, type CurrencyCode } from "@/lib/currency";
 import {
   DEBT_STATUS_COLORS,
   DEBT_STATUS_LABELS,
@@ -36,6 +36,7 @@ import { EditDebtButton } from "@/components/forms/EditDebtButton";
 import { DeleteSettlementButton } from "@/components/forms/DeleteSettlementButton";
 import { BackLink } from "@/components/ui/AppLink";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { CategoryBadge } from "@/components/ui/CategoryBadge";
 
 function formatDay(date: Date): string {
   return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
@@ -128,6 +129,7 @@ export default async function DebtDetailPage({
               color={debt.status === "PAID" ? "teal" : "blue"}
               mt="sm"
               mb={4}
+              aria-label="Progresso de quitação da dívida"
             />
             <Text size="xs" c="dimmed">
               {formatCurrency(debt.settledAmount, debt.currency)} abatidos de{" "}
@@ -140,13 +142,7 @@ export default async function DebtDetailPage({
             <Text size="sm" c="dimmed">
               Motivo
             </Text>
-            <Badge
-              color={debt.categoryColor ?? DEFAULT_CATEGORY_COLOR}
-              variant="light"
-              mt="xs"
-            >
-              {debt.categoryName}
-            </Badge>
+            <CategoryBadge name={debt.categoryName} color={debt.categoryColor} mt="xs" />
             {debt.dueDate && (
               <>
                 <Text size="sm" c="dimmed" mt="md">
@@ -160,7 +156,7 @@ export default async function DebtDetailPage({
       </Grid>
 
       <Card withBorder radius="md" padding="lg">
-        <Title order={4} mb="md">
+        <Title order={2} size="h4" mb="md">
           Movimentações
         </Title>
 
@@ -197,12 +193,10 @@ export default async function DebtDetailPage({
                     </TableTd>
                     <TableTd>
                       {movement.categoryName ? (
-                        <Badge
-                          color={movement.categoryColor ?? DEFAULT_CATEGORY_COLOR}
-                          variant="light"
-                        >
-                          {movement.categoryName}
-                        </Badge>
+                        <CategoryBadge
+                          name={movement.categoryName}
+                          color={movement.categoryColor}
+                        />
                       ) : (
                         <Text c="dimmed" size="sm">
                           —

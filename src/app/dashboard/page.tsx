@@ -244,7 +244,7 @@ export default async function DashboardPage() {
       {pending.length > 0 && (
         <Card withBorder radius="md" padding="lg">
           <Group justify="space-between" mb="md">
-            <Title order={4}>A confirmar neste mês</Title>
+            <Title order={2} size="h4">A confirmar neste mês</Title>
             <LinkButton href="/dashboard/recurring" rightSection={<ChevronRight size={14} />}>
               Ver recorrentes
             </LinkButton>
@@ -290,7 +290,7 @@ export default async function DashboardPage() {
 
       <Card withBorder radius="md" padding="lg">
         <Group justify="space-between" mb="md">
-          <Title order={4}>Atividade recente</Title>
+          <Title order={2} size="h4">Atividade recente</Title>
           <LinkButton href="/dashboard/transactions" rightSection={<ChevronRight size={14} />}>
             Todas as transações
           </LinkButton>

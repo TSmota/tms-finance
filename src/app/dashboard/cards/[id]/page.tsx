@@ -26,7 +26,6 @@ import {
 import { listAccounts } from "@/lib/accounts";
 import { listCategoryOptions } from "@/lib/categories";
 import {
-  DEFAULT_CATEGORY_COLOR,
   formatCurrency,
   type CurrencyCode,
 } from "@/lib/currency";
@@ -40,6 +39,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { BackLink } from "@/components/ui/AppLink";
 import { toCalendarDate } from "@/lib/dates";
 import type { CardPurchaseFormValues } from "@/components/forms/CardPurchaseFields";
+import { CategoryBadge } from "@/components/ui/CategoryBadge";
 
 const MONTH_NAMES = [
   "janeiro",
@@ -254,12 +254,10 @@ export default async function CardInvoicesPage({
                             </TableTd>
                             <TableTd>
                               {item.categoryName ? (
-                                <Badge
-                                  color={item.categoryColor ?? DEFAULT_CATEGORY_COLOR}
-                                  variant="light"
-                                >
-                                  {item.categoryName}
-                                </Badge>
+                                <CategoryBadge
+                                  name={item.categoryName}
+                                  color={item.categoryColor}
+                                />
                               ) : (
                                 <Text c="dimmed" size="sm">
                                   —

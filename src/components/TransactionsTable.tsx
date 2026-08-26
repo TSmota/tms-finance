@@ -19,13 +19,14 @@ import {
 } from "@mantine/core";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 
-import { DEFAULT_CATEGORY_COLOR, formatCurrency, type CurrencyCode } from "@/lib/currency";
+import { formatCurrency, type CurrencyCode } from "@/lib/currency";
 import { toCalendarDate } from "@/lib/dates";
 import { EmptyState } from "@/components/EmptyState";
 import { EditTransactionButton } from "@/components/forms/EditTransactionButton";
 import { DeleteTransactionButton } from "@/components/forms/DeleteTransactionButton";
 import { ConfirmPendingButton } from "@/components/forms/ConfirmPendingButton";
 import type { AccountOption, Option } from "@/components/forms/options";
+import { CategoryBadge } from "@/components/ui/CategoryBadge";
 
 export interface TransactionRow {
   id: string;
@@ -62,6 +63,11 @@ interface TransactionsTableProps {
 
 type SortKey = "date" | "amount";
 type SortDir = "asc" | "desc";
+
+/** Tradução de `SortDir` para o vocabulário do `aria-sort`. */
+function ariaSort(dir: SortDir): "ascending" | "descending" {
+  return dir === "asc" ? "ascending" : "descending";
+}
 
 export function TransactionsTable(props: TransactionsTableProps) {
   const {
@@ -131,10 +137,12 @@ export function TransactionsTable(props: TransactionsTableProps) {
 
   return (
     <>
-      <Group mb="md" gap="sm" wrap="wrap">
+      {/* `aria-label` em cada controle: a barra não comporta rótulo visível. */}
+      <Group mb="md" gap="sm" wrap="wrap" role="search" aria-label="Filtros de transações">
         <TextInput
           placeholder="Buscar descrição"
-          leftSection={<Search size={16} />}
+          aria-label="Buscar por descrição"
+          leftSection={<Search size={16} aria-hidden />}
           value={search}
           onChange={(event) => setSearch(event.currentTarget.value)}
           flex={1}
@@ -142,6 +150,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
         />
         <Select
           placeholder="Todas as categorias"
+          aria-label="Filtrar por categoria"
           data={categories}
           value={categoryId}
           onChange={setCategoryId}
@@ -151,6 +160,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
         />
         <Select
           placeholder="Todas as contas"
+          aria-label="Filtrar por conta"
           data={accounts}
           value={accountId}
           onChange={setAccountId}
@@ -160,6 +170,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
         <SegmentedControl
           value={type}
           onChange={setType}
+          aria-label="Filtrar por tipo"
           data={[
             { value: "ALL", label: "Todos" },
             { value: "INCOME", label: "Receitas" },
@@ -170,6 +181,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
           <SegmentedControl
             value={status}
             onChange={setStatus}
+            aria-label="Filtrar por situação"
             data={[
               { value: "ALL", label: "Tudo" },
               { value: "CONFIRMED", label: "Confirmados" },
@@ -179,14 +191,25 @@ export function TransactionsTable(props: TransactionsTableProps) {
         )}
       </Group>
 
+      {/* A filtragem não recarrega a página; sem região viva, ninguém é avisado. */}
+      <Text className="visually-hidden" role="status" aria-live="polite">
+        {`${filtered.length} ${filtered.length === 1 ? "transação encontrada" : "transações encontradas"}`}
+      </Text>
+
       {filtered.length === 0 ? (
         <EmptyState message="Nenhuma transação corresponde aos filtros." icon={Search} />
       ) : (
         <Table.ScrollContainer minWidth={720}>
           <Table highlightOnHover>
+            {/* Oculta: o Card em volta já traz o título na tela. */}
+            <caption className="visually-hidden">
+              {`Transações, ${filtered.length} de ${transactions.length}, ordenadas por ${
+                sortKey === "date" ? "data" : "valor"
+              } em ordem ${sortDir === "asc" ? "crescente" : "decrescente"}`}
+            </caption>
             <TableThead>
               <TableTr>
-                <TableTh>
+                <TableTh scope="col" aria-sort={sortKey === "date" ? ariaSort(sortDir) : "none"}>
                   <SortHeader
                     label="Data"
                     active={sortKey === "date"}
@@ -194,10 +217,14 @@ export function TransactionsTable(props: TransactionsTableProps) {
                     onClick={() => toggleSort("date")}
                   />
                 </TableTh>
-                <TableTh>Descrição</TableTh>
-                <TableTh>Categoria</TableTh>
-                <TableTh>Conta</TableTh>
-                <TableTh ta="right">
+                <TableTh scope="col">Descrição</TableTh>
+                <TableTh scope="col">Categoria</TableTh>
+                <TableTh scope="col">Conta</TableTh>
+                <TableTh
+                  scope="col"
+                  ta="right"
+                  aria-sort={sortKey === "amount" ? ariaSort(sortDir) : "none"}
+                >
                   <SortHeader
                     label="Valor"
                     active={sortKey === "amount"}
@@ -206,7 +233,9 @@ export function TransactionsTable(props: TransactionsTableProps) {
                     align="right"
                   />
                 </TableTh>
-                <TableTh w={140} />
+                <TableTh scope="col" w={140}>
+                  <span className="visually-hidden">Ações</span>
+                </TableTh>
               </TableTr>
             </TableThead>
             <TableTbody>
@@ -228,12 +257,10 @@ export function TransactionsTable(props: TransactionsTableProps) {
                     </TableTd>
                     <TableTd>
                       {transaction.categoryName ? (
-                        <Badge
-                          color={transaction.categoryColor ?? DEFAULT_CATEGORY_COLOR}
-                          variant="light"
-                        >
-                          {transaction.categoryName}
-                        </Badge>
+                        <CategoryBadge
+                          name={transaction.categoryName}
+                          color={transaction.categoryColor}
+                        />
                       ) : (
                         <Text c="dimmed" size="sm">
                           —
@@ -323,13 +350,21 @@ interface SortHeaderProps {
 function SortHeader(props: SortHeaderProps) {
   const { label, active, dir, onClick, align = "left" } = props;
 
+  // O `aria-sort` no `<th>` informa o estado; o rótulo aqui, a ação.
+  const next = active && dir === "asc" ? "decrescente" : "crescente";
+
   return (
-    <UnstyledButton onClick={onClick} style={{ display: "inline-flex" }}>
+    <UnstyledButton
+      onClick={onClick}
+      style={{ display: "inline-flex" }}
+      aria-label={`Ordenar por ${label.toLowerCase()}, ordem ${next}`}
+    >
       <Group gap={4} wrap="nowrap" justify={align === "right" ? "flex-end" : "flex-start"}>
         <Text size="sm" fw={500} inherit>
           {label}
         </Text>
-        {active && (dir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+        {active &&
+          (dir === "asc" ? <ChevronUp size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />)}
       </Group>
     </UnstyledButton>
   );

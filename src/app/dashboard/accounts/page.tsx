@@ -58,7 +58,7 @@ export default async function AccountsPage() {
           <Stack key={institution} gap="xs">
             <Group gap="xs">
               <Landmark size={16} color="var(--mantine-color-dimmed)" />
-              <Title order={5} c="dimmed">
+              <Title order={2} size="h5" c="dimmed">
                 {institution}
               </Title>
               <Badge variant="light" color="gray" size="sm">

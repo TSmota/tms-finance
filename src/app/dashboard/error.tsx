@@ -14,8 +14,8 @@ export default function DashboardError(props: DashboardErrorProps) {
   return (
     <Center mih="60vh">
       <Stack align="center" gap="sm" maw={420}>
-        <TriangleAlert size={40} color="var(--mantine-color-red-6)" />
-        <Title order={3}>Algo deu errado</Title>
+        <TriangleAlert size={40} color="var(--mantine-color-red-6)" aria-hidden />
+        <Title order={1} size="h3">Algo deu errado</Title>
         <Text c="dimmed" ta="center">
           {error.message ||
             "Não foi possível carregar esta página. Pode ser um problema temporário no banco de dados ou no serviço de câmbio."}

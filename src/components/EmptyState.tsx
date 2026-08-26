@@ -16,7 +16,7 @@ export function EmptyState(props: EmptyStateProps) {
   return (
     <Center py="xl">
       <Stack align="center" gap="xs">
-        <Icon size={40} strokeWidth={1.5} color="var(--mantine-color-dimmed)" />
+        <Icon size={40} strokeWidth={1.5} color="var(--mantine-color-dimmed)" aria-hidden />
         <Text c="dimmed" ta="center" maw={360}>
           {message}
         </Text>

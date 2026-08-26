@@ -54,7 +54,7 @@ export default function LoginPage() {
 
   return (
     <Paper withBorder shadow="md" p="xl" radius="md" w={420} maw="100%">
-      <Title order={2} ta="center" mb="lg">
+      <Title order={1} size="h2" ta="center" mb="lg">
         TMS Finance
       </Title>
 
@@ -91,7 +91,7 @@ export default function LoginPage() {
 
       <Text c="dimmed" size="sm" ta="center" mt="md">
         Ainda não tem uma conta?{" "}
-        <Anchor component={Link} href="/register" size="sm">
+        <Anchor component={Link} href="/register" size="sm" underline="always">
           Criar conta
         </Anchor>
       </Text>

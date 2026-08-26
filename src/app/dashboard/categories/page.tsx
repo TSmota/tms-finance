@@ -9,6 +9,7 @@ import { EditCategoryButton } from "@/components/forms/EditCategoryButton";
 import { DeleteCategoryButton } from "@/components/forms/DeleteCategoryButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { CategoryBadge } from "@/components/ui/CategoryBadge";
 
 export default async function CategoriesPage() {
   const user = await requireUser();
@@ -34,9 +35,7 @@ export default async function CategoriesPage() {
             <Card key={root.id} withBorder radius="md" padding="lg">
               <Group justify="space-between" wrap="nowrap">
                 <Group gap="sm">
-                  <Badge color={root.color ?? DEFAULT_CATEGORY_COLOR} variant="light" size="lg">
-                    {root.name}
-                  </Badge>
+                  <CategoryBadge name={root.name} color={root.color} size="lg" />
                   {root.subcategories.length > 0 && (
                     <Text size="xs" c="dimmed">
                       {root.subcategories.length}{" "}

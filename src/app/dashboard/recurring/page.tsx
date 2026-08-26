@@ -29,7 +29,7 @@ import { getBalanceProjection } from "@/lib/projection";
 import { listCreditCards } from "@/lib/creditCards";
 import { loadFormOptions } from "@/lib/formOptions";
 import { toCalendarDate } from "@/lib/dates";
-import { DEFAULT_CATEGORY_COLOR, formatCurrency, type CurrencyCode } from "@/lib/currency";
+import { formatCurrency, type CurrencyCode } from "@/lib/currency";
 import { FREQUENCY_LABELS } from "@/lib/recurrence";
 import { MonthSelector } from "@/components/MonthSelector";
 import { AddRecurringButton } from "@/components/forms/AddRecurringButton";
@@ -42,6 +42,7 @@ import type { RecurringFormValues } from "@/components/forms/RecurringFields";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { resolveCompetency } from "@/lib/competency";
+import { CategoryBadge } from "@/components/ui/CategoryBadge";
 
 interface RecurringPageProps {
   searchParams: Promise<{ month?: string }>;
@@ -188,7 +189,7 @@ export default async function RecurringPage({ searchParams }: RecurringPageProps
         <GridCol span={{ base: 12, md: 6 }}>
           <Card withBorder radius="md" padding="lg" h="100%">
             <Group justify="space-between" mb="sm">
-              <Title order={5}>A confirmar</Title>
+              <Title order={2} size="h5">A confirmar</Title>
               <Badge variant="light" color={pending.length > 0 ? "orange" : "gray"} size="sm">
                 {pending.length}
               </Badge>
@@ -242,7 +243,7 @@ export default async function RecurringPage({ searchParams }: RecurringPageProps
       </Grid>
 
       <Card withBorder radius="md" padding="lg">
-        <Title order={4} mb="md">
+        <Title order={2} size="h4" mb="md">
           Definições
         </Title>
 
@@ -291,12 +292,7 @@ export default async function RecurringPage({ searchParams }: RecurringPageProps
                       </Group>
                     </TableTd>
                     <TableTd>
-                      <Badge
-                        color={item.categoryColor ?? DEFAULT_CATEGORY_COLOR}
-                        variant="light"
-                      >
-                        {item.categoryName}
-                      </Badge>
+                      <CategoryBadge name={item.categoryName} color={item.categoryColor} />
                     </TableTd>
                     <TableTd>
                       <Text size="sm">

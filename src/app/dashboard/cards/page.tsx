@@ -79,7 +79,7 @@ export default async function CardsPage() {
           <Stack key={institution} gap="xs">
             <Group gap="xs">
               <Landmark size={16} color="var(--mantine-color-dimmed)" />
-              <Title order={5} c="dimmed">
+              <Title order={2} size="h5" c="dimmed">
                 {institution}
               </Title>
               <Badge variant="light" color="gray" size="sm">
@@ -120,6 +120,7 @@ export default async function CardsPage() {
                             color={overLimit ? "red" : usagePercent! > 80 ? "orange" : "teal"}
                             mt="sm"
                             mb={4}
+                            aria-label={`Limite usado do cartão ${card.name}`}
                           />
                           <Text size="xs" c={overLimit ? "red" : "dimmed"}>
                             {overLimit
