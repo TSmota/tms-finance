@@ -4,9 +4,8 @@ import type { ReactNode } from "react";
 
 interface EmptyStateProps {
   message: string;
-  /** Optional icon (defaults to Inbox). */
   icon?: LucideIcon;
-  /** Optional call-to-action rendered below the message (e.g. a button). */
+  /** Renderizada abaixo da mensagem, tipicamente o botão que resolve o vazio. */
   action?: ReactNode;
 }
 

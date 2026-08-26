@@ -16,7 +16,6 @@
 /** `sensitivity: "base"` faz "a", "á" e "A" compararem como equivalentes. */
 const collator = new Intl.Collator("pt-BR", { sensitivity: "base", numeric: true });
 
-/** Compara dois nomes em ordem alfabética pt-BR. */
 export function compareNames(a: string, b: string): number {
   return collator.compare(a, b);
 }

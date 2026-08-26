@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { ActionIcon } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import { Pencil } from "lucide-react";
@@ -9,9 +8,10 @@ import { Pencil } from "lucide-react";
 import { transactionSchema } from "@/lib/validations";
 import { updateTransaction } from "@/actions/transactions";
 import { FormModal } from "@/components/ui/FormModal";
+import { IconButton } from "@/components/ui/IconButton";
 import { useActionModal } from "@/components/ui/useActionModal";
 import { TransactionFields, type TransactionFormValues } from "./TransactionFields";
-import type { AccountOption, Option } from "./options";
+import type { AccountOption, Option } from "@/lib/options";
 
 interface EditTransactionButtonProps {
   id: string;
@@ -53,9 +53,9 @@ export function EditTransactionButton(props: EditTransactionButtonProps) {
 
   return (
     <>
-      <ActionIcon variant="subtle" color="gray" aria-label="Editar transação" onClick={handleOpen}>
+      <IconButton label="Editar transação" onClick={handleOpen}>
         <Pencil size={16} />
-      </ActionIcon>
+      </IconButton>
       <FormModal
         opened={opened}
         onClose={close}

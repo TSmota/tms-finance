@@ -14,7 +14,8 @@ import { DEBT_SETTLEMENT_LABELS, type DebtTypeCode } from "@/lib/debtTypes";
 import { settleDebt } from "@/actions/debts";
 import { FormModal } from "@/components/ui/FormModal";
 import { useActionModal } from "@/components/ui/useActionModal";
-import type { AccountOption, Option } from "./options";
+import { useFormValue } from "@/components/ui/useFormValue";
+import type { AccountOption, Option } from "@/lib/options";
 
 /** `type`, não `interface`: index signature implícita exigida pelo zod4Resolver. */
 type SettlementFormValues = {
@@ -25,6 +26,7 @@ type SettlementFormValues = {
   categoryId: string;
   description: string;
   manualFxRate?: number | undefined;
+  manualDebtFxRate?: number | undefined;
 };
 
 interface SettleDebtButtonProps {
@@ -82,6 +84,7 @@ export function SettleDebtButton(props: SettleDebtButtonProps) {
     categoryId: "",
     description: "",
     manualFxRate: undefined,
+    manualDebtFxRate: undefined,
   };
 
   const form = useForm<SettlementFormValues>({
@@ -106,10 +109,14 @@ export function SettleDebtButton(props: SettleDebtButtonProps) {
     });
   });
 
-  const values = form.getValues();
-  const accountCurrency = accounts.find((account) => account.value === values.accountId)?.currency;
+  const settlementCurrency = useFormValue(form, "currency");
+  const accountId = useFormValue(form, "accountId");
+  const accountCurrency = accounts.find((account) => account.value === accountId)?.currency;
   const inheritedLabel =
     categories.find((category) => category.value === defaultCategoryId)?.label ?? "a de origem";
+  // Cada conversão que exista ganha o seu campo.
+  const needsAccountRate = Boolean(accountCurrency) && settlementCurrency !== accountCurrency;
+  const needsDebtRate = settlementCurrency !== currency;
 
   return (
     <>
@@ -147,7 +154,7 @@ export function SettleDebtButton(props: SettleDebtButtonProps) {
         <Select
           label="Moeda"
           description={
-            values.currency === currency
+            settlementCurrency === currency
               ? undefined
               : `Será convertido para ${currency} ao abater a dívida`
           }
@@ -190,17 +197,30 @@ export function SettleDebtButton(props: SettleDebtButtonProps) {
           <>
             <Alert color="yellow" icon={<TriangleAlert size={16} />} title="Taxa de câmbio manual">
               <Text size="sm">
-                O serviço de câmbio está indisponível. Informe a taxa de {values.currency} para{" "}
-                {accountCurrency}.
+                O serviço de câmbio está indisponível. Informe a cotação de cada conversão: o
+                valor abate a dívida em {currency} e move a conta em {accountCurrency}.
               </Text>
             </Alert>
-            <NumberInput
-              label="Taxa de câmbio"
-              decimalScale={4}
-              min={0}
-              key={form.key("manualFxRate")}
-              {...form.getInputProps("manualFxRate")}
-            />
+            {needsAccountRate && (
+              <NumberInput
+                label={`Taxa de ${settlementCurrency} para ${accountCurrency}`}
+                description="Usada para debitar ou creditar a conta"
+                decimalScale={4}
+                min={0}
+                key={form.key("manualFxRate")}
+                {...form.getInputProps("manualFxRate")}
+              />
+            )}
+            {needsDebtRate && (
+              <NumberInput
+                label={`Taxa de ${settlementCurrency} para ${currency}`}
+                description="Usada para abater o restante da dívida"
+                decimalScale={4}
+                min={0}
+                key={form.key("manualDebtFxRate")}
+                {...form.getInputProps("manualDebtFxRate")}
+              />
+            )}
           </>
         )}
       </FormModal>

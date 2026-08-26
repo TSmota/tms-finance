@@ -89,6 +89,19 @@ describe("pagamento", () => {
     expect(after.totalAmount.toFixed(2)).toBe("250.00");
   });
 
+  it("não conta o próprio pagamento como item da fatura", async () => {
+    // Pelo mesmo motivo do total: o pagamento aponta para a fatura, e a
+    // listagem de itens já o exclui. Uma fatura de uma compra passava a dizer
+    // "2 itens" só por ter sido paga.
+    const { user, account, card, invoice } = await scenario({ amount: 250 });
+
+    expect((await listCardInvoices(user.id, card.id))[0]?.itemCount).toBe(1);
+
+    await payInvoice(user.id, invoice.id, { accountId: account.id, ...payment });
+
+    expect((await listCardInvoices(user.id, card.id))[0]?.itemCount).toBe(1);
+  });
+
   it("mantém o saldo denormalizado consistente com o recálculo", async () => {
     const { user, account, invoice } = await scenario({ amount: 250 });
 

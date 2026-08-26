@@ -3,8 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 
 /**
  * Auditoria de acessibilidade com axe-core num Chrome de verdade. Sai com 1 se
- * houver violação. Fica fora do Vitest porque contraste precisa de layout —
- * ver ARCHITECTURE — Testes.
+ * houver violação. Fica fora do Vitest porque a regra `color-contrast` compara
+ * cor computada com fundo pintado, e o jsdom não tem layout nem cascata.
  *
  *   npm run dev            # em outro terminal
  *   npm run test:a11y
@@ -30,6 +30,32 @@ const ROUTES = [
   "/dashboard/people",
   "/dashboard/debts",
   "/dashboard/settings",
+];
+
+/**
+ * Quantas rotas de detalhe `discoverDetailRoutes` tem de achar. Sem cartão nem
+ * dívida no banco ela devolve zero, e a auditoria passaria medindo duas telas a
+ * menos — um gate que degrada em silêncio não é gate.
+ */
+const DETAIL_ROUTES = 2;
+
+/**
+ * Todo formulário deste app vive dentro de um `Modal`, e o axe nunca tinha
+ * visto nenhum: o conteúdo só existe no DOM depois do clique.
+ *
+ * O rótulo é o texto exato do botão, que é também o título do modal. Botão que
+ * não aparece é falha, não "pulado": em `accounts` e `categories` ele é
+ * incondicional, e nas demais os pré-requisitos vêm do seed, que esta auditoria
+ * já exige.
+ */
+const MODAL_ROUTES: Array<[route: string, label: string]> = [
+  ["/dashboard/accounts", "Adicionar conta"],
+  ["/dashboard/categories", "Adicionar categoria"],
+  ["/dashboard/transactions", "Adicionar transação"],
+  ["/dashboard/cards", "Adicionar cartão"],
+  ["/dashboard/people", "Nova pessoa"],
+  ["/dashboard/debts", "Nova dívida"],
+  ["/dashboard/recurring", "Nova recorrência"],
 ];
 
 /**
@@ -182,6 +208,42 @@ interface Violation {
 async function auditRoute(cdp: Cdp, route: string): Promise<Violation[]> {
   await cdp.goto(`${BASE}${route}`);
 
+  return runAxe(cdp);
+}
+
+/** Audita a tela com o formulário aberto: foco preso, rótulos e contraste do modal. */
+async function auditModal(cdp: Cdp, route: string, label: string): Promise<Violation[]> {
+  await cdp.goto(`${BASE}${route}`);
+  await cdp.evaluate(`(async () => {
+    const label = ${JSON.stringify(label)};
+    const button = Array.from(document.querySelectorAll('button')).find(
+      (b) => b.textContent.trim() === label,
+    );
+
+    if (!button) {
+      throw new Error('Botão "' + label + '" não encontrado em ' + location.pathname);
+    }
+
+    button.click();
+
+    for (let i = 0; i < 40; i += 1) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (document.querySelector('[role="dialog"]')) {
+        // O Transition do Mantine ainda está correndo; medir no meio dele
+        // produz falso positivo de contraste sobre o overlay meio opaco.
+        await new Promise((r) => setTimeout(r, 600));
+
+        return true;
+      }
+    }
+
+    throw new Error('O modal de "' + label + '" não abriu em ' + location.pathname);
+  })()`);
+
+  return runAxe(cdp);
+}
+
+async function runAxe(cdp: Cdp): Promise<Violation[]> {
   const injected = await cdp.evaluate("typeof window.axe !== 'undefined'");
   if (!injected) {
     await cdp.evaluate(AXE_SOURCE);
@@ -261,7 +323,7 @@ async function main() {
 
   try {
     // Sem sessão, todas as rotas redirecionam para /login e a auditoria mediria
-    // a mesma tela onze vezes — passando.
+    // a mesma tela em toda iteração — passando.
     await cdp.goto(`${BASE}/login`);
     await cdp.evaluate(`(async () => {
       const inputs = Array.from(document.querySelectorAll('input'));
@@ -294,18 +356,26 @@ async function main() {
     }
 
     const rotas = [...ROUTES, ...(await discoverDetailRoutes(cdp))];
+    const minimo = ROUTES.length + DETAIL_ROUTES;
 
-    for (const rota of rotas) {
-      const violacoes = await auditRoute(cdp, rota);
+    if (rotas.length < minimo) {
+      throw new Error(
+        `Apenas ${rotas.length} das ${minimo} rotas foram alcançadas: falta cartão ou ` +
+          "dívida no banco para as telas de detalhe. Rode 'npm run db:seed'.",
+      );
+    }
+
+    const report = (rotulo: string, violacoes: Violation[]) => {
       const total = violacoes.reduce((soma, v) => soma + v.nodes.length, 0);
 
       if (total === 0) {
-        console.log(`  ok   ${rota}`);
-        continue;
+        console.log(`  ok   ${rotulo}`);
+
+        return;
       }
 
       falhas += total;
-      console.log(`  FALHA ${rota} — ${total} violação(ões)`);
+      console.log(`  FALHA ${rotulo} — ${total} violação(ões)`);
       for (const v of violacoes) {
         console.log(`        [${v.impact}] ${v.id}: ${v.help}`);
         for (const node of v.nodes) {
@@ -313,12 +383,22 @@ async function main() {
           console.log(`          ${node.resumo}`);
         }
       }
+    };
+
+    for (const rota of rotas) {
+      report(rota, await auditRoute(cdp, rota));
     }
+
+    for (const [rota, rotulo] of MODAL_ROUTES) {
+      report(`${rota} [${rotulo}]`, await auditModal(cdp, rota, rotulo));
+    }
+
+    const medidas = rotas.length + MODAL_ROUTES.length;
 
     console.log(
       falhas === 0
-        ? `\n${rotas.length} rotas auditadas, nenhuma violação.`
-        : `\n${falhas} violação(ões) em ${rotas.length} rotas auditadas.`,
+        ? `\n${medidas} telas auditadas (${MODAL_ROUTES.length} com modal aberto), nenhuma violação.`
+        : `\n${falhas} violação(ões) em ${medidas} telas auditadas.`,
     );
   } finally {
     cdp.close();

@@ -1,20 +1,19 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
 import { requireUser } from "@/lib/session";
 import { baseCurrencySchema } from "@/lib/validations";
 import * as service from "@/lib/settings";
-import { runAction } from "./guard";
+import { revalidateDomain, runAction } from "./guard";
 import type { ActionResult } from "./types";
 
 /**
  * A moeda base é lida por toda agregação, então a troca invalida **todas** as
  * telas — não uma lista de caminhos afetados como nas outras actions. Daí o
- * `"layout"`, que revalida a subárvore inteira de `/dashboard`.
+ * `"layout"` da entrada `settings` da tabela, que revalida a subárvore inteira
+ * de `/dashboard`.
  */
 function revalidateAll() {
-  revalidatePath("/dashboard", "layout");
+  revalidateDomain("settings");
 }
 
 export async function updateBaseCurrency(input: unknown): Promise<ActionResult> {

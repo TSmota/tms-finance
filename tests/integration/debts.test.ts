@@ -309,6 +309,34 @@ describe("limites da amortização", () => {
       status: "PAID",
     });
   });
+
+  it("duas amortizações simultâneas do restante inteiro: só uma passa", async () => {
+    // A recheca de `remainingAmount` fora da transação não basta: sob READ
+    // COMMITTED as duas leem 200 e as duas creditam a conta. Só o FOR UPDATE de
+    // `lockDebt` serializa — e este é o único dos quatro locks do código sem
+    // prova até aqui.
+    const { user, account, category, person } = await scenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
+    );
+
+    const results = await Promise.allSettled([
+      settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 200 })),
+      settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 200 })),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(await state(user.id, debt.id, account.id)).toEqual({
+      total: "200.00",
+      restante: "0.00",
+      status: "PAID",
+      // 1000 − 200 + 200: creditada uma vez só.
+      saldo: "1000.00",
+      saldoRecalculado: "1000.00",
+    });
+  });
 });
 
 describe("remoção", () => {
@@ -584,6 +612,84 @@ describe("moedas", () => {
     expect(await state(user.id, debt.id, account.id)).toMatchObject({
       restante: "80.00",
       status: "PARTIALLY_PAID",
+    });
+  });
+
+  // Com o câmbio fora do ar, cada um dos dois pares tem a sua taxa.
+  it("aplica cada taxa manual ao seu par de moedas", async () => {
+    const { user, account, category, person } = await scenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        accountId: account.id,
+        currency: "USD",
+        amount: 100,
+      }),
+    );
+
+    setFxAvailable(false);
+
+    // Lançamento na moeda da própria conta: o saldo se move pelos R$ 108,00
+    // lançados, não pelos US$ 20,00 que eles abatem.
+    await settleDebt(
+      user.id,
+      debt.id,
+      settlementInput({
+        accountId: account.id,
+        amount: 108,
+        currency: "BRL",
+        manualDebtFxRate: 0.1852,
+      }),
+    );
+
+    expect(await state(user.id, debt.id, account.id)).toEqual({
+      total: "100.00",
+      restante: "80.00",
+      status: "PARTIALLY_PAID",
+      // 1000 − (100 × 5,40) + 108,00.
+      saldo: "568.00",
+      saldoRecalculado: "568.00",
+    });
+  });
+
+  it("aceita três moedas distintas, uma taxa para cada conversão", async () => {
+    const { user, account, category, person } = await scenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        accountId: account.id,
+        currency: "USD",
+        amount: 100,
+      }),
+    );
+
+    setFxAvailable(false);
+
+    // EUR 20,00 → BRL 125,00 na conta, e → USD 23,20 na dívida.
+    await settleDebt(
+      user.id,
+      debt.id,
+      settlementInput({
+        accountId: account.id,
+        amount: 20,
+        currency: "EUR",
+        manualFxRate: 6.25,
+        manualDebtFxRate: 1.16,
+      }),
+    );
+
+    expect(await state(user.id, debt.id, account.id)).toEqual({
+      total: "100.00",
+      restante: "76.80",
+      status: "PARTIALLY_PAID",
+      saldo: "585.00",
+      saldoRecalculado: "585.00",
     });
   });
 

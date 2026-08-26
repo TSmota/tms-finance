@@ -1,17 +1,13 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
 import { requireUser } from "@/lib/session";
 import { personSchema } from "@/lib/validations";
 import * as service from "@/lib/people";
-import { parseId, runAction } from "./guard";
+import { parseId, revalidateDomain, runAction } from "./guard";
 import type { ActionResult } from "./types";
 
 function revalidateAll() {
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/people");
-  revalidatePath("/dashboard/debts");
+  revalidateDomain("people");
 }
 
 export async function createPerson(input: unknown): Promise<ActionResult> {

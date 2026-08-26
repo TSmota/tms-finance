@@ -1,6 +1,5 @@
 "use client";
 
-import { ActionIcon, ColorInput, Select, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import { Pencil } from "lucide-react";
@@ -9,8 +8,10 @@ import { updateCategory } from "@/actions/categories";
 import { categorySchema } from "@/lib/validations";
 import { DEFAULT_CATEGORY_COLOR } from "@/lib/currency";
 import { FormModal } from "@/components/ui/FormModal";
+import { IconButton } from "@/components/ui/IconButton";
 import { useActionModal } from "@/components/ui/useActionModal";
-import type { Option } from "./options";
+import { CategoryFields, type CategoryFormValues } from "./CategoryFields";
+import type { Option } from "@/lib/options";
 
 interface EditCategoryButtonProps {
   id: string;
@@ -28,7 +29,7 @@ export function EditCategoryButton(props: EditCategoryButtonProps) {
     successMessage: "Categoria atualizada",
   });
 
-  const values = {
+  const values: CategoryFormValues = {
     name,
     color: color ?? DEFAULT_CATEGORY_COLOR,
     icon: "",
@@ -52,14 +53,9 @@ export function EditCategoryButton(props: EditCategoryButtonProps) {
 
   return (
     <>
-      <ActionIcon
-        variant="subtle"
-        color="gray"
-        aria-label="Editar categoria"
-        onClick={handleOpen}
-      >
+      <IconButton label="Editar categoria" onClick={handleOpen}>
         <Pencil size={16} />
-      </ActionIcon>
+      </IconButton>
       <FormModal
         opened={opened}
         onClose={close}
@@ -67,17 +63,10 @@ export function EditCategoryButton(props: EditCategoryButtonProps) {
         onSubmit={handleSubmit}
         loading={loading}
       >
-        <TextInput label="Nome" key={form.key("name")} {...form.getInputProps("name")} />
-        <Select
-          label="Categoria pai"
-          placeholder="Nenhuma (categoria raiz)"
-          data={rootCategories.filter((option) => option.value !== id)}
-          clearable
-          searchable
-          key={form.key("parentId")}
-          {...form.getInputProps("parentId")}
+        <CategoryFields
+          form={form}
+          rootCategories={rootCategories.filter((option) => option.value !== id)}
         />
-        <ColorInput label="Cor" key={form.key("color")} {...form.getInputProps("color")} />
       </FormModal>
     </>
   );

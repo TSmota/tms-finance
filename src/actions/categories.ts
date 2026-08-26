@@ -1,19 +1,13 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
 import { requireUser } from "@/lib/session";
 import { categorySchema } from "@/lib/validations";
 import * as service from "@/lib/categories";
-import { parseId, runAction } from "./guard";
+import { parseId, revalidateDomain, runAction } from "./guard";
 import type { ActionResult } from "./types";
 
-const AFFECTED_PATHS = ["/dashboard", "/dashboard/categories", "/dashboard/transactions"];
-
 function revalidateAll() {
-  for (const path of AFFECTED_PATHS) {
-    revalidatePath(path);
-  }
+  revalidateDomain("categories");
 }
 
 export async function createCategory(input: unknown): Promise<ActionResult> {

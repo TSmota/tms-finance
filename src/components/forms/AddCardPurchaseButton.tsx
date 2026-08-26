@@ -13,11 +13,11 @@ import { createCardPurchase } from "@/actions/cardPurchases";
 import { FormModal } from "@/components/ui/FormModal";
 import { useActionModal } from "@/components/ui/useActionModal";
 import { CardPurchaseFields, type CardPurchaseFormValues } from "./CardPurchaseFields";
-import type { AccountOption, Option } from "./options";
+import type { CardOption, Option } from "@/lib/options";
 
 interface AddCardPurchaseButtonProps {
-  /** Cartões com a moeda, para sugerir a moeda do lançamento. */
-  cards: AccountOption[];
+  /** Cartões com a moeda e o dia de fechamento. */
+  cards: CardOption[];
   categories: Option[];
   /** Pré-seleciona um cartão quando o botão vive na página de um cartão só. */
   defaultCardId?: string;

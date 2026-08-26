@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   Badge,
   Group,
@@ -15,50 +15,34 @@ import {
   TableTr,
   Text,
   TextInput,
+  Tooltip,
   UnstyledButton,
 } from "@mantine/core";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 
-import { formatCurrency, type CurrencyCode } from "@/lib/currency";
+import { formatCurrency } from "@/lib/currency";
 import { toCalendarDate } from "@/lib/dates";
 import { EmptyState } from "@/components/EmptyState";
 import { EditTransactionButton } from "@/components/forms/EditTransactionButton";
-import { DeleteTransactionButton } from "@/components/forms/DeleteTransactionButton";
+import { deleteTransaction } from "@/actions/transactions";
+import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { ConfirmPendingButton } from "@/components/forms/ConfirmPendingButton";
-import type { AccountOption, Option } from "@/components/forms/options";
+import type { AccountOption, Option } from "@/lib/options";
+import type { TransactionRow } from "@/lib/transactionRow";
 import { CategoryBadge } from "@/components/ui/CategoryBadge";
 
-export interface TransactionRow {
-  id: string;
-  date: Date;
-  description: string;
-  type: "INCOME" | "EXPENSE";
-  /**
-   * `PENDING` = ocorrência de recorrente ainda não confirmada. Está
-   * fora do saldo e da projeção de receitas/despesas do mês.
-   */
-  status: "PENDING" | "CONFIRMED";
-  /** Valor na moeda do lançamento. */
-  amount: number;
-  currency: CurrencyCode;
-  /** Valor na moeda da conta — o que efetivamente moveu o saldo. */
-  convertedAmount: number;
-  exchangeRate: number;
-  accountId: string;
-  accountName: string;
-  accountCurrency: CurrencyCode;
-  categoryId: string | null;
-  categoryName: string | null;
-  categoryColor: string | null;
-  /** Recorrente de valor estimado: a confirmação pede conferência. */
-  isEstimated: boolean;
-}
+const MANAGED_BY_LABEL = {
+  debt: { label: "Dívida", hint: "Ajuste pela tela de dívidas" },
+  invoice: { label: "Fatura", hint: "Desfaça o pagamento pela tela do cartão" },
+} as const;
 
 interface TransactionsTableProps {
   transactions: TransactionRow[];
   accounts: AccountOption[];
   categories: Option[];
   emptyMessage?: string;
+  /** Botão oferecido quando não há lançamento nenhum. */
+  emptyAction?: ReactNode;
 }
 
 type SortKey = "date" | "amount";
@@ -75,6 +59,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
     accounts,
     categories,
     emptyMessage = "Nenhuma transação ainda. Adicione a primeira para começar.",
+    emptyAction,
   } = props;
 
   const [search, setSearch] = useState("");
@@ -130,7 +115,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
   };
 
   if (transactions.length === 0) {
-    return <EmptyState message={emptyMessage} />;
+    return <EmptyState message={emptyMessage} action={emptyAction} />;
   }
 
   const hasPending = transactions.some((transaction) => transaction.status === "PENDING");
@@ -295,37 +280,50 @@ export function TransactionsTable(props: TransactionsTableProps) {
                     </TableTd>
                     <TableTd>
                       <Group justify="flex-end" gap={4} wrap="nowrap">
-                        {transaction.status === "PENDING" && (
-                          <ConfirmPendingButton
-                            id={transaction.id}
-                            description={transaction.description}
-                            amount={transaction.amount}
-                            currency={transaction.currency}
-                            accountCurrency={transaction.accountCurrency}
-                            date={transaction.date}
-                            isEstimated={transaction.isEstimated}
-                            compact
-                          />
+                        {transaction.managedBy ? (
+                          <Tooltip label={MANAGED_BY_LABEL[transaction.managedBy].hint}>
+                            <Badge size="sm" variant="light" color="gray" tt="none">
+                              {MANAGED_BY_LABEL[transaction.managedBy].label}
+                            </Badge>
+                          </Tooltip>
+                        ) : (
+                          <>
+                            {transaction.status === "PENDING" && (
+                              <ConfirmPendingButton
+                                id={transaction.id}
+                                description={transaction.description}
+                                amount={transaction.amount}
+                                currency={transaction.currency}
+                                accountCurrency={transaction.accountCurrency}
+                                date={transaction.date}
+                                isEstimated={transaction.isEstimated}
+                                compact
+                              />
+                            )}
+                            <EditTransactionButton
+                              id={transaction.id}
+                              values={{
+                                accountId: transaction.accountId,
+                                categoryId: transaction.categoryId ?? "",
+                                type: transaction.type,
+                                amount: transaction.amount,
+                                currency: transaction.currency,
+                                date: toCalendarDate(transaction.date),
+                                description: transaction.description,
+                                manualFxRate: undefined,
+                              }}
+                              accounts={accounts}
+                              categories={categories}
+                            />
+                            <DeleteEntityButton
+                              id={transaction.id}
+                              title="Remover transação"
+                              successMessage="Transação removida"
+                              question={`Tem certeza que deseja remover a transação "${transaction.description}"?`}
+                              action={deleteTransaction}
+                            />
+                          </>
                         )}
-                        <EditTransactionButton
-                          id={transaction.id}
-                          values={{
-                            accountId: transaction.accountId,
-                            categoryId: transaction.categoryId ?? "",
-                            type: transaction.type,
-                            amount: transaction.amount,
-                            currency: transaction.currency,
-                            date: toCalendarDate(transaction.date),
-                            description: transaction.description,
-                            manualFxRate: undefined,
-                          }}
-                          accounts={accounts}
-                          categories={categories}
-                        />
-                        <DeleteTransactionButton
-                          id={transaction.id}
-                          description={transaction.description}
-                        />
                       </Group>
                     </TableTd>
                   </TableTr>

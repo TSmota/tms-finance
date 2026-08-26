@@ -6,7 +6,8 @@ import { listCategoryTree } from "@/lib/categories";
 import { DEFAULT_CATEGORY_COLOR } from "@/lib/currency";
 import { AddCategoryButton } from "@/components/forms/AddCategoryButton";
 import { EditCategoryButton } from "@/components/forms/EditCategoryButton";
-import { DeleteCategoryButton } from "@/components/forms/DeleteCategoryButton";
+import { deleteCategory } from "@/actions/categories";
+import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CategoryBadge } from "@/components/ui/CategoryBadge";
@@ -27,7 +28,10 @@ export default async function CategoriesPage() {
 
       {tree.length === 0 ? (
         <Card withBorder radius="md" padding="lg">
-          <EmptyState message="Nenhuma categoria ainda. Crie a primeira para começar a classificar seus lançamentos." />
+          <EmptyState
+            message="Nenhuma categoria ainda. Crie a primeira para começar a classificar seus lançamentos."
+            action={<AddCategoryButton rootCategories={rootOptions} />}
+          />
         </Card>
       ) : (
         <Stack gap="sm">
@@ -51,7 +55,14 @@ export default async function CategoriesPage() {
                     parentId={null}
                     rootCategories={rootOptions}
                   />
-                  <DeleteCategoryButton id={root.id} name={root.name} />
+                  <DeleteEntityButton
+                    id={root.id}
+                    title="Remover categoria"
+                    successMessage="Categoria removida"
+                    question={`Tem certeza que deseja remover a categoria ${root.name}?`}
+                    action={deleteCategory}
+                    impactTarget="category"
+                  />
                 </Group>
               </Group>
 
@@ -77,7 +88,14 @@ export default async function CategoriesPage() {
                           parentId={root.id}
                           rootCategories={rootOptions}
                         />
-                        <DeleteCategoryButton id={child.id} name={child.name} />
+                        <DeleteEntityButton
+                          id={child.id}
+                          title="Remover categoria"
+                          successMessage="Categoria removida"
+                          question={`Tem certeza que deseja remover a categoria ${child.name}?`}
+                          action={deleteCategory}
+                          impactTarget="category"
+                        />
                       </Group>
                     </Group>
                   ))}

@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/materialize-recurring",
+      "schedule": "10 3 * * *"
+    },
+    {
+      "path": "/api/cron/prune-audit",
+      "schedule": "40 3 * * *"
+    }
+  ]
+}

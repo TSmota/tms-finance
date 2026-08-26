@@ -46,9 +46,7 @@ export class FxUnavailableError extends Error {
 }
 
 interface GetFxRateParams {
-  /** Moeda de origem. */
   from: Currency;
-  /** Moeda de destino. */
   to: Currency;
   /** Data da cotação. Ausente = cotação mais recente. */
   date?: Date;
@@ -66,12 +64,14 @@ interface GetFxRateParams {
 export async function getExchangeRate(params: GetFxRateParams): Promise<FxRate> {
   const { from, to, date, manualRate } = params;
 
-  if (manualRate && manualRate > 0) {
-    return toStoredRate(manualRate);
-  }
-
+  // Antes da taxa manual: quem informa uma taxa responde por **um** par, e a
+  // mesma operação pode consultar outro em que as moedas coincidem.
   if (from === to) {
     return toStoredRate(1);
+  }
+
+  if (manualRate && manualRate > 0) {
+    return toStoredRate(manualRate);
   }
 
   const datePart = date ? toCalendarDate(date) : "latest";
@@ -114,10 +114,15 @@ export async function getExchangeRate(params: GetFxRateParams): Promise<FxRate> 
  *
  * Existe porque `convertedAmount` está na moeda da **conta**: somar contas de
  * moedas distintas exige esta segunda conversão.
+ *
+ * `date` ausente = cotação mais recente, e é o certo para saldo, patrimônio e
+ * projeção, que são perguntas sobre o presente. Agregação de mês fechado passa
+ * a data da competência: sem ela, o total de janeiro mudava todo dia.
  */
 export async function resolveRatesToBase(
   currencies: Currency[],
   base: Currency,
+  date?: Date,
 ): Promise<{ rates: Map<Currency, FxRate>; complete: boolean }> {
   const rates = new Map<Currency, FxRate>([[base, toStoredRate(1)]]);
   const foreign = [...new Set(currencies)].filter((currency) => currency !== base);
@@ -125,7 +130,7 @@ export async function resolveRatesToBase(
   const results = await Promise.all(
     foreign.map(async (currency) => {
       try {
-        rates.set(currency, await getExchangeRate({ from: currency, to: base }));
+        rates.set(currency, await getExchangeRate({ from: currency, to: base, date }));
 
         return true;
       } catch {

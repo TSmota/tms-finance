@@ -18,7 +18,7 @@ import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import { notifications } from "@mantine/notifications";
 
-import { registerSchema } from "@/lib/validations";
+import { registerSchema, PASSWORD_REQUIREMENT } from "@/lib/validations";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -49,7 +49,6 @@ export default function RegisterPage() {
       return;
     }
 
-    // Auto sign-in after successful registration.
     const signInRes = await signIn("credentials", {
       email: values.email,
       password: values.password,
@@ -61,6 +60,7 @@ export default function RegisterPage() {
       router.push("/login");
       return;
     }
+
     router.push("/dashboard");
     router.refresh();
   });
@@ -87,7 +87,7 @@ export default function RegisterPage() {
           />
           <PasswordInput
             label="Senha"
-            placeholder="Pelo menos 8 caracteres"
+            description={PASSWORD_REQUIREMENT}
             key={form.key("password")}
             {...form.getInputProps("password")}
           />

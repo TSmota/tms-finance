@@ -1,11 +1,18 @@
 import type { Currency, RecurringExpense, Transaction } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
-import { InvalidOperationError, NotFoundError } from "@/lib/errors";
-import { getExchangeRate, FX_RATE_SCALE, type FxRate } from "@/lib/fxService";
+import { InvalidOperationError, NotFoundError, PaidInvoiceError } from "@/lib/errors";
+import { getExchangeRate, FX_RATE_SCALE, FxUnavailableError, type FxRate } from "@/lib/fxService";
 import { convertMoney, toStorage } from "@/lib/money";
+import { assertAccountOwned, assertCategoryOwned } from "@/lib/ownership";
+import { requireCreditCard } from "@/lib/creditCards";
 import { addMonths, lastDayOfMonth, parseCalendarDate, utcDate } from "@/lib/dates";
-import { competenciesToMaterialize, occurrencesInMonth, type RecurrenceRule } from "@/lib/recurrence";
+import {
+  competenciesToMaterialize,
+  materializationHorizon,
+  occurrencesInMonth,
+  type RecurrenceRule,
+} from "@/lib/recurrence";
 import { invoiceCompetencyFor } from "@/lib/invoiceCycle";
 import { recalcInvoiceTotals, resolveInvoice } from "@/lib/invoices";
 import { applyToBalance, balanceDelta, type Tx } from "@/lib/accountBalance";
@@ -15,9 +22,9 @@ import type { ConfirmOccurrenceInput, RecurringExpenseInput } from "@/lib/valida
 /**
  * Gastos recorrentes.
  *
- * As ocorrências são materializadas sob demanda, ao abrir uma competência — não
- * há rotina agendada. `materializeRecurring` é idempotente e roda no
- * carregamento das páginas mensais.
+ * As ocorrências são materializadas por `materializeDue`, chamada pelo cron
+ * diário e por toda escrita de recorrência. **Nunca** na renderização: é
+ * escrita multi-passo, com lock de fatura, e um GET não é lugar para ela.
  *
  * O destino determina o status:
  *
@@ -59,7 +66,8 @@ export interface MaterializationResult {
   /** Ocorrências efetivamente criadas. */
   created: number;
   /**
-   * Descrições das recorrências que ficaram sem cotação de câmbio. Não avançam
+   * Descrições das recorrências que não puderam ser materializadas agora — sem
+   * cotação de câmbio, ou com ocorrência caindo em fatura já paga. Não avançam
    * o marcador, então tentam de novo no próximo carregamento.
    */
   skipped: string[];
@@ -113,15 +121,77 @@ function fxDateFor(occurrence: Date, now: Date): Date | undefined {
 }
 
 /**
+ * Materializa o que já está devido para um usuário, até o horizonte que as
+ * próprias recorrências pedem.
+ *
+ * É este o ponto de entrada de fora da renderização: o cron chama para todos os
+ * usuários, e as escritas de recorrência chamam para o usuário que acabou de
+ * mexer, para que a ocorrência apareça na mesma navegação.
+ */
+export async function materializeDue(
+  userId: string,
+  now: Date = new Date(),
+): Promise<MaterializationResult> {
+  const rules = await prisma.recurringExpense.findMany({
+    where: { userId, active: true },
+    select: { frequency: true, dueDay: true, startDate: true, endDate: true, active: true },
+  });
+
+  if (rules.length === 0) {
+    return { created: 0, skipped: [] };
+  }
+
+  const horizon = materializationHorizon(
+    rules,
+    { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 },
+    MAX_FUTURE_MONTHS,
+  );
+
+  return materializeRecurring(userId, horizon.year, horizon.month, now);
+}
+
+/**
+ * Varredura de todos os usuários com recorrência ativa, para o cron.
+ *
+ * Um usuário por vez, e não `Promise.all`: o pool tem poucas conexões e a
+ * rotina não tem pressa. Uma falha inesperada de um usuário não pode impedir os
+ * outros de rodar.
+ */
+export async function materializeAllUsers(
+  now: Date = new Date(),
+): Promise<{ users: number; created: number; failed: number }> {
+  const owners = await prisma.recurringExpense.findMany({
+    where: { active: true },
+    distinct: ["userId"],
+    select: { userId: true },
+  });
+
+  let created = 0;
+  let failed = 0;
+
+  for (const { userId } of owners) {
+    try {
+      created += (await materializeDue(userId, now)).created;
+    } catch (error) {
+      failed += 1;
+      console.error("Falha ao materializar recorrentes do usuário:", userId, error);
+    }
+  }
+
+  return { users: owners.length, created, failed };
+}
+
+/**
  * Materializa as ocorrências de todas as recorrências ativas até a competência
  * pedida, inclusive.
  *
  * Idempotente por dois mecanismos: `lastGeneratedAt`, que evita reprocessar
  * competências, e o índice único `(recurring_expense_id, date)`, que descarta a
- * inserção duplicada de dois renders simultâneos.
+ * inserção duplicada de duas execuções simultâneas.
  *
- * Nunca lança por indisponibilidade de câmbio: roda durante a renderização de
- * página. A recorrência afetada volta em `skipped`.
+ * Nunca lança por indisponibilidade de câmbio nem por fatura já paga: a
+ * recorrência afetada volta em `skipped`, sem avançar o marcador, e é tentada
+ * de novo na próxima rodada.
  */
 export async function materializeRecurring(
   userId: string,
@@ -159,10 +229,12 @@ export async function materializeRecurring(
     try {
       result.created += await materializeOne(recurring, occurrences, through, now);
     } catch (error) {
-      // Sem cotação: não avança o marcador, para tentar de novo depois.
+      // Câmbio fora do ar e fatura já paga são condições temporárias de uma
+      // recorrência só: derrubar a rodada inteira por causa delas deixaria as
+      // outras sem gerar. Não avança o marcador, para tentar de novo depois.
       result.skipped.push(recurring.description);
 
-      if (!isFxFailure(error)) {
+      if (!isFxFailure(error) && !(error instanceof PaidInvoiceError)) {
         throw error;
       }
     }
@@ -172,7 +244,7 @@ export async function materializeRecurring(
 }
 
 function isFxFailure(error: unknown): boolean {
-  return error instanceof Error && error.name === "FxUnavailableError";
+  return error instanceof FxUnavailableError;
 }
 
 /**
@@ -230,8 +302,17 @@ async function materializeOne(
     });
 
     return created;
-  });
+  }, MATERIALIZE_TX_OPTIONS);
 }
+
+/**
+ * Folga para a materialização.
+ *
+ * Mesmo motivo de `createCardPurchase`: uma recorrência de cartão resolve e
+ * trava uma fatura por competência, e o default de 5s do Prisma estourava com
+ * `P2028` deixando todas travadas até lá.
+ */
+const MATERIALIZE_TX_OPTIONS = { maxWait: 10_000, timeout: 30_000 };
 
 interface PricedOccurrence {
   date: Date;
@@ -414,28 +495,11 @@ async function resolveTargets(userId: string, input: RecurringExpenseInput) {
     );
   }
 
-  const category = await prisma.category.count({ where: { id: input.categoryId, userId } });
-
-  if (category === 0) {
-    throw new NotFoundError("Categoria não encontrada");
-  }
-
-  if (input.accountId) {
-    const account = await prisma.financialAccount.count({
-      where: { id: input.accountId, userId },
-    });
-
-    if (account === 0) {
-      throw new NotFoundError("Conta não encontrada");
-    }
-  }
+  await assertCategoryOwned(userId, input.categoryId);
+  await assertAccountOwned(userId, input.accountId);
 
   if (input.creditCardId) {
-    const card = await prisma.creditCard.count({ where: { id: input.creditCardId, userId } });
-
-    if (card === 0) {
-      throw new NotFoundError("Cartão não encontrado");
-    }
+    await requireCreditCard(userId, input.creditCardId);
   }
 }
 

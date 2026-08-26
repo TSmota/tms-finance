@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { FX_RATE_SCALE, FxUnavailableError, getExchangeRate } from "./fxService";
+import {
+  FX_RATE_SCALE,
+  FxUnavailableError,
+  getExchangeRate,
+  resolveRatesToBase,
+} from "./fxService";
 import { parseCalendarDate } from "./dates";
 import { convertMoney, MONEY_SCALE } from "./money";
 
@@ -53,12 +58,14 @@ describe("atalhos que evitam a rede", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("dá precedência à taxa manual mesmo com moedas iguais", async () => {
-    mockFetch(() => jsonResponse({}));
+  it("ignora a taxa manual quando origem e destino são a mesma moeda", async () => {
+    // A taxa responde por um par; a amortização consulta dois.
+    const spy = mockFetch(() => jsonResponse({}));
 
     await expect(
       storedRate({ from: "BRL", to: "BRL", manualRate: 2 }),
-    ).resolves.toBe("2.0000");
+    ).resolves.toBe("1.0000");
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it("ignora taxa manual inválida e vai à API", async () => {
@@ -189,5 +196,70 @@ describe("falhas viram FxUnavailableError", () => {
     mockFetch(() => jsonResponse({}, 503));
 
     await expect(getExchangeRate({ from: "USD", to: "BRL" })).rejects.toThrow();
+  });
+});
+
+/**
+ * A suíte de integração substitui esta função por inteiro (`tests/setup-fx.ts`),
+ * então é aqui — e só aqui — que a implementação de verdade é exercitada.
+ */
+describe("resolveRatesToBase", () => {
+  it("dedup: uma consulta por moeda distinta, e nenhuma para a base", async () => {
+    const spy = mockFetch((url) =>
+      jsonResponse({ rates: { BRL: url.includes("base=USD") ? 5.4 : 6.1 } }),
+    );
+
+    const { rates, complete } = await resolveRatesToBase(
+      ["USD", "USD", "EUR", "BRL"],
+      "BRL",
+    );
+
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(complete).toBe(true);
+    expect(rates.get("BRL")?.toFixed(FX_RATE_SCALE)).toBe("1.0000");
+    expect(rates.get("USD")?.toFixed(FX_RATE_SCALE)).toBe("5.4000");
+    expect(rates.get("EUR")?.toFixed(FX_RATE_SCALE)).toBe("6.1000");
+  });
+
+  it("a moeda sem cotação fica de fora e marca o total como parcial", async () => {
+    // Somar a moeda que faltou como se valesse 1 daria um número sem
+    // significado; quem chama exclui a linha e avisa que o total está parcial.
+    mockFetch((url) =>
+      url.includes("base=USD") ? jsonResponse({ rates: { BRL: 5.4 } }) : jsonResponse({}, 503),
+    );
+
+    const { rates, complete } = await resolveRatesToBase(["USD", "EUR"], "BRL");
+
+    expect(complete).toBe(false);
+    expect(rates.has("USD")).toBe(true);
+    expect(rates.has("EUR")).toBe(false);
+  });
+
+  it("sem data, pede a cotação mais recente", async () => {
+    const spy = mockFetch(() => jsonResponse({ rates: { BRL: 5.4 } }));
+
+    await resolveRatesToBase(["USD"], "BRL");
+
+    expect(spy.mock.calls[0]?.[0]).toContain("/latest?");
+  });
+
+  it("com data, pede a cotação daquele dia", async () => {
+    // É o que faz o relatório de um mês fechado parar de mudar de valor todo
+    // dia. Saldo e projeção continuam sem data, porque perguntam sobre hoje.
+    const spy = mockFetch(() => jsonResponse({ rates: { BRL: 5.1 } }));
+
+    await resolveRatesToBase(["USD"], "BRL", parseCalendarDate("2026-01-31"));
+
+    expect(spy.mock.calls[0]?.[0]).toContain("/2026-01-31?");
+  });
+
+  it("não consulta nada quando tudo já está na moeda base", async () => {
+    const spy = mockFetch(() => jsonResponse({}));
+
+    const { rates, complete } = await resolveRatesToBase(["BRL", "BRL"], "BRL");
+
+    expect(spy).not.toHaveBeenCalled();
+    expect(complete).toBe(true);
+    expect(rates.size).toBe(1);
   });
 });

@@ -10,7 +10,9 @@ import {
   updateCategory,
 } from "@/lib/categories";
 import { createTransaction } from "@/lib/transactions";
-import { makeAccount, makeCategory, makeUser } from "../factories";
+import { createRecurringExpense } from "@/lib/recurring";
+import { createDebt } from "@/lib/debts";
+import { makeAccount, makeCategory, makePerson, makeUser } from "../factories";
 import { setRates } from "../setup-fx";
 
 beforeEach(() => {
@@ -168,6 +170,58 @@ describe("exclusão", () => {
 
     await expect(deleteCategory(intruder.id, category.id)).rejects.toThrow(NotFoundError);
     await expect(prisma.category.count()).resolves.toBe(1);
+  });
+
+  // Sem guarda de domínio a recusa viria do banco por FK, em inglês.
+  it("recusa com mensagem de domínio quando um recorrente depende dela", async () => {
+    const user = await makeUser();
+    const account = await makeAccount(user.id);
+    const category = await createCategory(user.id, categoryInput({ name: "Moradia" }));
+
+    await createRecurringExpense(user.id, {
+      description: "Aluguel",
+      amount: 1200,
+      currency: "BRL",
+      frequency: "MONTHLY",
+      dueDay: 5,
+      isEstimated: false,
+      startDate: "2026-08-01",
+      endDate: null,
+      categoryId: category.id,
+      accountId: account.id,
+      creditCardId: null,
+    });
+
+    await expect(deleteCategory(user.id, category.id)).rejects.toThrow(InvalidOperationError);
+    await expect(prisma.category.count()).resolves.toBe(1);
+  });
+
+  it("recusa também quando a dependência está numa subcategoria", async () => {
+    const user = await makeUser();
+    const account = await makeAccount(user.id);
+    const person = await makePerson(user.id);
+    const root = await createCategory(user.id, categoryInput({ name: "Moradia" }));
+    const child = await createCategory(
+      user.id,
+      categoryInput({ name: "Luz", parentId: root.id }),
+    );
+
+    await createDebt(user.id, {
+      personId: person.id,
+      categoryId: child.id,
+      accountId: account.id,
+      type: "LENT",
+      description: "Empréstimo",
+      amount: 200,
+      currency: "BRL",
+      date: "2026-08-06",
+      dueDate: null,
+      manualFxRate: null,
+    });
+
+    // A raiz levaria a subcategoria junto, então o bloqueio dela vale para a raiz.
+    await expect(deleteCategory(user.id, root.id)).rejects.toThrow(InvalidOperationError);
+    await expect(prisma.category.count()).resolves.toBe(2);
   });
 });
 

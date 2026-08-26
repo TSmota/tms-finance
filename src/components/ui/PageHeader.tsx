@@ -8,9 +8,6 @@ interface PageHeaderProps {
   action?: ReactNode;
 }
 
-/**
- * Cabeçalho padrão: título e subtítulo à esquerda, ações à direita.
- */
 export function PageHeader(props: PageHeaderProps) {
   const { title, subtitle, action } = props;
 

@@ -15,7 +15,7 @@ import {
   validateRecurring,
   type RecurringFormValues,
 } from "./RecurringFields";
-import type { AccountOption, Option } from "./options";
+import type { AccountOption, Option } from "@/lib/options";
 
 interface AddRecurringButtonProps {
   accounts: AccountOption[];

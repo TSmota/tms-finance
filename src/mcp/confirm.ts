@@ -29,6 +29,17 @@ export interface ConfirmPayload {
   id: string;
 }
 
+/**
+ * A revisão do protocolo em que `input_required` existe.
+ *
+ * Ela não é negociada pelo `initialize`: o SDK não a lista em
+ * `SUPPORTED_PROTOCOL_VERSIONS`, então o cliente a declara por requisição, em
+ * header e `_meta` — e é isso que mantém o serving stateless. No dia em que o
+ * SDK passar a negociá-la, o desenho muda; `confirm.test.ts` reprova para que
+ * alguém reveja antes.
+ */
+export const MCP_PROTOCOL_REVISION = "2026-07-28";
+
 const DEFAULT_TTL_SECONDS = 120;
 
 function confirmTtlSeconds(): number {

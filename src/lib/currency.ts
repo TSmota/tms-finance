@@ -13,9 +13,17 @@ import type { Currency } from "@prisma/client";
  * A correspondência com o enum `Currency` do Prisma é verificada em
  * `currency.test.ts`.
  */
-export const CURRENCIES = ["BRL", "USD", "EUR", "GBP"] as const;
+export const CURRENCIES = ["BRL", "USD", "EUR", "GBP"] as const satisfies readonly Currency[];
 
-export type CurrencyCode = (typeof CURRENCIES)[number];
+/**
+ * Apelido client-safe do enum do Prisma, e não `(typeof CURRENCIES)[number]`.
+ *
+ * Derivar da tupla os tornaria tipos distintos, e cada fronteira entre serviço
+ * e componente precisaria de um `as` — no-op hoje, que acrescentar uma moeda
+ * transformaria em silêncio em falha de runtime. Sendo o mesmo tipo, quem
+ * diverge é `currency.test.ts`, antes do deploy.
+ */
+export type CurrencyCode = Currency;
 
 export const CURRENCY_LABELS: Record<CurrencyCode, string> = {
   BRL: "Real (R$)",
@@ -30,23 +38,12 @@ export const CURRENCY_OPTIONS = CURRENCIES.map((code) => ({
   label: CURRENCY_LABELS[code],
 }));
 
-/** Verdadeiro se `value` é um código de moeda suportado. */
 export function isCurrencyCode(value: unknown): value is CurrencyCode {
   return typeof value === "string" && (CURRENCIES as readonly string[]).includes(value);
 }
 
 /** Cor padrão de categoria sem cor definida. */
 export const DEFAULT_CATEGORY_COLOR = "#868e96";
-
-/**
- * Converte para `number`, tratando valores não finitos como 0.
- * Aceita o `Decimal` que o Prisma devolve, via `Number()`.
- */
-export function toNumber(value: unknown): number {
-  const number = Number(value);
-
-  return Number.isFinite(number) ? number : 0;
-}
 
 /**
  * Formata um valor como moeda em pt-BR. Cai para um formato simples se o

@@ -1,7 +1,7 @@
 import type { CreditCard, Currency, Invoice } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
-import { NotFoundError } from "@/lib/errors";
+import { NotFoundError, PaidInvoiceError } from "@/lib/errors";
 import { money, toStorage, type Money } from "@/lib/money";
 import type { Tx } from "@/lib/accountBalance";
 import { invoiceCycleDates, type Competency } from "@/lib/invoiceCycle";
@@ -40,6 +40,11 @@ interface ResolveInvoiceParams {
  *
  * A trava é por chave única, não por id, para evitar uma leitura extra só para
  * descobrir o id.
+ *
+ * **Recusa fatura paga.** Todos os chamadores inserem lançamento na fatura que
+ * recebem, e o total de uma fatura paga é o valor que já saiu da conta: subi-lo
+ * deixaria a fatura `PAID` por um número que ninguém pagou. A guarda vive aqui
+ * porque este é o único caminho — nos chamadores, seriam três cópias.
  */
 export async function resolveInvoice(tx: Tx, params: ResolveInvoiceParams): Promise<Invoice> {
   const { userId, card, competency } = params;
@@ -63,9 +68,18 @@ export async function resolveInvoice(tx: Tx, params: ResolveInvoiceParams): Prom
        AND year = ${competency.year}
      FOR UPDATE`;
 
-  return tx.invoice.findUniqueOrThrow({
+  const invoice = await tx.invoice.findUniqueOrThrow({
     where: { creditCardId_month_year: identity },
   });
+
+  if (invoice.status === "PAID") {
+    throw new PaidInvoiceError(
+      `A fatura de ${competency.month}/${competency.year} já foi paga. ` +
+        "Desfaça o pagamento antes de lançar nela.",
+    );
+  }
+
+  return invoice;
 }
 
 /**
@@ -155,8 +169,18 @@ export interface InvoiceSummary {
   total: number;
   paidAt: Date | null;
   paymentAccountId: string | null;
+  /** Lançamentos da fatura, sem a transação de pagamento. */
   itemCount: number;
 }
+
+/**
+ * Recorte dos lançamentos que a fatura mostra.
+ *
+ * O mesmo de {@link listInvoiceItems}, e não por acaso: sem ele, uma fatura de
+ * uma compra passava a dizer "2 itens" depois de paga, porque o próprio
+ * pagamento entrava na conta.
+ */
+const INVOICE_ITEMS_WHERE = { type: { not: "INVOICE_PAYMENT" } } as const;
 
 function toSummary(invoice: Invoice & { _count: { transactions: number } }): InvoiceSummary {
   return {
@@ -182,7 +206,7 @@ export async function listCardInvoices(
   const invoices = await prisma.invoice.findMany({
     where: { userId, creditCardId },
     orderBy: [{ year: "desc" }, { month: "desc" }],
-    include: { _count: { select: { transactions: true } } },
+    include: { _count: { select: { transactions: { where: INVOICE_ITEMS_WHERE } } } },
   });
 
   return invoices.map(toSummary);
@@ -219,8 +243,28 @@ export async function listInvoiceItems(
   userId: string,
   invoiceId: string,
 ): Promise<InvoiceItem[]> {
+  return (await listItemsByInvoice(userId, [invoiceId])).get(invoiceId) ?? [];
+}
+
+/**
+ * Os lançamentos de várias faturas em duas consultas, e não duas por fatura.
+ *
+ * A tela de um cartão renderiza todas as faturas do histórico; chamar
+ * `listInvoiceItems` num laço disparava `2 × nº de faturas` consultas
+ * concorrentes contra um pool de dez.
+ */
+export async function listItemsByInvoice(
+  userId: string,
+  invoiceIds: string[],
+): Promise<Map<string, InvoiceItem[]>> {
+  const byInvoice = new Map<string, InvoiceItem[]>();
+
+  if (invoiceIds.length === 0) {
+    return byInvoice;
+  }
+
   const items = await prisma.transaction.findMany({
-    where: { userId, invoiceId, type: { not: "INVOICE_PAYMENT" } },
+    where: { userId, invoiceId: { in: invoiceIds }, ...INVOICE_ITEMS_WHERE },
     orderBy: [{ date: "asc" }, { createdAt: "asc" }],
     include: { category: { select: { name: true, color: true } } },
   });
@@ -230,24 +274,32 @@ export async function listInvoiceItems(
     items.map((item) => item.parentInstallmentId ?? item.id),
   );
 
-  return items.map((item) => ({
-    id: item.id,
-    description: item.description,
-    date: item.date,
-    amount: item.amount.toNumber(),
-    currency: item.currency,
-    exchangeRate: item.exchangeRate.toNumber(),
-    convertedAmount: item.convertedAmount.toNumber(),
-    categoryId: item.categoryId,
-    categoryName: item.category?.name ?? null,
-    categoryColor: item.category?.color ?? null,
-    installmentNumber: item.installmentNumber,
-    totalInstallments: item.totalInstallments,
-    anchorId: item.parentInstallmentId ?? item.id,
-    groupTotal:
-      totalByAnchor.get(item.parentInstallmentId ?? item.id) ?? item.amount.toNumber(),
-    fromRecurring: item.recurringExpenseId !== null,
-  }));
+  for (const item of items) {
+    const anchorId = item.parentInstallmentId ?? item.id;
+    const bucket = byInvoice.get(item.invoiceId!) ?? [];
+
+    bucket.push({
+      id: item.id,
+      description: item.description,
+      date: item.date,
+      amount: item.amount.toNumber(),
+      currency: item.currency,
+      exchangeRate: item.exchangeRate.toNumber(),
+      convertedAmount: item.convertedAmount.toNumber(),
+      categoryId: item.categoryId,
+      categoryName: item.category?.name ?? null,
+      categoryColor: item.category?.color ?? null,
+      installmentNumber: item.installmentNumber,
+      totalInstallments: item.totalInstallments,
+      anchorId,
+      groupTotal: totalByAnchor.get(anchorId) ?? item.amount.toNumber(),
+      fromRecurring: item.recurringExpenseId !== null,
+    });
+
+    byInvoice.set(item.invoiceId!, bucket);
+  }
+
+  return byInvoice;
 }
 
 /**

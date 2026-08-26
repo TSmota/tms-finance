@@ -1,6 +1,6 @@
 import { listAccounts } from "@/lib/accounts";
 import { listCategoryOptions } from "@/lib/categories";
-import type { AccountOption, Option } from "@/components/forms/options";
+import type { AccountOption, Option } from "@/lib/options";
 
 /**
  * Opções de `Select` que quase toda página do dashboard precisa. Carregadas em

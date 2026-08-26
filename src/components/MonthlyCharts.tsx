@@ -51,7 +51,7 @@ export function MonthlyCharts(props: MonthlyChartsProps) {
         </Stack>
         {/* O gráfico não tem legenda em texto como o `CategoryPie`. */}
         <Text className="visually-hidden">
-          {`Receitas: ${formatCurrency(income, currency)}. Despesas: ${formatCurrency(expenses, currency)}.`}
+          {`Receitas: ${formatCurrency(income, currency)}. Saídas de caixa: ${formatCurrency(expenses, currency)}.`}
         </Text>
         <BarChart
           h={220}
@@ -59,13 +59,13 @@ export function MonthlyCharts(props: MonthlyChartsProps) {
             {
               label: "Este mês",
               Receitas: Number(income.toFixed(2)),
-              Despesas: Number(expenses.toFixed(2)),
+              "Saídas de caixa": Number(expenses.toFixed(2)),
             },
           ]}
           dataKey="label"
           series={[
             { name: "Receitas", color: "teal.9" },
-            { name: "Despesas", color: "red.9" },
+            { name: "Saídas de caixa", color: "red.9" },
           ]}
           withLegend
           barChartProps={{ accessibilityLayer: false }}

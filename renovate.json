@@ -1,0 +1,53 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":semanticCommitTypeAll(chore)"
+  ],
+  "timezone": "America/Sao_Paulo",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5,
+  "rangeStrategy": "pin",
+  "lockFileMaintenance": { "enabled": true },
+  "packageRules": [
+    {
+      "description": "Patch e minor de dev tooling num PR só: ruído sem risco de runtime.",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "groupName": "dev tooling",
+      "automerge": false
+    },
+    {
+      "description": "Mantine é um bloco: versões desalinhadas entre os pacotes quebram o tema e os estilos compartilhados.",
+      "matchPackageNames": ["@mantine/**", "mantine-form-zod-resolver"],
+      "groupName": "mantine"
+    },
+    {
+      "description": "Prisma client e adapter compartilham o mesmo engine; separá-los produz erro de versão em runtime.",
+      "matchPackageNames": ["prisma", "@prisma/**"],
+      "groupName": "prisma"
+    },
+    {
+      "description": "Next e o config de lint dele saem na mesma versão.",
+      "matchPackageNames": ["next", "eslint-config-next", "@next/**"],
+      "groupName": "next"
+    },
+    {
+      "description": "Os dois gateways da aplicação: next-auth beta gateia todo o /dashboard e o SDK do MCP gateia a escrita do agente. PR isolado, para a revisão não se diluir num lote.",
+      "matchPackageNames": ["next-auth", "@auth/**", "@modelcontextprotocol/**", "mcp-handler"],
+      "separateMinorPatch": true,
+      "groupName": null,
+      "labels": ["dependencies", "revisar-com-cuidado"]
+    },
+    {
+      "description": "@types/node segue a major do Node do .nvmrc, não a mais recente.",
+      "matchPackageNames": ["@types/node"],
+      "allowedVersions": "<23"
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "labels": ["security"],
+    "schedule": ["at any time"]
+  }
+}

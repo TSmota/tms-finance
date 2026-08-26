@@ -41,10 +41,17 @@ export default function LoginPage() {
     setLoading(false);
 
     if (res?.error) {
+      // Só `CredentialsSignin` significa "não confere". Qualquer outro tipo é
+      // falha nossa — banco fora, configuração quebrada — e culpar a senha
+      // manda o usuário trocar uma senha que está certa.
+      const wrongCredentials = res.error === "CredentialsSignin";
+
       notifications.show({
         color: "red",
-        title: "Falha ao entrar",
-        message: "Email ou senha inválidos.",
+        title: wrongCredentials ? "Falha ao entrar" : "Serviço indisponível",
+        message: wrongCredentials
+          ? "Email ou senha inválidos."
+          : "Não foi possível entrar agora. Tente de novo em alguns instantes.",
       });
       return;
     }

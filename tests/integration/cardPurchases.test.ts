@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/db";
-import { InvalidOperationError, NotFoundError } from "@/lib/errors";
+import { InvalidOperationError, NotFoundError, PaidInvoiceError } from "@/lib/errors";
 import { FxUnavailableError } from "@/lib/fxService";
 import {
   createCardPurchase,
@@ -9,7 +9,7 @@ import {
   updateCardPurchase,
 } from "@/lib/cardPurchases";
 import { listCardInvoices, listInvoiceItems } from "@/lib/invoices";
-import { payInvoice } from "@/lib/invoicePayments";
+import { payInvoice, undoInvoicePayment } from "@/lib/invoicePayments";
 import type { CardPurchaseInput } from "@/lib/validations";
 import { makeAccount, makeCategory, makeCreditCard, makeUser } from "../factories";
 import { setFxAvailable, setRates } from "../setup-fx";
@@ -285,6 +285,107 @@ describe("fatura única por ciclo", () => {
   });
 });
 
+describe("fatura paga não recebe lançamento", () => {
+  /** Fatura de agosto criada por uma compra e quitada. */
+  async function paidAugust() {
+    const user = await makeUser();
+    const account = await makeAccount(user.id, { initialBalance: "1000.00" });
+    const card = await makeCreditCard(user.id, { closingDay: 20, dueDay: 5 });
+
+    await createCardPurchase(
+      user.id,
+      purchaseInput({ creditCardId: card.id, amount: 100, date: "2026-08-10" }),
+    );
+
+    const [invoice] = await listCardInvoices(user.id, card.id);
+
+    await payInvoice(user.id, invoice!.id, {
+      accountId: account.id,
+      date: "2026-09-05",
+      manualFxRate: null,
+    });
+
+    return { user, account, card };
+  }
+
+  it("recusa compra retroativa cuja competência já foi paga", async () => {
+    // Aceitar subiria `total_amount` acima do valor que saiu da conta, e a
+    // fatura seguiria PAID por um número que ninguém pagou.
+    const { user, card } = await paidAugust();
+
+    await expect(
+      createCardPurchase(
+        user.id,
+        purchaseInput({ creditCardId: card.id, amount: 70, date: "2026-08-15" }),
+      ),
+    ).rejects.toThrow(PaidInvoiceError);
+
+    expect(await invoices(user.id, card.id)).toEqual([
+      { competencia: "2026-08", total: "100.00", itens: 1, status: "PAID" },
+    ]);
+  });
+
+  it("recusa quando só uma parcela futura cairia na fatura paga", async () => {
+    const { user, card } = await paidAugust();
+
+    // Compra de julho em 2x: a 1ª cai em julho, a 2ª na fatura paga de agosto.
+    await expect(
+      createCardPurchase(
+        user.id,
+        purchaseInput({
+          creditCardId: card.id,
+          amount: 80,
+          date: "2026-07-15",
+          installments: 2,
+        }),
+      ),
+    ).rejects.toThrow(PaidInvoiceError);
+
+    // A transação inteira volta atrás: nem a fatura de julho fica criada.
+    expect(await invoices(user.id, card.id)).toEqual([
+      { competencia: "2026-08", total: "100.00", itens: 1, status: "PAID" },
+    ]);
+  });
+
+  it("recusa edição que moveria a compra para dentro da fatura paga", async () => {
+    const { user, card } = await paidAugust();
+
+    const [setembro] = await createCardPurchase(
+      user.id,
+      purchaseInput({ creditCardId: card.id, amount: 40, date: "2026-09-15" }),
+    );
+
+    await expect(
+      updateCardPurchase(
+        user.id,
+        setembro!.id,
+        purchaseInput({ creditCardId: card.id, amount: 40, date: "2026-08-15" }),
+      ),
+    ).rejects.toThrow(PaidInvoiceError);
+
+    expect(await invoices(user.id, card.id)).toEqual([
+      { competencia: "2026-08", total: "100.00", itens: 1, status: "PAID" },
+      { competencia: "2026-09", total: "40.00", itens: 1, status: "OPEN" },
+    ]);
+  });
+
+  it("aceita de novo depois de o pagamento ser desfeito", async () => {
+    const { user, card } = await paidAugust();
+    const [invoice] = await listCardInvoices(user.id, card.id);
+
+    await undoInvoicePayment(user.id, invoice!.id);
+
+    await createCardPurchase(
+      user.id,
+      purchaseInput({ creditCardId: card.id, amount: 70, date: "2026-08-15" }),
+    );
+
+    expect(await invoices(user.id, card.id)).toEqual([
+      { competencia: "2026-08", total: "170.00", itens: 2, status: "OPEN" },
+    ]);
+  });
+});
+
 describe("compra em moeda estrangeira", () => {
   it("converte para a moeda do cartão e mantém a relação por linha", async () => {
     const user = await makeUser();
@@ -447,7 +548,7 @@ describe("exclusão de compra parcelada", () => {
 
     expect((await invoices(user.id, card.id))[0]).toMatchObject({
       total: "250.00",
-      itens: 2,
+      itens: 1,
       status: "PAID",
     });
   });
@@ -686,7 +787,7 @@ describe("edição da compra", () => {
 
     // Nada mudou: nem o lançamento, nem o total, nem o saldo debitado.
     expect(await invoices(user.id, card.id)).toEqual([
-      { competencia: "2026-08", total: "50.00", itens: 2, status: "PAID" },
+      { competencia: "2026-08", total: "50.00", itens: 1, status: "PAID" },
     ]);
 
     const stored = await prisma.financialAccount.findUniqueOrThrow({ where: { id: account.id } });

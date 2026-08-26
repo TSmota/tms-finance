@@ -51,20 +51,34 @@ export async function updatePerson(
 export async function deletePerson(userId: string, id: string): Promise<void> {
   const person = await prisma.person.findFirst({
     where: { id, userId },
-    select: { id: true, _count: { select: { debts: { where: { status: { not: "PAID" } } } } } },
+    select: { id: true },
   });
 
   if (!person) {
     throw new NotFoundError("Pessoa não encontrada");
   }
 
-  if (person._count.debts > 0) {
-    throw new InvalidOperationError(
-      "Esta pessoa tem dívidas em aberto. Quite ou remova as dívidas antes.",
-    );
+  const blocker = await personDeletionBlocker(userId, id);
+
+  if (blocker) {
+    throw new InvalidOperationError(blocker);
   }
 
   await prisma.person.delete({ where: { id } });
+}
+
+/** Motivo pelo qual a pessoa não pode ser removida, ou `null`. Ver `accountDeletionBlocker`. */
+export async function personDeletionBlocker(
+  userId: string,
+  id: string,
+): Promise<string | null> {
+  const openDebts = await prisma.debt.count({
+    where: { userId, personId: id, status: { not: "PAID" } },
+  });
+
+  return openDebts > 0
+    ? `Esta pessoa tem ${openDebts} dívida(s) em aberto. Quite ou remova as dívidas antes.`
+    : null;
 }
 
 export interface PersonPosition {

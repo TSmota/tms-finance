@@ -1,26 +1,20 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
 import { requireUser } from "@/lib/session";
 import { confirmOccurrenceSchema, recurringExpenseSchema } from "@/lib/validations";
 import * as service from "@/lib/recurring";
-import { parseFlag, parseId, runAction } from "./guard";
+import { parseFlag, parseId, revalidateDomain, runAction } from "./guard";
 import type { ActionResult } from "./types";
 
 /**
  * Recorrentes e confirmação de pendências.
  *
- * A materialização das ocorrências não tem action: acontece no carregamento das
- * páginas mensais, que é o gatilho da geração lazy.
+ * A materialização saiu do carregamento das páginas: quem a dispara é o cron
+ * diário e as escritas daqui. Materializar na escrita é o que faz a ocorrência
+ * da recorrência recém-criada aparecer sem esperar o cron.
  */
 function revalidateAll() {
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/recurring");
-  revalidatePath("/dashboard/transactions");
-  revalidatePath("/dashboard/accounts");
-  revalidatePath("/dashboard/cards");
-  revalidatePath("/dashboard/cards/[id]", "page");
+  revalidateDomain("recurring");
 }
 
 export async function createRecurringExpense(input: unknown): Promise<ActionResult> {
@@ -34,6 +28,7 @@ export async function createRecurringExpense(input: unknown): Promise<ActionResu
   const result = await runAction(() => service.createRecurringExpense(user.id, parsed.data));
 
   if (result.ok) {
+    await materializeQuietly(user.id);
     revalidateAll();
   }
 
@@ -56,6 +51,7 @@ export async function updateRecurringExpense(
   );
 
   if (result.ok) {
+    await materializeQuietly(user.id);
     revalidateAll();
   }
 
@@ -80,10 +76,23 @@ export async function setRecurringActive(id: string, active: boolean): Promise<A
   );
 
   if (result.ok) {
+    await materializeQuietly(user.id);
     revalidateAll();
   }
 
   return result;
+}
+
+/**
+ * A escrita já aconteceu quando isto roda: a geração falhar não pode desfazer
+ * o `{ ok: true }` da action. O cron tenta de novo.
+ */
+async function materializeQuietly(userId: string): Promise<void> {
+  try {
+    await service.materializeDue(userId);
+  } catch (error) {
+    console.error("Falha ao materializar recorrentes após escrita:", error);
+  }
 }
 
 export async function confirmPendingTransaction(

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { createTransaction } from "@/lib/transactions";
 import { transactionSchema } from "@/lib/validations";
-import { REVALIDATE, runTool } from "@/mcp/guard";
+import { runTool } from "@/mcp/guard";
 import { makeAccount, makeCategory, makeUser } from "../factories";
 import { setFxAvailable, setRates } from "../setup-fx";
 import { auditFor, ctxFor, makeAgent, readResult } from "../mcpHarness";
@@ -59,7 +59,7 @@ function call(ctx: ReturnType<typeof ctxFor>, input: unknown) {
     run: (agent, parsed) => createTransaction(agent.userId, parsed),
     serialize: (row) => ({ id: row.id }),
     affected: (row) => [row.id],
-    revalidatePaths: REVALIDATE.transactions,
+    revalidates: "transactions",
   });
 }
 

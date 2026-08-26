@@ -6,11 +6,11 @@ import type {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
-import { NotFoundError } from "@/lib/errors";
+import { InvalidOperationError, NotFoundError } from "@/lib/errors";
 import { getExchangeRate, FX_RATE_SCALE } from "@/lib/fxService";
 import { convertMoney, toStorage } from "@/lib/money";
 import { monthRange, parseCalendarDate } from "@/lib/dates";
-import { applyToBalance, balanceDelta } from "@/lib/accountBalance";
+import { applyToBalance, balanceDelta, lockTransaction } from "@/lib/accountBalance";
 import { assertCategoryOwned, requireAccount } from "@/lib/ownership";
 import type { TransactionInput } from "@/lib/validations";
 
@@ -25,9 +25,53 @@ import type { TransactionInput } from "@/lib/validations";
  * `@/lib/cardPurchases`.
  */
 
-/** Escopo do usuário + garantia de que é lançamento de conta, não de cartão. */
-function ownedAccountTransaction(userId: string, id: string) {
-  return { id, userId, accountId: { not: null } };
+/**
+ * Serviço dono do lançamento, quando não é este.
+ *
+ * Amortização e pagamento de fatura movem saldo de verdade, e por isso aparecem
+ * nas listagens. Mas cada um é metade de uma escrita de dois lados: mexer neles
+ * daqui deixa `Debt.remainingAmount` ou `Invoice.totalAmount` no valor de antes.
+ */
+export type ManagedBy = "debt" | "invoice";
+
+function managedBy(row: { debtId: string | null; type: TransactionType }): ManagedBy | null {
+  if (row.debtId !== null) {
+    return "debt";
+  }
+
+  if (row.type === "INVOICE_PAYMENT") {
+    return "invoice";
+  }
+
+  return null;
+}
+
+const MANAGED_ELSEWHERE: Record<ManagedBy, string> = {
+  debt:
+    "Este lançamento pertence a uma dívida. Ajuste-o pela tela de dívidas, " +
+    "para que o valor restante acompanhe.",
+  invoice:
+    "Este lançamento é o pagamento de uma fatura. Desfaça o pagamento pela " +
+    "tela do cartão, para que a fatura volte a ficar em aberto.",
+};
+
+/** Recusa o que pertence a dívida ou fatura. `NotFoundError` mentiria: a linha existe. */
+async function requireEditableTransaction(userId: string, id: string) {
+  const existing = await prisma.transaction.findFirst({
+    where: { id, userId, accountId: { not: null } },
+  });
+
+  if (!existing) {
+    throw new NotFoundError("Transação não encontrada");
+  }
+
+  const owner = managedBy(existing);
+
+  if (owner) {
+    throw new InvalidOperationError(MANAGED_ELSEWHERE[owner]);
+  }
+
+  return existing;
 }
 
 /**
@@ -101,13 +145,7 @@ export async function updateTransaction(
   id: string,
   input: TransactionInput,
 ): Promise<Transaction> {
-  const existing = await prisma.transaction.findFirst({
-    where: ownedAccountTransaction(userId, id),
-  });
-
-  if (!existing) {
-    throw new NotFoundError("Transação não encontrada");
-  }
+  await requireEditableTransaction(userId, id);
 
   const account = await requireAccount(userId, input.accountId);
   await assertCategoryOwned(userId, input.categoryId);
@@ -124,11 +162,21 @@ export async function updateTransaction(
   return prisma.$transaction(async (tx) => {
     // Desfaz o efeito antigo antes de aplicar o novo. Ajustar pelo delta seria
     // sutilmente errado quando a conta muda: são dois saldos diferentes.
-    if (existing.accountId && existing.status === "CONFIRMED") {
+    //
+    // Relido sob lock: a leitura de `requireEditableTransaction` aconteceu
+    // antes da conversão de moeda, e uma edição concorrente no meio faria este
+    // estorno devolver o valor de antes dela.
+    const previous = await lockTransaction(tx, id);
+
+    if (!previous) {
+      throw new NotFoundError("Transação não encontrada");
+    }
+
+    if (previous.accountId && previous.status === "CONFIRMED") {
       await applyToBalance(
         tx,
-        existing.accountId,
-        balanceDelta(existing.type, existing.convertedAmount).negated(),
+        previous.accountId,
+        balanceDelta(previous.type, previous.convertedAmount).negated(),
       );
     }
 
@@ -159,22 +207,22 @@ export async function updateTransaction(
 }
 
 export async function deleteTransaction(userId: string, id: string): Promise<void> {
-  const existing = await prisma.transaction.findFirst({
-    where: ownedAccountTransaction(userId, id),
-  });
-
-  if (!existing) {
-    throw new NotFoundError("Transação não encontrada");
-  }
+  await requireEditableTransaction(userId, id);
 
   await prisma.$transaction(async (tx) => {
+    const previous = await lockTransaction(tx, id);
+
+    if (!previous) {
+      throw new NotFoundError("Transação não encontrada");
+    }
+
     await tx.transaction.delete({ where: { id } });
 
-    if (existing.accountId && existing.status === "CONFIRMED") {
+    if (previous.accountId && previous.status === "CONFIRMED") {
       await applyToBalance(
         tx,
-        existing.accountId,
-        balanceDelta(existing.type, existing.convertedAmount).negated(),
+        previous.accountId,
+        balanceDelta(previous.type, previous.convertedAmount).negated(),
       );
     }
   });
@@ -208,6 +256,8 @@ export interface TransactionListItem {
    * conferência do valor real.
    */
   isEstimated: boolean;
+  /** Preenchido = a linha é só de leitura aqui; quem edita é o outro serviço. */
+  managedBy: ManagedBy | null;
 }
 
 const listInclude = {
@@ -240,6 +290,7 @@ function toListItem(transaction: TransactionWithRelations): TransactionListItem 
     categoryName: transaction.category?.name ?? null,
     categoryColor: transaction.category?.color ?? null,
     isEstimated: transaction.recurringExpense?.isEstimated ?? false,
+    managedBy: managedBy(transaction),
   };
 }
 

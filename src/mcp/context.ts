@@ -19,7 +19,6 @@ export interface AgentContext {
   baseCurrency: Currency;
 }
 
-/** O id precisa ser UUID. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface AuthInfoLike {

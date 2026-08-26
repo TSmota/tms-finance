@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ServerContext } from "@modelcontextprotocol/server";
+import {
+  SUPPORTED_PROTOCOL_VERSIONS,
+  type ServerContext,
+} from "@modelcontextprotocol/server";
 
 import type { DeletionImpact } from "@/lib/deletionImpact";
 import {
@@ -8,6 +11,7 @@ import {
   readConfirmation,
   requestConfirmation,
   resetConfirmCodec,
+  MCP_PROTOCOL_REVISION,
   type ConfirmPayload,
 } from "@/mcp/confirm";
 
@@ -81,6 +85,14 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.useRealTimers();
   resetConfirmCodec();
+});
+
+describe("revisão do protocolo", () => {
+  it("input_required continua fora do que o initialize negocia", () => {
+    // Se isto passar a falhar, o SDK promoveu a revisão: a declaração por
+    // requisição deixa de ser necessária e o desenho stateless precisa ser revisto.
+    expect(SUPPORTED_PROTOCOL_VERSIONS).not.toContain(MCP_PROTOCOL_REVISION);
+  });
 });
 
 describe("mensagem de confirmação", () => {

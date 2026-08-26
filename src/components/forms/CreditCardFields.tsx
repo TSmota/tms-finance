@@ -4,7 +4,7 @@ import { Group, NumberInput, Select, TextInput } from "@mantine/core";
 import type { UseFormReturnType } from "@mantine/form";
 
 import { CURRENCY_LABELS, CURRENCY_OPTIONS, type CurrencyCode } from "@/lib/currency";
-import type { Option } from "./options";
+import type { Option } from "@/lib/options";
 
 /** `type`, não `interface`: index signature implícita exigida pelo zod4Resolver. */
 export type CreditCardFormValues = {

@@ -52,33 +52,100 @@ const hexColorSchema = z
   .regex(/^#[0-9a-fA-F]{6}$/, "Cor inválida");
 
 /**
+ * Tetos de texto, espelhados nos `@db.VarChar(n)` do schema.
+ *
+ * Os dois lados existem porque servem a coisas diferentes: aqui a mensagem é em
+ * pt-BR e aponta o campo; lá o banco recusa o que qualquer caminho de código
+ * deixar passar — inclusive o endpoint público de cadastro.
+ */
+export const TEXT_LIMITS = {
+  name: 120,
+  description: 200,
+  notes: 1000,
+  email: 320,
+  icon: 60,
+} as const;
+
+/** Texto obrigatório com teto, para não gravar megabytes numa coluna de nome. */
+function requiredText(max: number, missing: string) {
+  return z
+    .string()
+    .trim()
+    .min(1, missing)
+    .max(max, `Máximo de ${max} caracteres`);
+}
+
+/**
  * Texto opcional que nunca é gravado em branco: o banco tem CHECK exigindo
  * `NULL` ou conteúdo não-vazio, porque string vazia é ruído indistinguível de
  * ausência nos agrupamentos.
  */
-const optionalTextSchema = z
-  .union([z.string(), z.null()])
-  .optional()
-  .transform((value) => {
-    const trimmed = value?.trim();
+function optionalText(max: number) {
+  return z
+    .union([z.string().max(max, `Máximo de ${max} caracteres`), z.null()])
+    .optional()
+    .transform((value) => {
+      const trimmed = value?.trim();
 
-    return trimmed ? trimmed : null;
-  });
+      return trimmed ? trimmed : null;
+    });
+}
+
+const optionalTextSchema = optionalText(TEXT_LIMITS.name);
 
 // ---------------------------------------------------------------
 // Autenticação
 // ---------------------------------------------------------------
 
+/**
+ * Mínimo de 12 e nenhuma regra de composição, seguindo o NIST 800-63B:
+ * exigir símbolo e maiúscula empurra o usuário para `Senha@123`. O
+ * comprimento é a única exigência, e é onde está a entropia.
+ */
+export const PASSWORD_MIN_LENGTH = 12;
+const PASSWORD_MAX_LENGTH = 128;
+
+export const PASSWORD_REQUIREMENT = `Pelo menos ${PASSWORD_MIN_LENGTH} caracteres. Prefira uma frase que só você saiba.`;
+
+const emailSchema = z.email("Email inválido").max(TEXT_LIMITS.email, "Email inválido");
+
 export const loginSchema = z.object({
-  email: z.email("Email inválido"),
-  password: z.string().min(8, "A senha deve ter pelo menos 8 caracteres"),
+  email: emailSchema,
+  // Sem o mínimo da política: a senha de quem se cadastrou antes dela continua
+  // valendo, e o formulário de entrada não é lugar de anunciar o formato.
+  password: z.string().min(1, "Informe a senha").max(PASSWORD_MAX_LENGTH),
 });
 
 export const registerSchema = z.object({
-  name: z.string().min(1, "Nome é obrigatório"),
-  email: z.email("Email inválido"),
-  password: z.string().min(8, "A senha deve ter pelo menos 8 caracteres"),
+  name: requiredText(TEXT_LIMITS.name, "Nome é obrigatório"),
+  email: emailSchema,
+  password: z
+    .string()
+    .min(PASSWORD_MIN_LENGTH, `A senha deve ter pelo menos ${PASSWORD_MIN_LENGTH} caracteres`)
+    .max(PASSWORD_MAX_LENGTH, `A senha deve ter no máximo ${PASSWORD_MAX_LENGTH} caracteres`),
 });
+
+export const passwordChangeSchema = z
+  .object({
+    // Sem o mínimo da política, pela mesma razão do `loginSchema`: a senha em
+    // vigor pode ser anterior a ela, e é justamente esta tela que a substitui.
+    currentPassword: z.string().min(1, "Informe a senha atual").max(PASSWORD_MAX_LENGTH),
+    newPassword: z
+      .string()
+      .min(PASSWORD_MIN_LENGTH, `A senha deve ter pelo menos ${PASSWORD_MIN_LENGTH} caracteres`)
+      .max(PASSWORD_MAX_LENGTH, `A senha deve ter no máximo ${PASSWORD_MAX_LENGTH} caracteres`),
+    confirmPassword: z.string(),
+  })
+  .refine((value) => value.newPassword === value.confirmPassword, {
+    message: "A confirmação não confere",
+    path: ["confirmPassword"],
+  })
+  .refine((value) => value.newPassword !== value.currentPassword, {
+    message: "A nova senha precisa ser diferente da atual",
+    path: ["newPassword"],
+  });
+
+export type PasswordChangeInput = z.infer<typeof passwordChangeSchema>;
 
 // ---------------------------------------------------------------
 // Configuração do usuário
@@ -98,7 +165,7 @@ export const baseCurrencySchema = z.object({
 // ---------------------------------------------------------------
 
 export const accountSchema = z.object({
-  name: z.string().min(1, "Nome é obrigatório"),
+  name: requiredText(TEXT_LIMITS.name, "Nome é obrigatório"),
   type: z.enum(ACCOUNT_TYPE_CODES, { message: "Tipo de conta inválido" }),
   /// Banco ou instituição, para agrupar com o cartão da mesma origem.
   institution: optionalTextSchema,
@@ -112,9 +179,9 @@ export const accountSchema = z.object({
 // ---------------------------------------------------------------
 
 export const categorySchema = z.object({
-  name: z.string().min(1, "Nome é obrigatório"),
+  name: requiredText(TEXT_LIMITS.name, "Nome é obrigatório"),
   color: hexColorSchema.optional().nullable(),
-  icon: z.string().optional().nullable(),
+  icon: z.string().max(TEXT_LIMITS.icon).optional().nullable(),
   /** Preenchido = subcategoria. A profundidade máxima é validada no serviço. */
   parentId: optionalIdSchema,
 });
@@ -131,7 +198,7 @@ export const transactionSchema = z.object({
   /** Moeda do lançamento; pode diferir da moeda da conta. */
   currency: currencySchema,
   date: calendarDateSchema,
-  description: z.string().min(1, "Descrição é obrigatória"),
+  description: requiredText(TEXT_LIMITS.description, "Descrição é obrigatória"),
   /** Informada pelo usuário quando o serviço de câmbio está indisponível. */
   manualFxRate: z.coerce
     .number()
@@ -151,7 +218,7 @@ const dayOfMonthSchema = z.coerce
   .max(31, "O dia deve estar entre 1 e 31");
 
 export const creditCardSchema = z.object({
-  name: z.string().min(1, "Nome é obrigatório"),
+  name: requiredText(TEXT_LIMITS.name, "Nome é obrigatório"),
   institution: optionalTextSchema,
   closingDay: dayOfMonthSchema,
   dueDay: dayOfMonthSchema,
@@ -167,7 +234,7 @@ export const creditCardSchema = z.object({
 export const cardPurchaseSchema = z.object({
   creditCardId: idSchema,
   categoryId: optionalIdSchema,
-  description: z.string().min(1, "Descrição é obrigatória"),
+  description: requiredText(TEXT_LIMITS.description, "Descrição é obrigatória"),
   amount: positiveAmountSchema,
   currency: currencySchema,
   date: calendarDateSchema,
@@ -190,7 +257,7 @@ export const cardPurchaseSchema = z.object({
 
 export const recurringExpenseSchema = z
   .object({
-    description: z.string().min(1, "Descrição é obrigatória"),
+    description: requiredText(TEXT_LIMITS.description, "Descrição é obrigatória"),
     amount: positiveAmountSchema,
     currency: currencySchema,
     frequency: z.enum(["WEEKLY", "MONTHLY", "YEARLY"], { message: "Periodicidade inválida" }),
@@ -241,8 +308,8 @@ export const invoicePaymentSchema = z.object({
 // ---------------------------------------------------------------
 
 export const personSchema = z.object({
-  name: z.string().min(1, "Nome é obrigatório"),
-  notes: optionalTextSchema,
+  name: requiredText(TEXT_LIMITS.name, "Nome é obrigatório"),
+  notes: optionalText(TEXT_LIMITS.notes),
 });
 
 /** Data opcional; `""` do `DatePickerInput` limpo conta como ausente. */
@@ -256,7 +323,7 @@ export const debtSchema = z.object({
   /** Motivo/origem: obrigatória, diferente das transações comuns. */
   categoryId: idSchema,
   type: z.enum(DEBT_TYPE_CODES, { message: "Tipo de dívida inválido" }),
-  description: z.string().min(1, "Descrição é obrigatória"),
+  description: requiredText(TEXT_LIMITS.description, "Descrição é obrigatória"),
   amount: positiveAmountSchema,
   currency: currencySchema,
   /** Conta pela qual o dinheiro saiu (LENT) ou entrou (BORROWED). */
@@ -278,22 +345,23 @@ export const debtSettlementSchema = z.object({
   date: calendarDateSchema,
   /** Vazia = herda a categoria de origem da dívida. */
   categoryId: optionalIdSchema,
-  description: z
-    .union([z.string(), z.null()])
-    .optional()
-    .transform((value) => {
-      const trimmed = value?.trim();
-
-      return trimmed ? trimmed : null;
-    }),
+  description: optionalText(TEXT_LIMITS.description),
+  /** Taxa do valor lançado para a moeda da **conta** — a que move o saldo. */
   manualFxRate: z.coerce
     .number()
     .positive("A taxa de câmbio deve ser positiva")
     .optional()
     .nullable(),
+  /**
+   * Segunda taxa, do valor lançado para a moeda da **dívida**. Com três moedas
+   * distintas os dois pares têm cotações diferentes.
+   */
+  manualDebtFxRate: z.coerce
+    .number()
+    .positive("A taxa de câmbio deve ser positiva")
+    .optional()
+    .nullable(),
 });
-
-export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type BaseCurrencyInput = z.infer<typeof baseCurrencySchema>;
 export type AccountInput = z.infer<typeof accountSchema>;

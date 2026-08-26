@@ -4,7 +4,8 @@ import { prisma } from "@/lib/db";
 import { InvalidOperationError, NotFoundError } from "@/lib/errors";
 import { recomputeBalance } from "@/lib/accountBalance";
 import { listCardInvoices, listInvoiceItems } from "@/lib/invoices";
-import { updateCardPurchase } from "@/lib/cardPurchases";
+import { createCardPurchase, updateCardPurchase } from "@/lib/cardPurchases";
+import { payInvoice, undoInvoicePayment } from "@/lib/invoicePayments";
 import {
   confirmPendingTransaction,
   createRecurringExpense,
@@ -354,6 +355,98 @@ describe("materialização no cartão de crédito", () => {
     expect(invoices).toHaveLength(1);
     expect(invoices[0]!.itemCount).toBe(1);
     expect(invoices[0]!.total.toFixed(2)).toBe("39.90");
+  });
+
+  it("pula a ocorrência que cairia em fatura paga, sem estourar", async () => {
+    // Isto roda dentro da renderização de três páginas: lançar aqui deixaria o
+    // painel inacessível a cada visita, e não só na primeira.
+    const user = await makeUser();
+    const account = await makeAccount(user.id, { initialBalance: "1000.00" });
+    const card = await makeCreditCard(user.id, { closingDay: 20, dueDay: 5 });
+    const category = await makeCategory(user.id);
+
+    // Fatura de agosto criada e quitada antes de a recorrência existir.
+    await createCardPurchase(user.id, {
+      creditCardId: card.id,
+      categoryId: null,
+      description: "Compra avulsa",
+      amount: 100,
+      currency: "BRL",
+      date: "2026-08-10",
+      installments: 1,
+      manualFxRate: null,
+    });
+
+    const [agosto] = await listCardInvoices(user.id, card.id);
+
+    await payInvoice(user.id, agosto!.id, {
+      accountId: account.id,
+      date: "2026-09-05",
+      manualFxRate: null,
+    });
+
+    const recurring = await createRecurringExpense(
+      user.id,
+      definition({ categoryId: category.id, creditCardId: card.id, startDate: "2026-08-01" }),
+    );
+
+    const result = await materializeRecurring(user.id, 2026, 8, NOW);
+
+    expect(result).toEqual({ created: 0, skipped: ["Assinatura de teste"] });
+    expect(await generated(recurring.id)).toEqual([]);
+
+    const invoices = await listCardInvoices(user.id, card.id);
+
+    expect(invoices).toHaveLength(1);
+    expect(invoices[0]!.total.toFixed(2)).toBe("100.00");
+    expect(invoices[0]!.status).toBe("PAID");
+  });
+
+  it("materializa sozinha depois de o pagamento ser desfeito", async () => {
+    const user = await makeUser();
+    const account = await makeAccount(user.id, { initialBalance: "1000.00" });
+    const card = await makeCreditCard(user.id, { closingDay: 20, dueDay: 5 });
+    const category = await makeCategory(user.id);
+
+    await createCardPurchase(user.id, {
+      creditCardId: card.id,
+      categoryId: null,
+      description: "Compra avulsa",
+      amount: 100,
+      currency: "BRL",
+      date: "2026-08-10",
+      installments: 1,
+      manualFxRate: null,
+    });
+
+    const [agosto] = await listCardInvoices(user.id, card.id);
+
+    await payInvoice(user.id, agosto!.id, {
+      accountId: account.id,
+      date: "2026-09-05",
+      manualFxRate: null,
+    });
+
+    const recurring = await createRecurringExpense(
+      user.id,
+      definition({ categoryId: category.id, creditCardId: card.id, startDate: "2026-08-01" }),
+    );
+
+    await materializeRecurring(user.id, 2026, 8, NOW);
+
+    // O marcador não avançou na tentativa recusada: a ocorrência volta inteira.
+    await undoInvoicePayment(user.id, agosto!.id);
+
+    const result = await materializeRecurring(user.id, 2026, 8, NOW);
+
+    expect(result).toEqual({ created: 1, skipped: [] });
+    expect(await generated(recurring.id)).toEqual([
+      { data: "2026-08-10", valor: "39.90", status: "CONFIRMED", conta: false, cartao: true },
+    ]);
+
+    const invoices = await listCardInvoices(user.id, card.id);
+
+    expect(invoices[0]!.total.toFixed(2)).toBe("139.90");
   });
 });
 

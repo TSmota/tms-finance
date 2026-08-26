@@ -3,10 +3,11 @@ import type { CreditCard, Currency } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { InvalidOperationError, NotFoundError } from "@/lib/errors";
 import { money, toStorage } from "@/lib/money";
+import { assertAccountOwned } from "@/lib/ownership";
 import { byName } from "@/lib/sorting";
 import { assertValidCycle } from "@/lib/invoiceCycle";
 import type { CreditCardInput } from "@/lib/validations";
-import type { AccountOption } from "@/components/forms/options";
+import type { AccountOption } from "@/lib/options";
 
 /**
  * Cartões de crédito.
@@ -15,25 +16,12 @@ import type { AccountOption } from "@/components/forms/options";
  * faturas em aberto, nunca gravado.
  */
 
-/** A conta de pagamento padrão, se informada, tem de ser do próprio usuário. */
-async function assertPaymentAccountOwned(userId: string, accountId: string | null) {
-  if (accountId === null) {
-    return;
-  }
-
-  const count = await prisma.financialAccount.count({ where: { id: accountId, userId } });
-
-  if (count === 0) {
-    throw new NotFoundError("Conta de pagamento não encontrada");
-  }
-}
-
 export async function createCreditCard(
   userId: string,
   input: CreditCardInput,
 ): Promise<CreditCard> {
   assertValidCycle(input);
-  await assertPaymentAccountOwned(userId, input.defaultPaymentAccountId);
+  await assertAccountOwned(userId, input.defaultPaymentAccountId);
 
   return prisma.creditCard.create({
     data: {
@@ -69,7 +57,7 @@ export async function updateCreditCard(
     throw new NotFoundError("Cartão não encontrado");
   }
 
-  await assertPaymentAccountOwned(userId, input.defaultPaymentAccountId);
+  await assertAccountOwned(userId, input.defaultPaymentAccountId);
 
   return prisma.creditCard.update({
     where: { id },
@@ -93,20 +81,34 @@ export async function updateCreditCard(
 export async function deleteCreditCard(userId: string, id: string): Promise<void> {
   const card = await prisma.creditCard.findFirst({
     where: { id, userId },
-    select: { _count: { select: { invoices: { where: { status: "PAID" } } } } },
+    select: { id: true },
   });
 
   if (!card) {
     throw new NotFoundError("Cartão não encontrado");
   }
 
-  if (card._count.invoices > 0) {
-    throw new InvalidOperationError(
-      "Este cartão tem faturas pagas e não pode ser removido — o histórico de pagamentos seria perdido",
-    );
+  const blocker = await creditCardDeletionBlocker(userId, id);
+
+  if (blocker) {
+    throw new InvalidOperationError(blocker);
   }
 
-  await prisma.creditCard.deleteMany({ where: { id, userId } });
+  await prisma.creditCard.delete({ where: { id } });
+}
+
+/** Motivo pelo qual o cartão não pode ser removido, ou `null`. Ver `accountDeletionBlocker`. */
+export async function creditCardDeletionBlocker(
+  userId: string,
+  id: string,
+): Promise<string | null> {
+  const paidInvoices = await prisma.invoice.count({
+    where: { userId, creditCardId: id, status: "PAID" },
+  });
+
+  return paidInvoices > 0
+    ? `Este cartão tem ${paidInvoices} fatura(s) paga(s) e não pode ser removido — o histórico de pagamentos seria perdido.`
+    : null;
 }
 
 export interface CreditCardSummary {

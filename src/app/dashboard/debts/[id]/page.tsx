@@ -23,7 +23,7 @@ import { NotFoundError } from "@/lib/errors";
 import { getDebtDetail } from "@/lib/debts";
 import { listPersonOptions } from "@/lib/people";
 import { loadFormOptions } from "@/lib/formOptions";
-import { formatCurrency, type CurrencyCode } from "@/lib/currency";
+import { formatCurrency } from "@/lib/currency";
 import {
   DEBT_STATUS_COLORS,
   DEBT_STATUS_LABELS,
@@ -33,7 +33,8 @@ import {
 import { toCalendarDate } from "@/lib/dates";
 import { SettleDebtButton } from "@/components/forms/SettleDebtButton";
 import { EditDebtButton } from "@/components/forms/EditDebtButton";
-import { DeleteSettlementButton } from "@/components/forms/DeleteSettlementButton";
+import { deleteSettlement } from "@/actions/debts";
+import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { BackLink } from "@/components/ui/AppLink";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CategoryBadge } from "@/components/ui/CategoryBadge";
@@ -79,7 +80,7 @@ export default async function DebtDetailPage({
                 debtId={debt.id}
                 type={debt.type}
                 remainingAmount={debt.remainingAmount}
-                currency={debt.currency as CurrencyCode}
+                currency={debt.currency}
                 accounts={options.accounts}
                 categories={options.categories}
                 defaultCategoryId={debt.categoryId}
@@ -104,7 +105,7 @@ export default async function DebtDetailPage({
               categories={options.categories}
               accounts={options.accounts}
               type={debt.type}
-              currency={debt.currency as CurrencyCode}
+              currency={debt.currency}
             />
           </Group>
         }
@@ -223,9 +224,12 @@ export default async function DebtDetailPage({
                       {/* A origem não sai por aqui: apagá-la deixaria a dívida
                           sem o lançamento que a criou. */}
                       {!movement.isOrigin && (
-                        <DeleteSettlementButton
+                        <DeleteEntityButton
                           id={movement.id}
-                          description={movement.description}
+                          title="Remover movimentação"
+                          successMessage="Movimentação removida"
+                          question={`Remover "${movement.description}" devolve o valor ao restante da dívida e reverte o saldo da conta.`}
+                          action={deleteSettlement}
                         />
                       )}
                     </TableTd>

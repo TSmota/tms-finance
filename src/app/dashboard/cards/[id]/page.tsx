@@ -1,5 +1,9 @@
 import { notFound } from "next/navigation";
 import {
+  Accordion,
+  AccordionControl,
+  AccordionItem,
+  AccordionPanel,
   Badge,
   Card,
   Group,
@@ -19,26 +23,25 @@ import { NotFoundError } from "@/lib/errors";
 import { listCreditCards, requireCreditCard } from "@/lib/creditCards";
 import {
   listCardInvoices,
-  listInvoiceItems,
+  listItemsByInvoice,
   type InvoiceItem,
   type InvoiceSummary,
 } from "@/lib/invoices";
 import { listAccounts } from "@/lib/accounts";
 import { listCategoryOptions } from "@/lib/categories";
-import {
-  formatCurrency,
-  type CurrencyCode,
-} from "@/lib/currency";
+import { formatCurrency } from "@/lib/currency";
 import { AddCardPurchaseButton } from "@/components/forms/AddCardPurchaseButton";
 import { EditCardPurchaseButton } from "@/components/forms/EditCardPurchaseButton";
 import { PayInvoiceButton } from "@/components/forms/PayInvoiceButton";
 import { UndoInvoicePaymentButton } from "@/components/forms/UndoInvoicePaymentButton";
-import { DeleteCardPurchaseButton } from "@/components/forms/DeleteCardPurchaseButton";
+import { deleteCardPurchase } from "@/actions/cardPurchases";
+import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { BackLink } from "@/components/ui/AppLink";
 import { toCalendarDate } from "@/lib/dates";
 import type { CardPurchaseFormValues } from "@/components/forms/CardPurchaseFields";
+import type { AccountOption, CardOption, Option } from "@/lib/options";
 import { CategoryBadge } from "@/components/ui/CategoryBadge";
 
 const MONTH_NAMES = [
@@ -133,13 +136,10 @@ export default async function CardInvoicesPage({
     listCreditCards(user.id),
   ]);
 
-  // Os itens de todas as faturas em uma leva, para não fazer N+1 na renderização.
-  const itemsByInvoice = new Map(
-    await Promise.all(
-      invoices.map(
-        async (invoice) => [invoice.id, await listInvoiceItems(user.id, invoice.id)] as const,
-      ),
-    ),
+  // Os itens de todas as faturas em duas consultas, e não duas por fatura.
+  const itemsByInvoice = await listItemsByInvoice(
+    user.id,
+    invoices.map((invoice) => invoice.id),
   );
 
   const accountOptions = accounts.map((account) => ({
@@ -152,7 +152,13 @@ export default async function CardInvoicesPage({
     value: item.id,
     label: item.name,
     currency: item.currency,
+    closingDay: item.closingDay,
+    dueDay: item.dueDay,
   }));
+
+  // A fatura corrente é a única acionável; o resto é histórico.
+  const current = invoices.filter((invoice) => invoice.status !== "PAID");
+  const settled = invoices.filter((invoice) => invoice.status === "PAID");
 
   return (
     <Stack gap="lg">
@@ -173,142 +179,241 @@ export default async function CardInvoicesPage({
 
       {invoices.length === 0 ? (
         <Card withBorder radius="md" padding="lg">
-          <EmptyState message="Nenhuma fatura ainda. A primeira nasce quando você lançar uma compra." />
+          <EmptyState
+            message="Nenhuma fatura ainda. A primeira nasce quando você lançar uma compra."
+            action={
+              <AddCardPurchaseButton
+                cards={cardOptions}
+                categories={categories}
+                defaultCardId={card.id}
+                baseCurrency={user.baseCurrency}
+              />
+            }
+          />
         </Card>
       ) : (
-        invoices.map((invoice) => {
-          const items = itemsByInvoice.get(invoice.id) ?? [];
-
-          return (
+        <>
+          {current.map((invoice) => (
             <Card key={invoice.id} withBorder radius="md" padding="lg">
-              <Group justify="space-between" mb="md" wrap="wrap">
-                <Group gap="sm">
-                  <Text fw={600}>{competencyLabel(invoice)}</Text>
-                  <Badge color={STATUS_COLORS[invoice.status]} variant="light" size="sm">
-                    {STATUS_LABELS[invoice.status]}
-                  </Badge>
-                  <Text size="xs" c="dimmed">
-                    Fecha {formatDay(invoice.closingDate)} · vence {formatDay(invoice.dueDate)}
-                  </Text>
-                </Group>
+              <InvoiceHeader
+                invoice={invoice}
+                accountOptions={accountOptions}
+                defaultAccountId={card.defaultPaymentAccountId}
+              />
+              <InvoiceItems
+                invoice={invoice}
+                items={itemsByInvoice.get(invoice.id) ?? []}
+                cardId={card.id}
+                cardOptions={cardOptions}
+                categories={categories}
+              />
+            </Card>
+          ))}
 
-                <Group gap="sm">
-                  <Text fw={700} size="lg">
-                    {formatCurrency(invoice.total, invoice.currency)}
-                  </Text>
-                  {invoice.status === "PAID" ? (
-                    <UndoInvoicePaymentButton invoiceId={invoice.id} />
-                  ) : (
-                    invoice.total > 0 && (
-                      <PayInvoiceButton
-                        invoiceId={invoice.id}
-                        total={invoice.total}
-                        currency={invoice.currency as CurrencyCode}
-                        dueDate={invoice.dueDate}
-                        accounts={accountOptions}
+          {settled.length > 0 && (
+            <Card withBorder radius="md" padding="lg">
+              <Text fw={600} mb="xs">
+                Faturas pagas
+              </Text>
+              {/* Recolhidas: o histórico de um cartão antigo tem dezenas de
+                  faturas, e todas expandidas empurram a fatura corrente — a
+                  única acionável — para fora da tela. */}
+              <Accordion variant="separated" chevronPosition="left">
+                {settled.map((invoice) => (
+                  <AccordionItem key={invoice.id} value={invoice.id}>
+                    <AccordionControl>
+                      <Group justify="space-between" wrap="wrap" pr="sm">
+                        <Text fw={500}>{competencyLabel(invoice)}</Text>
+                        <Group gap="sm">
+                          <Text size="sm" c="dimmed">
+                            {invoice.itemCount}{" "}
+                            {invoice.itemCount === 1 ? "lançamento" : "lançamentos"}
+                          </Text>
+                          <Text fw={600}>
+                            {formatCurrency(invoice.total, invoice.currency)}
+                          </Text>
+                        </Group>
+                      </Group>
+                    </AccordionControl>
+                    <AccordionPanel>
+                      <InvoiceHeader
+                        invoice={invoice}
+                        accountOptions={accountOptions}
                         defaultAccountId={card.defaultPaymentAccountId}
                       />
-                    )
-                  )}
-                </Group>
-              </Group>
-
-              {invoice.paidAt && (
-                <Text size="xs" c="dimmed" mb="sm">
-                  Paga em {formatDay(invoice.paidAt)}
-                </Text>
-              )}
-
-              {items.length === 0 ? (
-                <Text size="sm" c="dimmed">
-                  Nenhum lançamento nesta fatura.
-                </Text>
-              ) : (
-                <TableScrollContainer minWidth={560}>
-                  <Table highlightOnHover>
-                    <TableThead>
-                      <TableTr>
-                        <TableTh>Data</TableTh>
-                        <TableTh>Descrição</TableTh>
-                        <TableTh>Categoria</TableTh>
-                        <TableTh ta="right">Valor</TableTh>
-                        <TableTh w={80} />
-                      </TableTr>
-                    </TableThead>
-                    <TableTbody>
-                      {items.map((item) => {
-                        const isConverted = item.currency !== invoice.currency;
-
-                        return (
-                          <TableTr key={item.id}>
-                            <TableTd>{formatDay(item.date)}</TableTd>
-                            <TableTd>
-                              <Group gap="xs" wrap="nowrap">
-                                <Text size="sm">{item.description}</Text>
-                                {(item.totalInstallments ?? 1) > 1 && (
-                                  <Badge size="xs" variant="outline" color="gray" tt="none">
-                                    {item.installmentNumber}/{item.totalInstallments}
-                                  </Badge>
-                                )}
-                              </Group>
-                            </TableTd>
-                            <TableTd>
-                              {item.categoryName ? (
-                                <CategoryBadge
-                                  name={item.categoryName}
-                                  color={item.categoryColor}
-                                />
-                              ) : (
-                                <Text c="dimmed" size="sm">
-                                  —
-                                </Text>
-                              )}
-                            </TableTd>
-                            <TableTd ta="right">
-                              <Stack gap={0} align="flex-end">
-                                <Text fw={500}>
-                                  {formatCurrency(item.convertedAmount, invoice.currency)}
-                                </Text>
-                                {isConverted && (
-                                  <Text size="xs" c="dimmed">
-                                    {formatCurrency(item.amount, item.currency)} ×{" "}
-                                    {item.exchangeRate.toLocaleString("pt-BR", {
-                                      minimumFractionDigits: 4,
-                                    })}
-                                  </Text>
-                                )}
-                              </Stack>
-                            </TableTd>
-                            <TableTd>
-                              {invoice.status !== "PAID" && (
-                                <Group gap={4} wrap="nowrap" justify="flex-end">
-                                  <EditCardPurchaseButton
-                                    id={item.id}
-                                    values={toPurchaseValues(item, card.id)}
-                                    cards={cardOptions}
-                                    categories={categories}
-                                    totalInstallments={item.totalInstallments}
-                                    fromRecurring={item.fromRecurring}
-                                  />
-                                  <DeleteCardPurchaseButton
-                                    id={item.id}
-                                    description={item.description}
-                                    totalInstallments={item.totalInstallments}
-                                  />
-                                </Group>
-                              )}
-                            </TableTd>
-                          </TableTr>
-                        );
-                      })}
-                    </TableTbody>
-                  </Table>
-                </TableScrollContainer>
-              )}
+                      <InvoiceItems
+                        invoice={invoice}
+                        items={itemsByInvoice.get(invoice.id) ?? []}
+                        cardId={card.id}
+                        cardOptions={cardOptions}
+                        categories={categories}
+                      />
+                    </AccordionPanel>
+                  </AccordionItem>
+                ))}
+              </Accordion>
             </Card>
-          );
-        })
+          )}
+        </>
       )}
     </Stack>
+  );
+}
+
+interface InvoiceHeaderProps {
+  invoice: InvoiceSummary;
+  accountOptions: AccountOption[];
+  defaultAccountId: string | null;
+}
+
+function InvoiceHeader(props: InvoiceHeaderProps) {
+  const { invoice, accountOptions, defaultAccountId } = props;
+
+  return (
+    <>
+      <Group justify="space-between" mb="md" wrap="wrap">
+        <Group gap="sm">
+          <Text fw={600}>{competencyLabel(invoice)}</Text>
+          <Badge color={STATUS_COLORS[invoice.status]} variant="light" size="sm">
+            {STATUS_LABELS[invoice.status]}
+          </Badge>
+          <Text size="xs" c="dimmed">
+            Fecha {formatDay(invoice.closingDate)} · vence {formatDay(invoice.dueDate)}
+          </Text>
+        </Group>
+
+        <Group gap="sm">
+          <Text fw={700} size="lg">
+            {formatCurrency(invoice.total, invoice.currency)}
+          </Text>
+          {invoice.status === "PAID" ? (
+            <UndoInvoicePaymentButton invoiceId={invoice.id} />
+          ) : (
+            invoice.total > 0 && (
+              <PayInvoiceButton
+                invoiceId={invoice.id}
+                total={invoice.total}
+                currency={invoice.currency}
+                dueDate={invoice.dueDate}
+                accounts={accountOptions}
+                defaultAccountId={defaultAccountId}
+              />
+            )
+          )}
+        </Group>
+      </Group>
+
+      {invoice.paidAt && (
+        <Text size="xs" c="dimmed" mb="sm">
+          Paga em {formatDay(invoice.paidAt)}
+        </Text>
+      )}
+    </>
+  );
+}
+
+interface InvoiceItemsProps {
+  invoice: InvoiceSummary;
+  items: InvoiceItem[];
+  cardId: string;
+  cardOptions: CardOption[];
+  categories: Option[];
+}
+
+function InvoiceItems(props: InvoiceItemsProps) {
+  const { invoice, items, cardId, cardOptions, categories } = props;
+
+  if (items.length === 0) {
+    return (
+      <Text size="sm" c="dimmed">
+        Nenhum lançamento nesta fatura.
+      </Text>
+    );
+  }
+
+  return (
+    <TableScrollContainer minWidth={560}>
+      <Table highlightOnHover>
+        <TableThead>
+          <TableTr>
+            <TableTh>Data</TableTh>
+            <TableTh>Descrição</TableTh>
+            <TableTh>Categoria</TableTh>
+            <TableTh ta="right">Valor</TableTh>
+            <TableTh w={80} />
+          </TableTr>
+        </TableThead>
+        <TableTbody>
+          {items.map((item) => {
+            const isConverted = item.currency !== invoice.currency;
+
+            return (
+              <TableTr key={item.id}>
+                <TableTd>{formatDay(item.date)}</TableTd>
+                <TableTd>
+                  <Group gap="xs" wrap="nowrap">
+                    <Text size="sm">{item.description}</Text>
+                    {(item.totalInstallments ?? 1) > 1 && (
+                      <Badge size="xs" variant="outline" color="gray" tt="none">
+                        {item.installmentNumber}/{item.totalInstallments}
+                      </Badge>
+                    )}
+                  </Group>
+                </TableTd>
+                <TableTd>
+                  {item.categoryName ? (
+                    <CategoryBadge name={item.categoryName} color={item.categoryColor} />
+                  ) : (
+                    <Text c="dimmed" size="sm">
+                      —
+                    </Text>
+                  )}
+                </TableTd>
+                <TableTd ta="right">
+                  <Stack gap={0} align="flex-end">
+                    <Text fw={500}>
+                      {formatCurrency(item.convertedAmount, invoice.currency)}
+                    </Text>
+                    {isConverted && (
+                      <Text size="xs" c="dimmed">
+                        {formatCurrency(item.amount, item.currency)} ×{" "}
+                        {item.exchangeRate.toLocaleString("pt-BR", {
+                          minimumFractionDigits: 4,
+                        })}
+                      </Text>
+                    )}
+                  </Stack>
+                </TableTd>
+                <TableTd>
+                  {invoice.status !== "PAID" && (
+                    <Group gap={4} wrap="nowrap" justify="flex-end">
+                      <EditCardPurchaseButton
+                        id={item.id}
+                        values={toPurchaseValues(item, cardId)}
+                        cards={cardOptions}
+                        categories={categories}
+                        totalInstallments={item.totalInstallments}
+                        fromRecurring={item.fromRecurring}
+                      />
+                      <DeleteEntityButton
+                        id={item.id}
+                        title="Remover compra"
+                        successMessage="Compra removida"
+                        question={
+                          (item.totalInstallments ?? 1) > 1
+                            ? `"${item.description}" está parcelada em ${item.totalInstallments}x. Remover apaga todas as parcelas, em todas as faturas.`
+                            : `Remover a compra "${item.description}"?`
+                        }
+                        action={deleteCardPurchase}
+                      />
+                    </Group>
+                  )}
+                </TableTd>
+              </TableTr>
+            );
+          })}
+        </TableTbody>
+      </Table>
+    </TableScrollContainer>
   );
 }

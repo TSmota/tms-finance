@@ -1,15 +1,13 @@
-import { prisma } from "@/lib/db";
+import { consumeRateLimit, type RateLimitPolicy, type RateLimitVerdict } from "@/lib/rateLimit";
 
 /**
- * Janela deslizante por token, contada em SQL sobre `agent_audit_log`.
+ * Janela deslizante por token, sobre `rate_limit_hits`.
  *
- * **Por que no Postgres e não em memória:** o Fluid Compute reusa instâncias
- * mas não garante que duas chamadas caiam na mesma. Um bucket em processo
- * contaria cada instância separadamente e o limite real seria N vezes o
- * configurado — pior que não ter limite, porque parece ter. A tabela de
- * auditoria já é escrita em toda chamada e já tem o índice
- * `(token_id, created_at)`, então a contagem é uma consulta indexada e nenhuma
- * infraestrutura nova entra (sem Redis).
+ * Tabela própria e não `agent_audit_log`, que já é escrito em toda chamada: a
+ * auditoria só grava **depois** de a ferramenta rodar, então N chamadas
+ * simultâneas contariam todas zero e passariam juntas. `@/lib/rateLimit` insere
+ * a tentativa antes de contar, e por isso cada chamada enxerga ao menos a
+ * própria linha.
  *
  * **O que isto protege:** loop desgovernado do agente. Não é medida
  * anti-fraude — o token já é a autenticação. Por isso o default é generoso.
@@ -31,29 +29,18 @@ export function agentRateLimitPerMinute(): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_LIMIT_PER_MINUTE;
 }
 
-export interface RateLimitVerdict {
-  allowed: boolean;
-  /** Chamadas já registradas na janela. */
-  used: number;
-  limit: number;
+// Montada a cada chamada, e não no import: o limite vem do ambiente, e um
+// módulo avaliado uma vez congelaria o valor do primeiro carregamento.
+function agentPolicy(): RateLimitPolicy {
+  return { scope: "agent", limit: agentRateLimitPerMinute(), windowMs: 60_000 };
 }
 
-/**
- * Conta as chamadas do token no último minuto.
- *
- * `now` é parâmetro com default para que o teste fixe o relógio: um teste que
- * dependa do relógio real quebra sozinho.
- */
+export type { RateLimitVerdict };
+
+/** Registra a chamada do token e diz se ela cabe na janela do último minuto. */
 export async function checkAgentRateLimit(
   tokenId: string,
   now: Date = new Date(),
 ): Promise<RateLimitVerdict> {
-  const limit = agentRateLimitPerMinute();
-  const windowStart = new Date(now.getTime() - 60_000);
-
-  const used = await prisma.agentAuditLog.count({
-    where: { tokenId, createdAt: { gt: windowStart } },
-  });
-
-  return { allowed: used < limit, used, limit };
+  return consumeRateLimit(agentPolicy(), tokenId, now);
 }

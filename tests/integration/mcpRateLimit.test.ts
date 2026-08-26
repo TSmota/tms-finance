@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { prisma } from "@/lib/db";
-import { recordAgentCall } from "@/lib/agentAudit";
 import { checkAgentRateLimit } from "@/lib/agentRateLimit";
 import { listCategoryTree } from "@/lib/categories";
 import { noArgs } from "@/mcp/args";
@@ -11,13 +10,16 @@ import { auditFor, ctxFor, makeAgent } from "../mcpHarness";
 import { readResult } from "../mcpHarness";
 
 /**
- * Cota por token, contada em SQL sobre a trilha de auditoria.
+ * Cota por token, contada em SQL sobre `rate_limit_hits`.
  *
  * O que isto protege é loop desgovernado do agente, não fraude — o token já é a
  * autenticação. A contagem vive no Postgres e não em memória porque o Fluid
  * Compute reusa instâncias mas não garante que duas chamadas caiam na mesma: um
  * bucket em processo contaria cada instância separadamente e o limite real seria
  * N vezes o configurado, o que é pior que não ter limite, porque parece ter.
+ *
+ * `checkAgentRateLimit` **consome**: ela registra a chamada antes de contar, e
+ * por isso `used` já inclui a própria.
  */
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
@@ -28,21 +30,13 @@ beforeEach(() => {
 });
 
 /** Preenche a janela sem gastar chamadas de ferramenta de verdade. */
-async function fillWindow(tokenId: string, userId: string, count: number, at: Date) {
-  for (let i = 0; i < count; i += 1) {
-    await recordAgentCall({
-      tokenId,
-      userId,
-      tool: "list_categories",
-      verdict: "OK",
-      args: {},
-      durationMs: 1,
-    });
-  }
-
-  await prisma.agentAuditLog.updateMany({
-    where: { tokenId },
-    data: { createdAt: at },
+async function fillWindow(tokenId: string, count: number, at: Date) {
+  await prisma.rateLimitHit.createMany({
+    data: Array.from({ length: count }, () => ({
+      scope: "agent",
+      key: tokenId,
+      createdAt: at,
+    })),
   });
 }
 
@@ -53,22 +47,22 @@ describe("janela deslizante", () => {
     const now = new Date("2026-08-21T12:00:00Z");
 
     // Dentro da janela.
-    await fillWindow(agent.tokenId, user.id, 3, new Date("2026-08-21T11:59:30Z"));
+    await fillWindow(agent.tokenId, 3, new Date("2026-08-21T11:59:30Z"));
 
     expect(await checkAgentRateLimit(agent.tokenId, now)).toMatchObject({
       allowed: true,
-      used: 3,
+      used: 4,
     });
 
     // Empurradas para fora: a janela é deslizante, não um balde que enche.
-    await prisma.agentAuditLog.updateMany({
-      where: { tokenId: agent.tokenId },
+    await prisma.rateLimitHit.updateMany({
+      where: { key: agent.tokenId },
       data: { createdAt: new Date("2026-08-21T11:58:00Z") },
     });
 
     expect(await checkAgentRateLimit(agent.tokenId, now)).toMatchObject({
       allowed: true,
-      used: 0,
+      used: 1,
     });
   });
 
@@ -80,18 +74,18 @@ describe("janela deslizante", () => {
 
     vi.stubEnv("AGENT_RATE_LIMIT_PER_MINUTE", "5");
 
-    await fillWindow(first.tokenId, user.id, 5, new Date("2026-08-21T11:59:50Z"));
+    await fillWindow(first.tokenId, 5, new Date("2026-08-21T11:59:50Z"));
 
     expect(await checkAgentRateLimit(first.tokenId, now)).toMatchObject({
       allowed: false,
-      used: 5,
+      used: 6,
       limit: 5,
     });
 
     // O segundo token do mesmo usuário não herda a cota do primeiro.
     expect(await checkAgentRateLimit(second.tokenId, now)).toMatchObject({
       allowed: true,
-      used: 0,
+      used: 1,
     });
   });
 

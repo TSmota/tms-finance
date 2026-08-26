@@ -1,11 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
 import { requireUser } from "@/lib/session";
 import { transactionSchema } from "@/lib/validations";
 import * as service from "@/lib/transactions";
-import { parseId, runAction } from "./guard";
+import { parseId, revalidateDomain, runAction } from "./guard";
 import type { ActionResult } from "./types";
 
 /**
@@ -13,12 +11,8 @@ import type { ActionResult } from "./types";
  * negócio (câmbio, saldo, atomicidade) vive em `@/lib/transactions`.
  */
 
-const AFFECTED_PATHS = ["/dashboard", "/dashboard/transactions", "/dashboard/accounts"];
-
 function revalidateAll() {
-  for (const path of AFFECTED_PATHS) {
-    revalidatePath(path);
-  }
+  revalidateDomain("transactions");
 }
 
 export async function createTransaction(input: unknown): Promise<ActionResult> {

@@ -1,8 +1,10 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import type { Currency } from "@prisma/client";
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { UUID_PATTERN } from "@/lib/uuid";
 
 export interface CurrentUser {
   id: string;
@@ -14,21 +16,18 @@ export interface CurrentUser {
 }
 
 /**
- * IDs de usuário são UUID. A versão anterior do schema usava `cuid`, e um JWT
- * assinado com o mesmo `AUTH_SECRET` continua válido depois da migração —
- * carregando um id em formato antigo. Consultar o Postgres com ele levantaria
- * `invalid input syntax for type uuid` em vez de simplesmente não encontrar.
- */
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
  * Usuário autenticado, ou redirect para `/login`.
  *
  * Confere no banco que o usuário do token ainda existe: o JWT é auto-contido e
  * sobrevive ao dado. Sem esta checagem, uma sessão órfã leria listas vazias e
  * quebraria toda escrita com violação de chave estrangeira.
+ *
+ * `cache()` é por requisição, não entre requisições: o layout e a página de
+ * `/dashboard` chamam os dois, e sem ele toda navegação custava duas idas ao
+ * banco pelo mesmo usuário. Nada aqui é revalidado ou compartilhado — a memória
+ * morre com a resposta.
  */
-export async function requireUser(): Promise<CurrentUser> {
+export const requireUser = cache(async function requireUser(): Promise<CurrentUser> {
   const session = await auth();
   const id = session?.user?.id;
 
@@ -46,4 +45,4 @@ export async function requireUser(): Promise<CurrentUser> {
   }
 
   return user;
-}
+});

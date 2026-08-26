@@ -3,9 +3,23 @@ import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
+import { clientIp, consumeRateLimit, REGISTER_BY_IP } from "@/lib/rateLimit";
 import { registerSchema } from "@/lib/validations";
 
 export async function POST(req: Request) {
+  const ip = clientIp(req.headers);
+
+  if (ip) {
+    const rate = await consumeRateLimit(REGISTER_BY_IP, ip);
+
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: "Muitas tentativas de cadastro. Tente novamente mais tarde." },
+        { status: 429 },
+      );
+    }
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -30,14 +44,14 @@ export async function POST(req: Request) {
       data: { name, email, passwordHash },
     });
   } catch (err) {
-    // Unique constraint violation on email — the only expected failure.
+    // Violação da unique de email — a única falha esperada aqui.
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       return NextResponse.json(
-        { error: "Email já cadastrado" },
+        { error: "Este email já está cadastrado. Entre com a sua senha." },
         { status: 409 },
       );
     }
-    
+
     throw err;
   }
 

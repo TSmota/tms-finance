@@ -40,6 +40,41 @@ export function setFxAvailable(available: boolean): void {
 vi.mock("@/lib/fxService", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/fxService")>();
 
+  /**
+   * A cotação do par, com a mesma ordem de precedência da implementação real:
+   * identidade antes da taxa manual.
+   *
+   * A data é ignorada de propósito: a fixture é por par, e um teste que
+   * dependesse de cotação histórica estaria afirmando sobre o Frankfurter.
+   */
+  const lookup = (params: {
+    from: string;
+    to: string;
+    manualRate?: number | null;
+  }): import("@/lib/fxService").FxRate => {
+    if (params.from === params.to) {
+      return actual.toStoredRate(1);
+    }
+
+    if (params.manualRate && params.manualRate > 0) {
+      return actual.toStoredRate(params.manualRate);
+    }
+
+    if (!fx.available) {
+      throw new actual.FxUnavailableError();
+    }
+
+    const rate = fx.rates.get(`${params.from}->${params.to}`);
+
+    if (rate === undefined) {
+      throw new actual.FxUnavailableError(
+        `Cotação ${params.from}->${params.to} não configurada no teste`,
+      );
+    }
+
+    return actual.toStoredRate(rate);
+  };
+
   return {
     ...actual,
 
@@ -49,31 +84,12 @@ vi.mock("@/lib/fxService", async (importOriginal) => {
         to: string;
         date?: Date;
         manualRate?: number | null;
-      }): Promise<import("@/lib/fxService").FxRate> => {
-        if (params.manualRate && params.manualRate > 0) {
-          return actual.toStoredRate(params.manualRate);
-        }
-
-        if (params.from === params.to) {
-          return actual.toStoredRate(1);
-        }
-
-        if (!fx.available) {
-          throw new actual.FxUnavailableError();
-        }
-
-        const rate = fx.rates.get(`${params.from}->${params.to}`);
-
-        if (rate === undefined) {
-          throw new actual.FxUnavailableError(
-            `Cotação ${params.from}->${params.to} não configurada no teste`,
-          );
-        }
-
-        return actual.toStoredRate(rate);
-      },
+      }): Promise<import("@/lib/fxService").FxRate> => lookup(params),
     ),
 
+    // Substituída por inteiro, e não só `getExchangeRate`, porque em ESM a
+    // chamada interna do módulo não passa pelo mock. A versão real é exercitada
+    // em `src/lib/fxService.test.ts`, com `fetch` stubbado.
     resolveRatesToBase: vi.fn(async (currencies: string[], base: string) => {
       const rates = new Map<string, import("@/lib/fxService").FxRate>([
         [base, actual.toStoredRate(1)],
@@ -85,12 +101,10 @@ vi.mock("@/lib/fxService", async (importOriginal) => {
           continue;
         }
 
-        const rate = fx.available ? fx.rates.get(`${currency}->${base}`) : undefined;
-
-        if (rate === undefined) {
+        try {
+          rates.set(currency, lookup({ from: currency, to: base }));
+        } catch {
           complete = false;
-        } else {
-          rates.set(currency, actual.toStoredRate(rate));
         }
       }
 

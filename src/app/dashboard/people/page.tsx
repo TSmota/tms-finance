@@ -22,7 +22,8 @@ import { loadFormOptions } from "@/lib/formOptions";
 import { formatCurrency } from "@/lib/currency";
 import { AddPersonButton } from "@/components/forms/AddPersonButton";
 import { EditPersonButton } from "@/components/forms/EditPersonButton";
-import { DeletePersonButton } from "@/components/forms/DeletePersonButton";
+import { deletePerson } from "@/actions/people";
+import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { AddDebtButton } from "@/components/forms/AddDebtButton";
 import { LinkButton } from "@/components/ui/AppLink";
 import { EmptyState } from "@/components/EmptyState";
@@ -170,10 +171,20 @@ export default async function PeoplePage() {
                             id={person.id}
                             values={{ name: person.name, notes: person.notes ?? "" }}
                           />
-                          <DeletePersonButton
+                          <DeleteEntityButton
                             id={person.id}
-                            name={person.name}
-                            openDebts={person.openDebts}
+                            title="Remover pessoa"
+                            successMessage="Pessoa removida"
+                            question={
+                              person.openDebts > 0
+                                ? `${person.name} tem ${person.openDebts} ${
+                                  person.openDebts === 1 ? "dívida" : "dívidas"
+                                } em aberto. Quite ou remova as dívidas antes de remover a pessoa.`
+                                : `Remover ${person.name}?`
+                            }
+                            action={deletePerson}
+                            impactTarget="person"
+                            blocked={person.openDebts > 0}
                           />
                         </Group>
                       </TableTd>

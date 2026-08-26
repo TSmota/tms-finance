@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { Currency, Prisma } from "@prisma/client";
+import { Currency } from "@prisma/client";
 
-import {
-  CURRENCIES,
-  CURRENCY_LABELS,
-  CURRENCY_OPTIONS,
-  formatCurrency,
-  toNumber,
-} from "./currency";
+import { CURRENCIES, CURRENCY_LABELS, CURRENCY_OPTIONS, formatCurrency } from "./currency";
 
 describe("lista de moedas", () => {
   /**
@@ -47,23 +41,5 @@ describe("formatCurrency", () => {
 
   it("cai para formato simples se a moeda for inválida", () => {
     expect(formatCurrency(10, "XYZ_INVALIDO")).toBe("XYZ_INVALIDO 10.00");
-  });
-});
-
-describe("toNumber", () => {
-  it("converte Decimal do Prisma", () => {
-    expect(toNumber(new Prisma.Decimal("8228.70"))).toBe(8228.7);
-  });
-
-  it("converte string numérica", () => {
-    expect(toNumber("450.30")).toBe(450.3);
-  });
-
-  it("trata valores não finitos como 0", () => {
-    expect(toNumber(null)).toBe(0);
-    expect(toNumber(undefined)).toBe(0);
-    expect(toNumber("abc")).toBe(0);
-    expect(toNumber(NaN)).toBe(0);
-    expect(toNumber(Infinity)).toBe(0);
   });
 });

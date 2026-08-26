@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/db";
-import { NotFoundError } from "@/lib/errors";
+import { InvalidOperationError, NotFoundError } from "@/lib/errors";
 import {
   createAccount,
   deleteAccount,
@@ -11,8 +11,12 @@ import {
 } from "@/lib/accounts";
 import { reconcileBalance } from "@/lib/accountBalance";
 import { createTransaction } from "@/lib/transactions";
+import { createDebt } from "@/lib/debts";
+import { createCardPurchase } from "@/lib/cardPurchases";
+import { listCardInvoices } from "@/lib/invoices";
+import { payInvoice } from "@/lib/invoicePayments";
 import { accountSchema } from "@/lib/validations";
-import { makeAccount, makeCreditCard, makeUser } from "../factories";
+import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "../factories";
 import { setFxAvailable, setRates } from "../setup-fx";
 
 beforeEach(() => {
@@ -157,6 +161,66 @@ describe("exclusão", () => {
 
     await expect(deleteAccount(intruder.id, account.id)).rejects.toThrow(NotFoundError);
     await expect(prisma.financialAccount.count()).resolves.toBe(1);
+  });
+
+  // Os dois casos que produzem estado irrecuperável: fatura paga sem conta de
+  // origem, e dívida com o restante de antes mas sem o lançamento que o justifica.
+  it("recusa conta que pagou fatura, e a fatura continua paga", async () => {
+    const user = await makeUser();
+    const account = await makeAccount(user.id, { initialBalance: "1000.00" });
+    const card = await makeCreditCard(user.id, { closingDay: 20, dueDay: 5 });
+
+    await createCardPurchase(user.id, {
+      creditCardId: card.id,
+      categoryId: null,
+      description: "Compra",
+      amount: 250,
+      currency: "BRL",
+      date: "2026-08-15",
+      installments: 1,
+      manualFxRate: null,
+    });
+
+    const [invoice] = await listCardInvoices(user.id, card.id);
+    await payInvoice(user.id, invoice!.id, {
+      accountId: account.id,
+      date: "2026-09-05",
+      manualFxRate: null,
+    });
+
+    await expect(deleteAccount(user.id, account.id)).rejects.toThrow(InvalidOperationError);
+
+    await expect(prisma.financialAccount.count()).resolves.toBe(1);
+    const after = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice!.id } });
+    expect(after.status).toBe("PAID");
+    expect(after.paymentAccountId).toBe(account.id);
+  });
+
+  it("recusa conta com movimentação de dívida, e a dívida fica intacta", async () => {
+    const user = await makeUser();
+    const account = await makeAccount(user.id, { initialBalance: "1000.00" });
+    const category = await makeCategory(user.id);
+    const person = await makePerson(user.id);
+
+    const debt = await createDebt(user.id, {
+      personId: person.id,
+      categoryId: category.id,
+      accountId: account.id,
+      type: "LENT",
+      description: "Empréstimo",
+      amount: 200,
+      currency: "BRL",
+      date: "2026-08-06",
+      dueDate: null,
+      manualFxRate: null,
+    });
+
+    await expect(deleteAccount(user.id, account.id)).rejects.toThrow(InvalidOperationError);
+
+    await expect(prisma.financialAccount.count()).resolves.toBe(1);
+    const after = await prisma.debt.findUniqueOrThrow({ where: { id: debt.id } });
+    expect(after.remainingAmount.toFixed(2)).toBe("200.00");
+    await expect(prisma.transaction.count({ where: { debtId: debt.id } })).resolves.toBe(1);
   });
 });
 

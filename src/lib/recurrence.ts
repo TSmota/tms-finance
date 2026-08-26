@@ -173,6 +173,38 @@ export function competenciesToMaterialize(params: {
   );
 }
 
+/**
+ * Até que competência vale a pena materializar, dado o conjunto de regras.
+ *
+ * O horizonte não é a competência que o usuário está olhando — isso faria
+ * navegar para dezembro disparar a geração. A pergunta é "qual é a próxima
+ * ocorrência que ainda não existe", e a resposta depende da periodicidade:
+ * mensal e semanal pedem o mês seguinte, anual pede até o mês do aniversário.
+ *
+ * `maxMonths` corta o horizonte de uma regra sem ocorrência alcançável, para o
+ * laço não varrer o calendário inteiro.
+ */
+export function materializationHorizon(
+  rules: RecurrenceRule[],
+  from: { year: number; month: number },
+  maxMonths: number,
+): { year: number; month: number } {
+  let ahead = 0;
+
+  for (const rule of rules) {
+    for (let months = ahead + 1; months <= maxMonths; months += 1) {
+      const competency = addMonths(from.year, from.month, months);
+
+      if (occurrencesInMonth(rule, competency.year, competency.month).length > 0) {
+        ahead = months;
+        break;
+      }
+    }
+  }
+
+  return addMonths(from.year, from.month, ahead);
+}
+
 /** Índice absoluto de meses, para comparar competências. */
 function monthIndex(competency: { year: number; month: number }): number {
   return competency.year * 12 + (competency.month - 1);

@@ -1,16 +1,16 @@
 "use client";
 
-import { Button, NumberInput, Select, TextInput } from "@mantine/core";
+import { Button } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import { Plus } from "lucide-react";
 
 import { accountSchema } from "@/lib/validations";
-import { ACCOUNT_TYPES } from "@/lib/accountTypes";
-import { CURRENCY_OPTIONS, type CurrencyCode } from "@/lib/currency";
+import type { CurrencyCode } from "@/lib/currency";
 import { createAccount } from "@/actions/accounts";
 import { FormModal } from "@/components/ui/FormModal";
 import { useActionModal } from "@/components/ui/useActionModal";
+import { AccountFields, type AccountFormValues } from "./AccountFields";
 
 interface AddAccountButtonProps {
   /** Último recurso do campo de moeda: a moeda base do usuário. */
@@ -24,15 +24,17 @@ export function AddAccountButton(props: AddAccountButtonProps) {
     successMessage: "Conta criada",
   });
 
+  const initialValues: AccountFormValues = {
+    name: "",
+    type: "CHECKING",
+    institution: "",
+    currency: baseCurrency,
+    initialBalance: 0,
+  };
+
   const form = useForm({
     mode: "uncontrolled",
-    initialValues: {
-      name: "",
-      type: "CHECKING",
-      institution: "",
-      currency: baseCurrency,
-      initialBalance: 0,
-    },
+    initialValues,
     validate: zod4Resolver(accountSchema),
   });
 
@@ -52,42 +54,7 @@ export function AddAccountButton(props: AddAccountButtonProps) {
         onSubmit={handleSubmit}
         loading={loading}
       >
-        <TextInput
-          label="Nome"
-          placeholder="Conta corrente"
-          key={form.key("name")}
-          {...form.getInputProps("name")}
-        />
-        <Select
-          label="Tipo"
-          data={ACCOUNT_TYPES}
-          allowDeselect={false}
-          key={form.key("type")}
-          {...form.getInputProps("type")}
-        />
-        <TextInput
-          label="Banco / instituição"
-          description="Opcional. Agrupa esta conta com o cartão da mesma origem."
-          placeholder="Nubank"
-          key={form.key("institution")}
-          {...form.getInputProps("institution")}
-        />
-        <Select
-          label="Moeda"
-          description="Não pode ser alterada depois: reinterpretaria todo o histórico"
-          data={CURRENCY_OPTIONS}
-          allowDeselect={false}
-          key={form.key("currency")}
-          {...form.getInputProps("currency")}
-        />
-        <NumberInput
-          label="Saldo inicial"
-          decimalScale={2}
-          thousandSeparator="."
-          decimalSeparator=","
-          key={form.key("initialBalance")}
-          {...form.getInputProps("initialBalance")}
-        />
+        <AccountFields form={form} />
       </FormModal>
     </>
   );

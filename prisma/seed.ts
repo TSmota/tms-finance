@@ -8,16 +8,15 @@ import bcrypt from "bcryptjs";
  * Os valores denormalizados (`currentBalance`, `invoice.totalAmount`,
  * `debt.remainingAmount`) são escritos já calculados à mão. As contas estão
  * conferidas nos comentários; se mexer nos lançamentos, refaça a soma.
- *
- * As recorrências entram só como definição: é a materialização lazy que produz
- * as ocorrências ao abrir o mês.
  */
 
-const isProduction =
-  process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+const environment = process.env.NODE_ENV ?? "development";
 
-if (isProduction) {
-  console.log("Refusing to seed a production database.");
+if (environment !== "development" || process.env.VERCEL) {
+  console.log(
+    `Refusing to seed: NODE_ENV=${environment}` +
+      (process.env.VERCEL ? `, VERCEL_ENV=${process.env.VERCEL_ENV ?? "set"}` : ""),
+  );
   process.exit(1);
 }
 

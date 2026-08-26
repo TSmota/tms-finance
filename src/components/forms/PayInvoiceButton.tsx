@@ -13,7 +13,8 @@ import { toCalendarDate } from "@/lib/dates";
 import { payInvoice } from "@/actions/invoices";
 import { FormModal } from "@/components/ui/FormModal";
 import { useActionModal } from "@/components/ui/useActionModal";
-import type { AccountOption } from "./options";
+import { useFormValue } from "@/components/ui/useFormValue";
+import type { AccountOption } from "@/lib/options";
 
 /** `type`, não `interface`: index signature implícita exigida pelo zod4Resolver. */
 type InvoicePaymentFormValues = {
@@ -69,7 +70,8 @@ export function PayInvoiceButton(props: PayInvoiceButtonProps) {
     });
   });
 
-  const selected = accounts.find((account) => account.value === form.getValues().accountId);
+  const accountId = useFormValue(form, "accountId");
+  const selected = accounts.find((account) => account.value === accountId);
   const needsConversion = selected !== undefined && selected.currency !== currency;
 
   return (

@@ -22,19 +22,19 @@ import { requireUser } from "@/lib/session";
 import {
   listPendingOccurrences,
   listRecurringExpenses,
-  materializeRecurring,
   type RecurringListItem,
 } from "@/lib/recurring";
 import { getBalanceProjection } from "@/lib/projection";
 import { listCreditCards } from "@/lib/creditCards";
 import { loadFormOptions } from "@/lib/formOptions";
-import { toCalendarDate } from "@/lib/dates";
-import { formatCurrency, type CurrencyCode } from "@/lib/currency";
+import { toCalendarDate, competencyOf } from "@/lib/dates";
+import { formatCurrency } from "@/lib/currency";
 import { FREQUENCY_LABELS } from "@/lib/recurrence";
 import { MonthSelector } from "@/components/MonthSelector";
 import { AddRecurringButton } from "@/components/forms/AddRecurringButton";
 import { EditRecurringButton } from "@/components/forms/EditRecurringButton";
-import { DeleteRecurringButton } from "@/components/forms/DeleteRecurringButton";
+import { deleteRecurringExpense } from "@/actions/recurring";
+import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { RecurringActiveToggle } from "@/components/forms/RecurringActiveToggle";
 import { ConfirmPendingButton } from "@/components/forms/ConfirmPendingButton";
 import { joinTarget } from "@/lib/recurringTarget";
@@ -79,14 +79,6 @@ export default async function RecurringPage({ searchParams }: RecurringPageProps
   const { month } = await searchParams;
   const competency = resolveCompetency(month);
 
-  // Geração lazy: abrir o mês materializa as ocorrências. Idempotente, então
-  // re-renderizações não duplicam nada.
-  const materialization = await materializeRecurring(
-    user.id,
-    competency.year,
-    competency.month,
-  );
-
   const [recurrings, pending, projection, cards, options] = await Promise.all([
     listRecurringExpenses(user.id),
     listPendingOccurrences(user.id, competency.year, competency.month),
@@ -94,6 +86,17 @@ export default async function RecurringPage({ searchParams }: RecurringPageProps
     listCreditCards(user.id),
     loadFormOptions(user.id),
   ]);
+
+  // Recorrência ativa cujo marcador não alcança a competência aberta: o cron
+  // ainda não gerou, ou pulou por câmbio indisponível ou fatura já paga.
+  const notGenerated = recurrings.filter(
+    (item) =>
+      item.active &&
+      (item.lastGeneratedAt === null ||
+        competencyOf(item.lastGeneratedAt).year * 12 +
+          competencyOf(item.lastGeneratedAt).month <
+          competency.year * 12 + competency.month),
+  );
 
   const cardOptions = cards.map((card) => ({
     value: card.id,
@@ -130,10 +133,11 @@ export default async function RecurringPage({ searchParams }: RecurringPageProps
         </Alert>
       )}
 
-      {materialization.skipped.length > 0 && (
+      {notGenerated.length > 0 && (
         <Alert color="orange" variant="light" icon={<TriangleAlert size={16} />}>
-          Sem cotação de câmbio para {materialization.skipped.join(", ")}. As ocorrências serão
-          geradas quando o serviço voltar.
+          Ainda sem ocorrência gerada nesta competência:{" "}
+          {notGenerated.map((item) => item.description).join(", ")}. A geração roda uma vez por
+          dia e tenta de novo quando a cotação de câmbio voltar.
         </Alert>
       )}
 
@@ -227,8 +231,8 @@ export default async function RecurringPage({ searchParams }: RecurringPageProps
                         id={occurrence.id}
                         description={occurrence.description}
                         amount={occurrence.amount}
-                        currency={occurrence.currency as CurrencyCode}
-                        accountCurrency={occurrence.accountCurrency as CurrencyCode}
+                        currency={occurrence.currency}
+                        accountCurrency={occurrence.accountCurrency}
                         date={occurrence.date}
                         isEstimated={occurrence.isEstimated}
                         compact
@@ -312,7 +316,13 @@ export default async function RecurringPage({ searchParams }: RecurringPageProps
                           cards={cardOptions}
                           categories={options.categories}
                         />
-                        <DeleteRecurringButton id={item.id} description={item.description} />
+                        <DeleteEntityButton
+                          id={item.id}
+                          title="Remover recorrência"
+                          successMessage="Recorrência removida"
+                          question={`Remover "${item.description}" apaga as pendências ainda não confirmadas e os lançamentos em faturas abertas. O que já foi pago permanece no histórico.`}
+                          action={deleteRecurringExpense}
+                        />
                       </Group>
                     </TableTd>
                   </TableTr>

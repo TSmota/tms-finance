@@ -1,19 +1,13 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
 import { requireUser } from "@/lib/session";
 import { invoicePaymentSchema } from "@/lib/validations";
 import * as service from "@/lib/invoicePayments";
-import { parseId, runAction } from "./guard";
+import { parseId, revalidateDomain, runAction } from "./guard";
 import type { ActionResult } from "./types";
 
 function revalidateAll() {
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/cards");
-  revalidatePath("/dashboard/accounts");
-  revalidatePath("/dashboard/transactions");
-  revalidatePath("/dashboard/cards/[id]", "page");
+  revalidateDomain("invoices");
 }
 
 export async function payInvoice(invoiceId: string, input: unknown): Promise<ActionResult> {

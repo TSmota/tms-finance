@@ -1,10 +1,8 @@
 interface SuccessActionResult {
-  /** A ação foi concluída. */
   ok: true;
 }
 
 interface FailureActionResult {
-  /** A ação falhou. */
   ok: false;
   /** Mensagem em pt-BR exibida direto ao usuário. */
   error: string;

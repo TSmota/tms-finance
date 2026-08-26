@@ -1,4 +1,4 @@
-import type { Prisma, TransactionType } from "@prisma/client";
+import type { Prisma, TransactionStatus, TransactionType } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
 import { money, sumMoney, toStorage, type Money, type MoneyInput } from "@/lib/money";
@@ -72,6 +72,47 @@ export async function applyToBalance(
     where: { id: accountId },
     data: { currentBalance: { increment: toStorage(amount) } },
   });
+}
+
+/** O que um estorno precisa saber sobre a transação que está desfazendo. */
+export interface TransactionPreImage {
+  accountId: string | null;
+  status: TransactionStatus;
+  type: TransactionType;
+  amount: Prisma.Decimal;
+  convertedAmount: Prisma.Decimal;
+}
+
+/**
+ * Trava a linha da transação e devolve o retrato dela já sob o lock.
+ *
+ * O retrato lido **antes** de abrir a `$transaction` pode estar velho: uma
+ * edição concorrente já teria trocado conta, tipo ou valor, e o estorno
+ * devolveria o número errado à conta errada — dinheiro criado ou sumido. Com
+ * `FOR UPDATE`, a segunda operação espera a primeira confirmar e, em READ
+ * COMMITTED, relê o valor novo.
+ *
+ * Devolve `null` quando a linha não existe mais, para o chamador escolher a
+ * mensagem: quem chega aqui já conferiu a posse, então "sumiu no meio" e "nunca
+ * existiu" não são a mesma coisa para quem lê o erro.
+ */
+export async function lockTransaction(
+  tx: Tx,
+  id: string,
+): Promise<TransactionPreImage | null> {
+  const rows = await tx.$queryRaw<TransactionPreImage[]>`
+    SELECT
+      account_id AS "accountId",
+      status,
+      type,
+      amount,
+      converted_amount AS "convertedAmount"
+    FROM finance.transactions
+    WHERE id = ${id}::uuid
+    FOR UPDATE
+  `;
+
+  return rows[0] ?? null;
 }
 
 /**

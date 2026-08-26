@@ -6,9 +6,12 @@ import type { UseFormReturnType } from "@mantine/form";
 import { TriangleAlert } from "lucide-react";
 
 import { CURRENCY_OPTIONS, formatCurrency } from "@/lib/currency";
+import { parseCalendarDate } from "@/lib/dates";
 import { describeSplit } from "@/lib/installmentSplit";
+import { consecutiveCompetencies, invoiceCompetencyFor } from "@/lib/invoiceCycle";
 import { MAX_INSTALLMENTS } from "@/lib/limits";
-import type { AccountOption, Option } from "./options";
+import { useFormValue } from "@/components/ui/useFormValue";
+import type { CardOption, Option } from "@/lib/options";
 
 /** `type`, não `interface`: index signature implícita exigida pelo zod4Resolver. */
 export type CardPurchaseFormValues = {
@@ -24,8 +27,8 @@ export type CardPurchaseFormValues = {
 
 interface CardPurchaseFieldsProps {
   form: UseFormReturnType<CardPurchaseFormValues>;
-  /** Cartões com a moeda, para sugerir a moeda do lançamento. */
-  cards: AccountOption[];
+  /** Cartões com a moeda e o dia de fechamento, para sugerir moeda e fatura. */
+  cards: CardOption[];
   categories: Option[];
   /** Mostra o campo de taxa manual quando o câmbio automático falhou. */
   showManualFx: boolean;
@@ -40,16 +43,24 @@ interface CardPurchaseFieldsProps {
 export function CardPurchaseFields(props: CardPurchaseFieldsProps) {
   const { form, cards, categories, showManualFx } = props;
 
-  const values = form.getValues();
-  const cardCurrency = cards.find((card) => card.value === values.creditCardId)?.currency;
-  const needsConversion = cardCurrency !== undefined && values.currency !== cardCurrency;
+  const creditCardId = useFormValue(form, "creditCardId");
+  const currency = useFormValue(form, "currency");
+  const amount = useFormValue(form, "amount");
+  const installments = useFormValue(form, "installments");
+  const date = useFormValue(form, "date");
+
+  const card = cards.find((entry) => entry.value === creditCardId);
+  const cardCurrency = card?.currency;
+  const needsConversion = cardCurrency !== undefined && currency !== cardCurrency;
 
   // Prévia da divisão pela mesma regra que o servidor aplica.
   const installmentPreview = describeSplit(
-    Math.round((values.amount || 0) * 100),
-    values.installments,
-    (cents) => formatCurrency(cents / 100, values.currency),
+    Math.round((amount || 0) * 100),
+    installments,
+    (cents) => formatCurrency(cents / 100, currency),
   );
+
+  const invoiceHint = describeTargetInvoices(card, date, installments);
 
   return (
     <>
@@ -105,7 +116,7 @@ export function CardPurchaseFields(props: CardPurchaseFieldsProps) {
       />
       <DatePickerInput
         label="Data da compra"
-        description="Depois do dia de fechamento, entra na fatura seguinte"
+        description={invoiceHint ?? "Depois do dia de fechamento, entra na fatura seguinte"}
         valueFormat="DD/MM/YYYY"
         key={form.key("date")}
         {...form.getInputProps("date")}
@@ -123,7 +134,7 @@ export function CardPurchaseFields(props: CardPurchaseFieldsProps) {
         <>
           <Alert color="yellow" icon={<TriangleAlert size={16} />} title="Taxa de câmbio manual">
             <Text size="sm">
-              O serviço de câmbio está indisponível. Informe a taxa de {values.currency} para{" "}
+              O serviço de câmbio está indisponível. Informe a taxa de {currency} para{" "}
               {cardCurrency}.
             </Text>
           </Alert>
@@ -138,4 +149,59 @@ export function CardPurchaseFields(props: CardPurchaseFieldsProps) {
       )}
     </>
   );
+}
+
+const MONTH_NAMES = [
+  "janeiro",
+  "fevereiro",
+  "março",
+  "abril",
+  "maio",
+  "junho",
+  "julho",
+  "agosto",
+  "setembro",
+  "outubro",
+  "novembro",
+  "dezembro",
+];
+
+/**
+ * Em que fatura a compra vai cair, pela mesma função que o servidor usa.
+ *
+ * Sem a prévia, compra depois do fechamento some da fatura que o usuário
+ * esperava e só aparece um mês adiante.
+ */
+function describeTargetInvoices(
+  card: CardOption | undefined,
+  date: string,
+  installments: number,
+): string | null {
+  if (!card || !date) {
+    return null;
+  }
+
+  let purchaseDate: Date;
+
+  try {
+    purchaseDate = parseCalendarDate(date);
+  } catch {
+    return null;
+  }
+
+  const count = Number.isInteger(installments) && installments > 0 ? installments : 1;
+  const competencies = consecutiveCompetencies(
+    invoiceCompetencyFor(card, purchaseDate),
+    Math.min(count, MAX_INSTALLMENTS),
+  );
+
+  const label = (index: number) => {
+    const competency = competencies[index]!;
+
+    return `${MONTH_NAMES[competency.month - 1]}/${competency.year}`;
+  };
+
+  return competencies.length === 1
+    ? `Entra na fatura de ${label(0)}`
+    : `Entra nas faturas de ${label(0)} a ${label(competencies.length - 1)}`;
 }

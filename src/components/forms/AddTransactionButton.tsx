@@ -13,7 +13,7 @@ import { createTransaction } from "@/actions/transactions";
 import { FormModal } from "@/components/ui/FormModal";
 import { useActionModal } from "@/components/ui/useActionModal";
 import { TransactionFields, type TransactionFormValues } from "./TransactionFields";
-import type { AccountOption, Option } from "./options";
+import type { AccountOption, Option } from "@/lib/options";
 
 interface AddTransactionButtonProps {
   accounts: AccountOption[];

@@ -7,7 +7,7 @@ import { NotFoundError } from "@/lib/errors";
  * Guardas de posse compartilhadas pelos serviços de domínio.
  *
  * Toda escrita que aceita um id vindo do cliente precisa provar que a linha é
- * do usuário antes de tocá-la. A checagem já esteve copiada em quatro serviços,
+ * do usuário antes de tocá-la. A checagem já esteve copiada em vários serviços,
  * e corrigir uma cópia deixava as outras erradas.
  *
  * Todas lançam {@link NotFoundError}, nunca um erro de autorização: "não
@@ -33,6 +33,22 @@ export async function requireAccount(
   }
 
   return account;
+}
+
+/** Recusa conta de outro usuário. `null` é ausência legítima, não erro. */
+export async function assertAccountOwned(
+  userId: string,
+  accountId: string | null,
+): Promise<void> {
+  if (accountId === null) {
+    return;
+  }
+
+  const count = await prisma.financialAccount.count({ where: { id: accountId, userId } });
+
+  if (count === 0) {
+    throw new NotFoundError("Conta não encontrada");
+  }
 }
 
 /** Recusa categoria de outro usuário. `null` é ausência legítima, não erro. */

@@ -7,7 +7,8 @@ import { TriangleAlert } from "lucide-react";
 
 import { CURRENCY_LABELS, CURRENCY_OPTIONS, type CurrencyCode } from "@/lib/currency";
 import { DEBT_TYPE_LABELS, DEBT_TYPE_OPTIONS, type DebtTypeCode } from "@/lib/debtTypes";
-import type { AccountOption, Option } from "./options";
+import { useFormValue } from "@/components/ui/useFormValue";
+import type { AccountOption, Option } from "@/lib/options";
 
 /** `type`, não `interface`: index signature implícita exigida pelo zod4Resolver. */
 export type DebtFormValues = {
@@ -40,11 +41,13 @@ interface DebtFieldsProps {
 export function DebtFields(props: DebtFieldsProps) {
   const { form, people, categories, accounts, locked, showManualFx } = props;
 
-  const values = form.getValues();
-  const accountCurrency = accounts.find((account) => account.value === values.accountId)?.currency;
-  const needsConversion =
-    accountCurrency !== undefined && values.currency !== accountCurrency;
-  const isLent = values.type === "LENT";
+  const accountId = useFormValue(form, "accountId");
+  const currency = useFormValue(form, "currency");
+  const type = useFormValue(form, "type");
+
+  const accountCurrency = accounts.find((account) => account.value === accountId)?.currency;
+  const needsConversion = accountCurrency !== undefined && currency !== accountCurrency;
+  const isLent = type === "LENT";
 
   return (
     <>
@@ -119,7 +122,7 @@ export function DebtFields(props: DebtFieldsProps) {
         label={isLent ? "Conta de onde o dinheiro saiu" : "Conta em que o dinheiro entrou"}
         description={
           needsConversion
-            ? `A dívida está em ${values.currency} e o saldo se move em ${accountCurrency}`
+            ? `A dívida está em ${currency} e o saldo se move em ${accountCurrency}`
             : undefined
         }
         data={accounts}
@@ -148,7 +151,7 @@ export function DebtFields(props: DebtFieldsProps) {
         <>
           <Alert color="yellow" icon={<TriangleAlert size={16} />} title="Taxa de câmbio manual">
             <Text size="sm">
-              O serviço de câmbio está indisponível. Informe a taxa de {values.currency} para{" "}
+              O serviço de câmbio está indisponível. Informe a taxa de {currency} para{" "}
               {accountCurrency}.
             </Text>
           </Alert>

@@ -69,3 +69,23 @@ export async function recordAgentCall(entry: AgentCallRecord): Promise<void> {
     console.error("Falha ao gravar auditoria de agente:", error);
   }
 }
+
+/**
+ * Retenção da trilha: 90 dias.
+ *
+ * O índice de `createdAt` no schema já se declarava "para retenção", mas nada
+ * apagava — cerca de 10 M de linhas com JSONB por ano, que nenhuma consulta do
+ * produto lê. Noventa dias cobrem a janela em que uma investigação de incidente
+ * ainda é útil.
+ */
+export const AGENT_AUDIT_RETENTION_DAYS = 90;
+
+export async function pruneAgentAudit(now: Date = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - AGENT_AUDIT_RETENTION_DAYS * 86_400_000);
+
+  const { count } = await prisma.agentAuditLog.deleteMany({
+    where: { createdAt: { lt: cutoff } },
+  });
+
+  return count;
+}

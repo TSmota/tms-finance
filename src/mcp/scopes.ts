@@ -4,9 +4,11 @@ import type { AgentScope } from "@/lib/agentScopes";
  * Qual ferramenta exige qual escopo.
  *
  * Vive aqui, e não em `src/lib/agentScopes.ts`, porque o domínio não sabe que
- * existem ferramentas. `scopes.test.ts` afirma que este mapa e o registro
- * cobrem o mesmo conjunto de nomes, o que impede uma ferramenta nova de entrar
- * sem escopo e rodar aberta.
+ * existem ferramentas. Quem confere este mapa contra o registro de fato é
+ * `tests/integration/mcpRegistry.test.ts` — precisa importar `registerTools`, e
+ * com ele o grafo inteiro dos serviços. `scopes.test.ts` cuida do que dá para
+ * afirmar sem banco: que todo nome daqui tem escopo do vocabulário e que
+ * nenhuma escrita caiu em `finance:read`.
  */
 
 export const READ_TOOLS = [

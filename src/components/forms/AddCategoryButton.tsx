@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, ColorInput, Select, TextInput } from "@mantine/core";
+import { Button } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import { Plus } from "lucide-react";
@@ -9,7 +9,8 @@ import { categorySchema } from "@/lib/validations";
 import { createCategory } from "@/actions/categories";
 import { FormModal } from "@/components/ui/FormModal";
 import { useActionModal } from "@/components/ui/useActionModal";
-import type { Option } from "./options";
+import { CategoryFields, type CategoryFormValues } from "./CategoryFields";
+import type { Option } from "@/lib/options";
 
 interface AddCategoryButtonProps {
   /** Apenas categorias raiz: a hierarquia é de dois níveis. */
@@ -23,9 +24,11 @@ export function AddCategoryButton(props: AddCategoryButtonProps) {
     successMessage: "Categoria criada",
   });
 
+  const initialValues: CategoryFormValues = { name: "", color: "#40c057", icon: "", parentId: "" };
+
   const form = useForm({
     mode: "uncontrolled",
-    initialValues: { name: "", color: "#40c057", icon: "", parentId: "" },
+    initialValues,
     validate: zod4Resolver(categorySchema),
   });
 
@@ -45,18 +48,7 @@ export function AddCategoryButton(props: AddCategoryButtonProps) {
         onSubmit={handleSubmit}
         loading={loading}
       >
-        <TextInput label="Nome" key={form.key("name")} {...form.getInputProps("name")} />
-        <Select
-          label="Categoria pai"
-          placeholder="Nenhuma (categoria raiz)"
-          description="Escolher um pai transforma esta em subcategoria"
-          data={rootCategories}
-          clearable
-          searchable
-          key={form.key("parentId")}
-          {...form.getInputProps("parentId")}
-        />
-        <ColorInput label="Cor" key={form.key("color")} {...form.getInputProps("color")} />
+        <CategoryFields form={form} rootCategories={rootCategories} />
       </FormModal>
     </>
   );

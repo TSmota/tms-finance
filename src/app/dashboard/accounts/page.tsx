@@ -4,11 +4,12 @@ import { Landmark } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getAccountBalances, listAccounts } from "@/lib/accounts";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/accountTypes";
-import { formatCurrency, type CurrencyCode } from "@/lib/currency";
+import { formatCurrency } from "@/lib/currency";
 import { groupByInstitution } from "@/lib/grouping";
 import { AddAccountButton } from "@/components/forms/AddAccountButton";
 import { EditAccountButton } from "@/components/forms/EditAccountButton";
-import { DeleteAccountButton } from "@/components/forms/DeleteAccountButton";
+import { deleteAccount } from "@/actions/accounts";
+import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 
@@ -51,7 +52,10 @@ export default async function AccountsPage() {
 
       {accounts.length === 0 ? (
         <Card withBorder radius="md" padding="lg">
-          <EmptyState message="Nenhuma conta ainda. Adicione uma conta para começar a acompanhar seus saldos." />
+          <EmptyState
+            message="Nenhuma conta ainda. Adicione uma conta para começar a acompanhar seus saldos."
+            action={<AddAccountButton baseCurrency={user.baseCurrency} />}
+          />
         </Card>
       ) : (
         groups.map(({ institution, items }) => (
@@ -96,10 +100,17 @@ export default async function AccountsPage() {
                         name={account.name}
                         type={account.type}
                         institution={account.institution}
-                        currency={account.currency as CurrencyCode}
+                        currency={account.currency}
                         initialBalance={initialBalanceById.get(account.id) ?? 0}
                       />
-                      <DeleteAccountButton id={account.id} name={account.name} />
+                      <DeleteEntityButton
+                        id={account.id}
+                        title="Remover conta"
+                        successMessage="Conta removida"
+                        question={`Tem certeza que deseja remover a conta ${account.name}?`}
+                        action={deleteAccount}
+                        impactTarget="account"
+                      />
                     </Group>
                   </Card>
                 </GridCol>

@@ -1,7 +1,12 @@
 import { z } from "zod";
+import { revalidatePath } from "next/cache";
 
 import { DomainError, NotFoundError } from "@/lib/errors";
 import { FxUnavailableError } from "@/lib/fxService";
+import {
+  REVALIDATION_TARGETS,
+  type RevalidationDomain,
+} from "@/lib/revalidation";
 import type { ActionResult } from "./types";
 
 /**
@@ -84,4 +89,17 @@ export function parseFlag(value: unknown): boolean {
   }
 
   return parsed.data;
+}
+
+/**
+ * Invalida as telas que um domínio afeta, pela tabela de
+ * {@link REVALIDATION_TARGETS}.
+ *
+ * Toda action chama esta função em vez de manter a sua lista de caminhos: as
+ * listas por arquivo divergiam entre si e da tabela do agente.
+ */
+export function revalidateDomain(domain: RevalidationDomain): void {
+  for (const [path, type] of REVALIDATION_TARGETS[domain]) {
+    revalidatePath(path, type);
+  }
 }

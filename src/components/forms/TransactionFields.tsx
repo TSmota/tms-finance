@@ -6,7 +6,8 @@ import type { UseFormReturnType } from "@mantine/form";
 import { TriangleAlert } from "lucide-react";
 
 import { CURRENCY_OPTIONS } from "@/lib/currency";
-import type { AccountOption, Option } from "./options";
+import { useFormValue } from "@/components/ui/useFormValue";
+import type { AccountOption, Option } from "@/lib/options";
 
 /**
  * `type`, não `interface`: o TypeScript concede index signature implícita a
@@ -42,9 +43,9 @@ interface TransactionFieldsProps {
 export function TransactionFields(props: TransactionFieldsProps) {
   const { form, accounts, categories, showManualFx } = props;
 
-  const accountId = form.getValues().accountId;
+  const accountId = useFormValue(form, "accountId");
+  const transactionCurrency = useFormValue(form, "currency");
   const accountCurrency = accounts.find((account) => account.value === accountId)?.currency;
-  const transactionCurrency = form.getValues().currency;
   const needsConversion =
     accountCurrency !== undefined && transactionCurrency !== accountCurrency;
 

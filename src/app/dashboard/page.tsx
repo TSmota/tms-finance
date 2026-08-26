@@ -17,10 +17,11 @@ import { getAccountBalances } from "@/lib/accounts";
 import { listRecentTransactions } from "@/lib/transactions";
 import { getDebtsByCategory, getMonthSummary, getOpenInvoices } from "@/lib/reports";
 import { getBalanceProjection } from "@/lib/projection";
-import { listPendingOccurrences, materializeRecurring } from "@/lib/recurring";
+import { listPendingOccurrences } from "@/lib/recurring";
 import { loadFormOptions } from "@/lib/formOptions";
 import { currentCompetency } from "@/lib/dates";
-import { formatCurrency, type CurrencyCode } from "@/lib/currency";
+import { formatCurrency } from "@/lib/currency";
+import { toTransactionRow, type TransactionRow } from "@/lib/transactionRow";
 import { MonthlyCharts } from "@/components/MonthlyCharts";
 import { CategoryPie } from "@/components/CategoryPie";
 import { AddTransactionButton } from "@/components/forms/AddTransactionButton";
@@ -28,7 +29,7 @@ import { ConfirmPendingButton } from "@/components/forms/ConfirmPendingButton";
 import { LinkButton } from "@/components/ui/AppLink";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { TransactionsTable, type TransactionRow } from "@/components/TransactionsTable";
+import { TransactionsTable } from "@/components/TransactionsTable";
 
 const MONTH_NAMES = [
   "janeiro",
@@ -53,9 +54,6 @@ export default async function DashboardPage() {
   const user = await requireUser();
   const { year, month } = currentCompetency();
 
-  // Geração lazy dos recorrentes do mês corrente, antes das leituras.
-  await materializeRecurring(user.id, year, month);
-
   const [balances, recent, summary, projection, openInvoices, debts, pending, options] =
     await Promise.all([
       getAccountBalances(user.id, user.baseCurrency),
@@ -68,24 +66,9 @@ export default async function DashboardPage() {
       loadFormOptions(user.id),
     ]);
 
-  const rows: TransactionRow[] = recent.map((transaction) => ({
-    id: transaction.id,
-    date: transaction.date,
-    description: transaction.description,
-    type: transaction.type === "INCOME" ? "INCOME" : "EXPENSE",
-    status: transaction.status,
-    amount: transaction.amount,
-    currency: transaction.currency as CurrencyCode,
-    convertedAmount: transaction.convertedAmount,
-    exchangeRate: transaction.exchangeRate,
-    accountId: transaction.accountId ?? "",
-    accountName: transaction.accountName ?? "—",
-    accountCurrency: (transaction.accountCurrency ?? user.baseCurrency) as CurrencyCode,
-    categoryId: transaction.categoryId,
-    categoryName: transaction.categoryName,
-    categoryColor: transaction.categoryColor,
-    isEstimated: transaction.isEstimated,
-  }));
+  const rows: TransactionRow[] = recent.map((transaction) =>
+    toTransactionRow(transaction, user.baseCurrency),
+  );
 
   const netPosition = debts.receivableTotal - debts.payableTotal;
   const monthLabel = `${MONTH_NAMES[month - 1]} de ${year}`;
@@ -173,10 +156,10 @@ export default async function DashboardPage() {
             hint={
               pending.length === 0
                 ? "Nada a confirmar até o fim do mês"
-                : `${formatCurrency(projection.pendingExpenses, user.baseCurrency)} previstos`
+                : `${pending.length} ${pending.length === 1 ? "ocorrência" : "ocorrências"} até o fim do mês`
             }
-            value={String(pending.length)}
-            badge={pending.length > 0 ? "aguardando" : undefined}
+            value={formatCurrency(projection.pendingExpenses, user.baseCurrency)}
+            badge={pending.length > 0 ? String(pending.length) : undefined}
             action={<LinkButton href="/dashboard/recurring">Recorrentes</LinkButton>}
           />
         </GridCol>
@@ -275,8 +258,8 @@ export default async function DashboardPage() {
                     id={occurrence.id}
                     description={occurrence.description}
                     amount={occurrence.amount}
-                    currency={occurrence.currency as CurrencyCode}
-                    accountCurrency={occurrence.accountCurrency as CurrencyCode}
+                    currency={occurrence.currency}
+                    accountCurrency={occurrence.accountCurrency}
                     date={occurrence.date}
                     isEstimated={occurrence.isEstimated}
                     compact

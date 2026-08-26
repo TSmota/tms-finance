@@ -13,7 +13,7 @@ import { getDebtsByCategory, getMonthSummary, getOpenInvoices } from "@/lib/repo
 import { listMonthTransactions, listRecentTransactions } from "@/lib/transactions";
 import { DEBT_TYPE_CODES } from "@/lib/debtTypes";
 import { competencyArgs, idArg, noArgs, toCompetency } from "@/mcp/args";
-import { runTool } from "@/mcp/guard";
+import { defineTool } from "@/mcp/define";
 import * as dto from "@/mcp/serializers";
 
 /**
@@ -34,360 +34,207 @@ const MONEY_WARNING =
   "use get_month_summary, get_balance_projection ou list_accounts, que já " +
   "trazem os totais convertidos para a moeda base.";
 
+const listTransactionsArgs = z.object({
+  /** Ausente junto com `recent` = mês corrente. */
+  month: competencyArgs.shape.month,
+  /** Ignora o mês e traz os N mais recentes. */
+  recent: z.coerce.number().int().min(1).max(200).optional(),
+});
+
+const cardIdArgs = z.object({ credit_card_id: idArg });
+const invoiceIdArgs = z.object({ invoice_id: idArg });
+const debtIdArgs = z.object({ debt_id: idArg });
+
+const listDebtsArgs = z.object({
+  person_id: idArg.optional(),
+  type: z.enum(DEBT_TYPE_CODES).optional(),
+});
+
 export function registerReadTools(server: McpServer): void {
-  server.registerTool(
-    "get_month_summary",
-    {
-      title: "Resumo do mês",
-      description:
-        "Fluxo de caixa e gasto por categoria de um mês. " +
-        "ATENÇÃO: são duas visões diferentes e não somam a mesma coisa. " +
-        "`cash_flow.cash_out` é o que saiu das contas, incluindo pagamento de fatura. " +
-        "`spending.total` é onde o dinheiro foi gasto, incluindo compra no cartão pela " +
-        "data da compra e excluindo pagamento de fatura (uma compra no cartão não sai " +
-        "da conta). Nunca chame as duas de 'despesa'. " +
-        "`complete: false` significa que faltou cotação de alguma moeda: relate a " +
-        "incerteza em vez de apresentar o total como fato.",
-      inputSchema: competencyArgs,
+  defineTool(server, "get_month_summary", {
+    title: "Resumo do mês",
+    description:
+      "Fluxo de caixa e gasto por categoria de um mês. " +
+      "ATENÇÃO: são duas visões diferentes e não somam a mesma coisa. " +
+      "`cash_flow.cash_out` é o que saiu das contas, incluindo pagamento de fatura. " +
+      "`spending.total` é onde o dinheiro foi gasto, incluindo compra no cartão pela " +
+      "data da compra e excluindo pagamento de fatura (uma compra no cartão não sai " +
+      "da conta). Nunca chame as duas de 'despesa'. " +
+      "`complete: false` significa que faltou cotação de alguma moeda: relate a " +
+      "incerteza em vez de apresentar o total como fato.",
+    schema: competencyArgs,
+    run: async (agent, input) => {
+      const { year, month } = toCompetency(input.month);
+
+      return getMonthSummary(agent.userId, year, month, agent.baseCurrency);
     },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "get_month_summary",
-        input: args,
-        schema: competencyArgs,
-        run: async (agent, input) => {
-          const { year, month } = toCompetency(input.month);
-
-          return getMonthSummary(agent.userId, year, month, agent.baseCurrency);
-        },
-        serialize: (result, agent) => dto.monthSummaryDto(result, agent.baseCurrency),
-      }),
-  );
-
-  server.registerTool(
-    "get_open_invoices",
-    {
-      title: "Faturas em aberto",
-      description:
-        "Quanto o usuário deve de cartão hoje, somando todas as faturas não pagas, " +
-        "sem recorte por vencimento. Para 'quanto sai neste mês', use " +
-        "get_balance_projection.",
-      inputSchema: noArgs,
-    },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "get_open_invoices",
-        input: args,
-        schema: noArgs,
-        run: (agent) => getOpenInvoices(agent.userId, agent.baseCurrency),
-        serialize: (result, agent) => dto.openInvoicesDto(result, agent.baseCurrency),
-      }),
-  );
-
-  server.registerTool(
-    "get_debts_by_category",
-    {
-      title: "Dívidas por motivo",
-      description:
-        "Dívidas em aberto agrupadas pela categoria de origem: não só " +
-        "para quem se deve, mas com o quê aquele dinheiro foi gasto.",
-      inputSchema: noArgs,
-    },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "get_debts_by_category",
-        input: args,
-        schema: noArgs,
-        run: (agent) => getDebtsByCategory(agent.userId, agent.baseCurrency),
-        serialize: (result, agent) => dto.debtsByCategoryDto(result, agent.baseCurrency),
-      }),
-  );
-
-  server.registerTool(
-    "get_balance_projection",
-    {
-      title: "Projeção de saldo",
-      description:
-        "Saldo projetado até o fim da competência: saldo atual mais pendências de " +
-        "recorrentes menos faturas a vencer. `pending_count` conta as pendências " +
-        "já materializadas — se parecer baixo, chame materialize_recurring, porque " +
-        "nenhuma leitura materializa sozinha.",
-      inputSchema: competencyArgs,
-    },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "get_balance_projection",
-        input: args,
-        schema: competencyArgs,
-        run: async (agent, input) => {
-          const { year, month } = toCompetency(input.month);
-
-          return getBalanceProjection(agent.userId, year, month, agent.baseCurrency);
-        },
-        serialize: (result, agent) => dto.balanceProjectionDto(result, agent.baseCurrency),
-      }),
-  );
-
-  server.registerTool(
-    "list_accounts",
-    {
-      title: "Contas e saldos",
-      description:
-        "Contas e carteiras com saldo na moeda nativa e convertido para a moeda base. " +
-        `Uma conta sem cotação vem com \`balance_in_base_currency: null\` e fica fora do patrimônio. ${MONEY_WARNING}`,
-      inputSchema: noArgs,
-    },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "list_accounts",
-        input: args,
-        schema: noArgs,
-        run: (agent) => getAccountBalances(agent.userId, agent.baseCurrency),
-        serialize: (result, agent) => dto.accountsDto(result, agent.baseCurrency),
-      }),
-  );
-
-  const listTransactionsArgs = z.object({
-    /** Ausente junto com `recent` = mês corrente. */
-    month: competencyArgs.shape.month,
-    /** Ignora o mês e traz os N mais recentes. */
-    recent: z.coerce.number().int().min(1).max(200).optional(),
+    serialize: (result, agent) => dto.monthSummaryDto(result, agent.baseCurrency),
   });
 
-  server.registerTool(
-    "list_transactions",
-    {
-      title: "Lançamentos",
-      description:
-        "Lançamentos de conta bancária. Por mês (`month`) ou os mais recentes (`recent`). " +
-        "Compra no cartão NÃO aparece aqui — ela vive na fatura (list_invoice_items). " +
-        "`converted_amount` é o valor na moeda da conta e é o que moveu o saldo; " +
-        "`amount` é a moeda em que o gasto aconteceu. " +
-        "`status: PENDING` é projeção de recorrente e ainda não moveu saldo nenhum.",
-      inputSchema: listTransactionsArgs,
-    },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "list_transactions",
-        input: args,
-        schema: listTransactionsArgs,
-        run: async (agent, input) => {
-          if (input.recent) {
-            return listRecentTransactions(agent.userId, input.recent);
-          }
-
-          const { year, month } = toCompetency(input.month);
-
-          return listMonthTransactions(agent.userId, year, month);
-        },
-        serialize: (result) => dto.transactionsDto(result),
-      }),
-  );
-
-  server.registerTool(
-    "list_credit_cards",
-    {
-      title: "Cartões de crédito",
-      description:
-        "Cartões com limite usado e disponível. `used_limit` é a soma das faturas não " +
-        "pagas — a melhor aproximação sem integração bancária. `closing_day` importa: " +
-        "compra depois dele cai na fatura do mês seguinte.",
-      inputSchema: noArgs,
-    },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "list_credit_cards",
-        input: args,
-        schema: noArgs,
-        run: (agent) => listCreditCards(agent.userId),
-        serialize: (result) => dto.creditCardsDto(result),
-      }),
-  );
-
-  const cardIdArgs = z.object({ credit_card_id: idArg });
-
-  server.registerTool(
-    "list_card_invoices",
-    {
-      title: "Faturas de um cartão",
-      description:
-        "Faturas de um cartão, da mais recente para a mais antiga. `competency` é a " +
-        "competência da fatura, que pode ser o mês seguinte ao da compra.",
-      inputSchema: cardIdArgs,
-    },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "list_card_invoices",
-        input: args,
-        schema: cardIdArgs,
-        run: (agent, input) => listCardInvoices(agent.userId, input.credit_card_id),
-        serialize: (result) => dto.invoicesDto(result),
-      }),
-  );
-
-  const invoiceIdArgs = z.object({ invoice_id: idArg });
-
-  server.registerTool(
-    "list_invoice_items",
-    {
-      title: "Lançamentos de uma fatura",
-      description:
-        "Compras de uma fatura, sem a transação de pagamento. Numa compra parcelada, " +
-        "cada linha é uma parcela: `installment.purchase_total` é o valor cheio da " +
-        "compra e `installment.anchor_id` é a 1ª parcela, que identifica a compra " +
-        "inteira para edição.",
-      inputSchema: invoiceIdArgs,
-    },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "list_invoice_items",
-        input: args,
-        schema: invoiceIdArgs,
-        run: (agent, input) => listInvoiceItems(agent.userId, input.invoice_id),
-        serialize: (result) => dto.invoiceItemsDto(result),
-      }),
-  );
-
-  const listDebtsArgs = z.object({
-    person_id: idArg.optional(),
-    type: z.enum(DEBT_TYPE_CODES).optional(),
+  defineTool(server, "get_open_invoices", {
+    title: "Faturas em aberto",
+    description:
+      "Quanto o usuário deve de cartão hoje, somando todas as faturas não pagas, " +
+      "sem recorte por vencimento. Para 'quanto sai neste mês', use " +
+      "get_balance_projection.",
+    schema: noArgs,
+    run: (agent) => getOpenInvoices(agent.userId, agent.baseCurrency),
+    serialize: (result, agent) => dto.openInvoicesDto(result, agent.baseCurrency),
   });
 
-  server.registerTool(
-    "list_debts",
-    {
-      title: "Dívidas",
-      description:
-        "Empréstimos entre pessoas. `type: LENT` = o usuário emprestou (a receber); " +
-        "`BORROWED` = pegou emprestado (a pagar). `remaining_amount` é o que falta.",
-      inputSchema: listDebtsArgs,
+  defineTool(server, "get_debts_by_category", {
+    title: "Dívidas por motivo",
+    description:
+      "Dívidas em aberto agrupadas pela categoria de origem: não só " +
+      "para quem se deve, mas com o quê aquele dinheiro foi gasto.",
+    schema: noArgs,
+    run: (agent) => getDebtsByCategory(agent.userId, agent.baseCurrency),
+    serialize: (result, agent) => dto.debtsByCategoryDto(result, agent.baseCurrency),
+  });
+
+  defineTool(server, "get_balance_projection", {
+    title: "Projeção de saldo",
+    description:
+      "Saldo projetado até o fim da competência: saldo atual mais pendências de " +
+      "recorrentes menos faturas a vencer. `pending_count` conta as pendências " +
+      "já materializadas — se parecer baixo, chame materialize_recurring, porque " +
+      "nenhuma leitura materializa sozinha.",
+    schema: competencyArgs,
+    run: async (agent, input) => {
+      const { year, month } = toCompetency(input.month);
+
+      return getBalanceProjection(agent.userId, year, month, agent.baseCurrency);
     },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "list_debts",
-        input: args,
-        schema: listDebtsArgs,
-        run: (agent, input) =>
-          listDebts(agent.userId, { personId: input.person_id, type: input.type }),
-        serialize: (result) => dto.debtsDto(result),
-      }),
-  );
+    serialize: (result, agent) => dto.balanceProjectionDto(result, agent.baseCurrency),
+  });
 
-  const debtIdArgs = z.object({ debt_id: idArg });
+  defineTool(server, "list_accounts", {
+    title: "Contas e saldos",
+    description:
+      "Contas e carteiras com saldo na moeda nativa e convertido para a moeda base. " +
+      `Uma conta sem cotação vem com \`balance_in_base_currency: null\` e fica fora do patrimônio. ${MONEY_WARNING}`,
+    schema: noArgs,
+    run: (agent) => getAccountBalances(agent.userId, agent.baseCurrency),
+    serialize: (result, agent) => dto.accountsDto(result, agent.baseCurrency),
+  });
 
-  server.registerTool(
-    "get_debt_detail",
-    {
-      title: "Dívida com histórico",
-      description:
-        "Uma dívida com todo o histórico de movimentações: a que originou " +
-        "o empréstimo (`is_origin: true`) e cada amortização.",
-      inputSchema: debtIdArgs,
+  defineTool(server, "list_transactions", {
+    title: "Lançamentos",
+    description:
+      "Lançamentos de conta bancária. Por mês (`month`) ou os mais recentes (`recent`). " +
+      "Compra no cartão NÃO aparece aqui — ela vive na fatura (list_invoice_items). " +
+      "`converted_amount` é o valor na moeda da conta e é o que moveu o saldo; " +
+      "`amount` é a moeda em que o gasto aconteceu. " +
+      "`status: PENDING` é projeção de recorrente e ainda não moveu saldo nenhum.",
+    schema: listTransactionsArgs,
+    run: async (agent, input) => {
+      if (input.recent) {
+        return listRecentTransactions(agent.userId, input.recent);
+      }
+
+      const { year, month } = toCompetency(input.month);
+
+      return listMonthTransactions(agent.userId, year, month);
     },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "get_debt_detail",
-        input: args,
-        schema: debtIdArgs,
-        run: (agent, input) => getDebtDetail(agent.userId, input.debt_id),
-        serialize: (result) => dto.debtDetailDto(result),
-      }),
-  );
+    serialize: (result) => dto.transactionsDto(result),
+  });
 
-  server.registerTool(
-    "get_people_overview",
-    {
-      title: "Posição por pessoa",
-      description:
-        "Quanto cada pessoa deve ao usuário e vice-versa, na moeda base. " +
-        "`net` positivo = a pessoa deve ao usuário.",
-      inputSchema: noArgs,
+  defineTool(server, "list_credit_cards", {
+    title: "Cartões de crédito",
+    description:
+      "Cartões com limite usado e disponível. `used_limit` é a soma das faturas não " +
+      "pagas — a melhor aproximação sem integração bancária. `closing_day` importa: " +
+      "compra depois dele cai na fatura do mês seguinte.",
+    schema: noArgs,
+    run: (agent) => listCreditCards(agent.userId),
+    serialize: (result) => dto.creditCardsDto(result),
+  });
+
+  defineTool(server, "list_card_invoices", {
+    title: "Faturas de um cartão",
+    description:
+      "Faturas de um cartão, da mais recente para a mais antiga. `competency` é a " +
+      "competência da fatura, que pode ser o mês seguinte ao da compra.",
+    schema: cardIdArgs,
+    run: (agent, input) => listCardInvoices(agent.userId, input.credit_card_id),
+    serialize: (result) => dto.invoicesDto(result),
+  });
+
+  defineTool(server, "list_invoice_items", {
+    title: "Lançamentos de uma fatura",
+    description:
+      "Compras de uma fatura, sem a transação de pagamento. Numa compra parcelada, " +
+      "cada linha é uma parcela: `installment.purchase_total` é o valor cheio da " +
+      "compra e `installment.anchor_id` é a 1ª parcela, que identifica a compra " +
+      "inteira para edição.",
+    schema: invoiceIdArgs,
+    run: (agent, input) => listInvoiceItems(agent.userId, input.invoice_id),
+    serialize: (result) => dto.invoiceItemsDto(result),
+  });
+
+  defineTool(server, "list_debts", {
+    title: "Dívidas",
+    description:
+      "Empréstimos entre pessoas. `type: LENT` = o usuário emprestou (a receber); " +
+      "`BORROWED` = pegou emprestado (a pagar). `remaining_amount` é o que falta.",
+    schema: listDebtsArgs,
+    run: (agent, input) => listDebts(agent.userId, { personId: input.person_id, type: input.type }),
+    serialize: (result) => dto.debtsDto(result),
+  });
+
+  defineTool(server, "get_debt_detail", {
+    title: "Dívida com histórico",
+    description:
+      "Uma dívida com todo o histórico de movimentações: a que originou " +
+      "o empréstimo (`is_origin: true`) e cada amortização.",
+    schema: debtIdArgs,
+    run: (agent, input) => getDebtDetail(agent.userId, input.debt_id),
+    serialize: (result) => dto.debtDetailDto(result),
+  });
+
+  defineTool(server, "get_people_overview", {
+    title: "Posição por pessoa",
+    description:
+      "Quanto cada pessoa deve ao usuário e vice-versa, na moeda base. " +
+      "`net` positivo = a pessoa deve ao usuário.",
+    schema: noArgs,
+    run: (agent) => getPeopleOverview(agent.userId, agent.baseCurrency),
+    serialize: (result, agent) => dto.peopleOverviewDto(result, agent.baseCurrency),
+  });
+
+  defineTool(server, "list_recurring", {
+    title: "Gastos recorrentes",
+    description:
+      "Gastos recorrentes cadastrados. `target` diz se o lançamento gerado debita " +
+      "em conta ou entra no cartão (exatamente um dos dois). " +
+      "`is_estimated: true` significa valor variável, a conferir no vencimento.",
+    schema: noArgs,
+    run: (agent) => listRecurringExpenses(agent.userId),
+    serialize: (result) => dto.recurringDto(result),
+  });
+
+  defineTool(server, "list_pending_occurrences", {
+    title: "Pendências a confirmar",
+    description:
+      "Ocorrências de recorrentes já materializadas e ainda não confirmadas, até o " +
+      "fim da competência. Inclui as vencidas de meses anteriores de propósito. " +
+      "Confirmar é `confirm_pending`; materializar novas é `materialize_recurring`.",
+    schema: competencyArgs,
+    run: async (agent, input) => {
+      const { year, month } = toCompetency(input.month);
+
+      return listPendingOccurrences(agent.userId, year, month);
     },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "get_people_overview",
-        input: args,
-        schema: noArgs,
-        run: (agent) => getPeopleOverview(agent.userId, agent.baseCurrency),
-        serialize: (result, agent) => dto.peopleOverviewDto(result, agent.baseCurrency),
-      }),
-  );
+    serialize: (result) => dto.pendingOccurrencesDto(result),
+  });
 
-  server.registerTool(
-    "list_recurring",
-    {
-      title: "Gastos recorrentes",
-      description:
-        "Gastos recorrentes cadastrados. `target` diz se o lançamento gerado debita " +
-        "em conta ou entra no cartão (exatamente um dos dois). " +
-        "`is_estimated: true` significa valor variável, a conferir no vencimento.",
-      inputSchema: noArgs,
-    },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "list_recurring",
-        input: args,
-        schema: noArgs,
-        run: (agent) => listRecurringExpenses(agent.userId),
-        serialize: (result) => dto.recurringDto(result),
-      }),
-  );
-
-  server.registerTool(
-    "list_pending_occurrences",
-    {
-      title: "Pendências a confirmar",
-      description:
-        "Ocorrências de recorrentes já materializadas e ainda não confirmadas, até o " +
-        "fim da competência. Inclui as vencidas de meses anteriores de propósito. " +
-        "Confirmar é `confirm_pending`; materializar novas é `materialize_recurring`.",
-      inputSchema: competencyArgs,
-    },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "list_pending_occurrences",
-        input: args,
-        schema: competencyArgs,
-        run: async (agent, input) => {
-          const { year, month } = toCompetency(input.month);
-
-          return listPendingOccurrences(agent.userId, year, month);
-        },
-        serialize: (result) => dto.pendingOccurrencesDto(result),
-      }),
-  );
-
-  server.registerTool(
-    "list_categories",
-    {
-      title: "Categorias",
-      description:
-        "Categorias em árvore de dois níveis. Os ids daqui são o que `categoryId` " +
-        "espera nas ferramentas de escrita.",
-      inputSchema: noArgs,
-    },
-    async (args, ctx) =>
-      runTool({
-        ctx,
-        tool: "list_categories",
-        input: args,
-        schema: noArgs,
-        run: (agent) => listCategoryTree(agent.userId),
-        serialize: (result) => dto.categoriesDto(result),
-      }),
-  );
+  defineTool(server, "list_categories", {
+    title: "Categorias",
+    description:
+      "Categorias em árvore de dois níveis. Os ids daqui são o que `categoryId` " +
+      "espera nas ferramentas de escrita.",
+    schema: noArgs,
+    run: (agent) => listCategoryTree(agent.userId),
+    serialize: (result) => dto.categoriesDto(result),
+  });
 }

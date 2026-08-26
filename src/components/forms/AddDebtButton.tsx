@@ -13,7 +13,7 @@ import { createDebt } from "@/actions/debts";
 import { FormModal } from "@/components/ui/FormModal";
 import { useActionModal } from "@/components/ui/useActionModal";
 import { DebtFields, type DebtFormValues } from "./DebtFields";
-import type { AccountOption, Option } from "./options";
+import type { AccountOption, Option } from "@/lib/options";
 
 interface AddDebtButtonProps {
   people: Option[];

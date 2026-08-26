@@ -5,7 +5,8 @@ import { theme } from "./theme";
 
 /**
  * Trava os tokens do tema, não as telas — para estas, `npm run test:a11y`.
- * O porquê da divisão está em ARCHITECTURE — Testes.
+ * Contraste de tela precisa de layout e cascata resolvida, que o jsdom não tem:
+ * um teste de contraste aqui passaria sempre.
  */
 
 const AA = 4.5;

@@ -1,19 +1,13 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
 import { requireUser } from "@/lib/session";
 import { accountSchema } from "@/lib/validations";
 import * as service from "@/lib/accounts";
-import { parseId, runAction } from "./guard";
+import { parseId, revalidateDomain, runAction } from "./guard";
 import type { ActionResult } from "./types";
 
-const AFFECTED_PATHS = ["/dashboard", "/dashboard/accounts", "/dashboard/transactions"];
-
 function revalidateAll() {
-  for (const path of AFFECTED_PATHS) {
-    revalidatePath(path);
-  }
+  revalidateDomain("accounts");
 }
 
 export async function createAccount(input: unknown): Promise<ActionResult> {

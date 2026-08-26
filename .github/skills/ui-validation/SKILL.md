@@ -10,7 +10,7 @@ disable-model-invocation: false
 
 ## Preparação
 
-Leia `ARCHITECTURE.md` — Server Components e UI, e identifique todas as rotas afetadas. As quatro armadilhas de Server Component estão naquela seção, com o erro que cada uma produz; esta skill não as repete. Considere primeiro os componentes reutilizáveis de `src/components/ui/`.
+Leia `ARCHITECTURE.md` — Server Components e UI, e identifique todas as rotas afetadas. As armadilhas de Server Component estão naquela seção, com o erro que cada uma produz; esta skill não as repete. Considere primeiro os componentes reutilizáveis de `src/components/ui/`.
 
 ## Procedimento
 

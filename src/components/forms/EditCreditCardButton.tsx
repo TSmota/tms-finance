@@ -1,6 +1,5 @@
 "use client";
 
-import { ActionIcon } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import { Pencil } from "lucide-react";
@@ -9,9 +8,10 @@ import { creditCardSchema } from "@/lib/validations";
 import type { CurrencyCode } from "@/lib/currency";
 import { updateCreditCard } from "@/actions/creditCards";
 import { FormModal } from "@/components/ui/FormModal";
+import { IconButton } from "@/components/ui/IconButton";
 import { useActionModal } from "@/components/ui/useActionModal";
 import { CreditCardFields, type CreditCardFormValues } from "./CreditCardFields";
-import type { Option } from "./options";
+import type { Option } from "@/lib/options";
 
 interface EditCreditCardButtonProps {
   id: string;
@@ -44,9 +44,9 @@ export function EditCreditCardButton(props: EditCreditCardButtonProps) {
 
   return (
     <>
-      <ActionIcon variant="subtle" color="gray" aria-label="Editar cartão" onClick={handleOpen}>
+      <IconButton label="Editar cartão" onClick={handleOpen}>
         <Pencil size={16} />
-      </ActionIcon>
+      </IconButton>
       <FormModal
         opened={opened}
         onClose={close}

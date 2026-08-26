@@ -163,6 +163,8 @@ export function transactionsDto(rows: TransactionListItem[]) {
     category: row.categoryId ? { id: row.categoryId, name: row.categoryName } : null,
     /** Valor é estimativa e deve ser conferido ao confirmar. */
     is_estimated: row.isEstimated,
+    /** Preenchido = `delete_settlement` ou `undo_invoice_payment`, não esta linha. */
+    managed_by: row.managedBy,
   }));
 }
 

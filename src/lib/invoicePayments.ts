@@ -1,4 +1,4 @@
-import type { InvoiceStatus, Transaction } from "@prisma/client";
+import type { InvoiceStatus, Prisma, Transaction } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
 import { InvalidOperationError, NotFoundError } from "@/lib/errors";
@@ -21,17 +21,23 @@ import type { InvoicePaymentInput } from "@/lib/validations";
  */
 
 /**
- * Trava a linha da fatura e devolve o status já sob o lock.
+ * Trava a linha da fatura e devolve status **e** total já sob o lock.
  *
  * `SELECT ... FOR UPDATE` cru, e não `findUnique`: em READ COMMITTED releitura
  * sem lock não impede nada — dois cliques no botão de pagar leem `OPEN` em
  * paralelo e a conta é debitada duas vezes. Não há `@@unique` em
  * `transactions(invoice_id)` que derrube o segundo.
+ *
+ * O total vem junto porque uma compra lançada entre a leitura e o lock muda o
+ * que a fatura deve: pagar o valor lido antes deixaria a diferença sem cobrir.
  */
-async function lockInvoice(tx: Tx, invoiceId: string): Promise<{ status: InvoiceStatus }> {
+async function lockInvoice(
+  tx: Tx,
+  invoiceId: string,
+): Promise<{ status: InvoiceStatus; totalAmount: Prisma.Decimal }> {
   const rows = await tx.$queryRaw<
-    { status: InvoiceStatus }[]
-  >`SELECT status FROM finance.invoices WHERE id = ${invoiceId}::uuid FOR UPDATE`;
+    { status: InvoiceStatus; totalAmount: Prisma.Decimal }[]
+  >`SELECT status, total_amount AS "totalAmount" FROM finance.invoices WHERE id = ${invoiceId}::uuid FOR UPDATE`;
 
   const row = rows[0];
 
@@ -53,9 +59,7 @@ export async function payInvoice(
     throw new InvalidOperationError("Esta fatura já foi paga");
   }
 
-  const total = money(invoice.totalAmount);
-
-  if (!isPositive(total)) {
+  if (!isPositive(money(invoice.totalAmount))) {
     throw new InvalidOperationError("Não há valor a pagar nesta fatura");
   }
 
@@ -63,14 +67,15 @@ export async function payInvoice(
 
   const date = parseCalendarDate(input.date);
 
-  // A fatura está na moeda do cartão; a conta pode estar em outra.
+  // A fatura está na moeda do cartão; a conta pode estar em outra. A taxa é
+  // resolvida aqui de propósito: chamada de rede dentro do `$transaction`
+  // seguraria o lock esperando a API.
   const rate = await getExchangeRate({
     from: invoice.currency,
     to: account.currency,
     date,
     manualRate: input.manualFxRate,
   });
-  const convertedAmount = convertMoney(total, rate);
 
   return prisma.$transaction(async (tx) => {
     const current = await lockInvoice(tx, invoiceId);
@@ -78,6 +83,14 @@ export async function payInvoice(
     if (current.status === "PAID") {
       throw new InvalidOperationError("Esta fatura já foi paga");
     }
+
+    const total = money(current.totalAmount);
+
+    if (!isPositive(total)) {
+      throw new InvalidOperationError("Não há valor a pagar nesta fatura");
+    }
+
+    const convertedAmount = convertMoney(total, rate);
 
     const payment = await tx.transaction.create({
       data: {

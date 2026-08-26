@@ -15,11 +15,12 @@ import { requireUser } from "@/lib/session";
 import { listCreditCards } from "@/lib/creditCards";
 import { listAccounts } from "@/lib/accounts";
 import { listCategoryOptions } from "@/lib/categories";
-import { formatCurrency, type CurrencyCode } from "@/lib/currency";
+import { formatCurrency } from "@/lib/currency";
 import { groupByInstitution } from "@/lib/grouping";
 import { AddCreditCardButton } from "@/components/forms/AddCreditCardButton";
 import { EditCreditCardButton } from "@/components/forms/EditCreditCardButton";
-import { DeleteCreditCardButton } from "@/components/forms/DeleteCreditCardButton";
+import { deleteCreditCard } from "@/actions/creditCards";
+import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { AddCardPurchaseButton } from "@/components/forms/AddCardPurchaseButton";
 import { LinkButton } from "@/components/ui/AppLink";
 import { EmptyState } from "@/components/EmptyState";
@@ -44,6 +45,8 @@ export default async function CardsPage() {
     value: card.id,
     label: card.name,
     currency: card.currency,
+    closingDay: card.closingDay,
+    dueDay: card.dueDay,
   }));
 
   const groups = groupByInstitution(cards);
@@ -148,7 +151,7 @@ export default async function CardsPage() {
                         <Group gap={4} wrap="nowrap">
                           <EditCreditCardButton
                             id={card.id}
-                            currency={card.currency as CurrencyCode}
+                            currency={card.currency}
                             accounts={accountOptions}
                             values={{
                               name: card.name,
@@ -160,7 +163,14 @@ export default async function CardsPage() {
                               defaultPaymentAccountId: card.defaultPaymentAccountId ?? "",
                             }}
                           />
-                          <DeleteCreditCardButton id={card.id} name={card.name} />
+                          <DeleteEntityButton
+                            id={card.id}
+                            title="Remover cartão"
+                            successMessage="Cartão removido"
+                            question={`Remover o cartão ${card.name}? Tem certeza?`}
+                            action={deleteCreditCard}
+                            impactTarget="credit_card"
+                          />
                         </Group>
                       </Group>
                     </Card>

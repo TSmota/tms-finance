@@ -1,17 +1,22 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/db";
-import { NotFoundError } from "@/lib/errors";
+import { InvalidOperationError, NotFoundError } from "@/lib/errors";
 import { FxUnavailableError } from "@/lib/fxService";
 import { recomputeBalance } from "@/lib/accountBalance";
+import { createDebt, settleDebt } from "@/lib/debts";
+import { createCardPurchase } from "@/lib/cardPurchases";
+import { listCardInvoices } from "@/lib/invoices";
+import { payInvoice } from "@/lib/invoicePayments";
 import {
   createTransaction,
   deleteTransaction,
   listMonthTransactions,
+  listRecentTransactions,
   updateTransaction,
 } from "@/lib/transactions";
 import type { TransactionInput } from "@/lib/validations";
-import { makeAccount, makeCategory, makeUser } from "../factories";
+import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "../factories";
 import { setFxAvailable, setRates } from "../setup-fx";
 
 /**
@@ -398,5 +403,145 @@ describe("listagem por competência", () => {
       categoryName: "Mercado",
       categoryColor: "#40c057",
     });
+  });
+});
+
+/**
+ * Amortização e pagamento de fatura são metade de uma escrita de dois lados:
+ * mexer neles daqui deixaria `Debt.remainingAmount` ou a fatura no valor de
+ * antes. Toda recusa afirma também que nada mudou.
+ */
+describe("lançamentos que pertencem a outro serviço", () => {
+  it("recusa editar e apagar uma amortização, e não move nada", async () => {
+    const user = await makeUser();
+    const account = await makeAccount(user.id, { initialBalance: "1000.00" });
+    const category = await makeCategory(user.id);
+    const person = await makePerson(user.id);
+
+    const debt = await createDebt(user.id, {
+      personId: person.id,
+      categoryId: category.id,
+      accountId: account.id,
+      type: "LENT",
+      description: "Empréstimo",
+      amount: 200,
+      currency: "BRL",
+      date: "2026-08-06",
+      dueDate: null,
+      manualFxRate: null,
+    });
+
+    const settlement = await settleDebt(user.id, debt.id, {
+      accountId: account.id,
+      amount: 80,
+      currency: "BRL",
+      date: "2026-08-16",
+      categoryId: null,
+      description: null,
+      manualFxRate: null,
+    });
+
+    const before = await balanceOf(account.id);
+
+    await expect(
+      updateTransaction(user.id, settlement.id, input({ accountId: account.id, amount: 5 })),
+    ).rejects.toThrow(InvalidOperationError);
+    await expect(deleteTransaction(user.id, settlement.id)).rejects.toThrow(InvalidOperationError);
+
+    expect(await balanceOf(account.id)).toBe(before);
+    expect(await prisma.transaction.count({ where: { id: settlement.id } })).toBe(1);
+
+    const after = await prisma.debt.findUniqueOrThrow({ where: { id: debt.id } });
+    expect(after.remainingAmount.toFixed(2)).toBe("120.00");
+    expect(after.status).toBe("PARTIALLY_PAID");
+  });
+
+  it("recusa editar e apagar um pagamento de fatura, e não move nada", async () => {
+    const user = await makeUser();
+    const account = await makeAccount(user.id, { initialBalance: "1000.00" });
+    const card = await makeCreditCard(user.id, { closingDay: 20, dueDay: 5 });
+
+    await createCardPurchase(user.id, {
+      creditCardId: card.id,
+      categoryId: null,
+      description: "Compra",
+      amount: 250,
+      currency: "BRL",
+      date: "2026-08-15",
+      installments: 1,
+      manualFxRate: null,
+    });
+
+    const [invoice] = await listCardInvoices(user.id, card.id);
+    const payment = await payInvoice(user.id, invoice!.id, {
+      accountId: account.id,
+      date: "2026-09-05",
+      manualFxRate: null,
+    });
+
+    const before = await balanceOf(account.id);
+
+    await expect(
+      updateTransaction(user.id, payment.id, input({ accountId: account.id, amount: 5 })),
+    ).rejects.toThrow(InvalidOperationError);
+    await expect(deleteTransaction(user.id, payment.id)).rejects.toThrow(InvalidOperationError);
+
+    expect(await balanceOf(account.id)).toBe(before);
+
+    const after = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice!.id } });
+    expect(after.status).toBe("PAID");
+    expect(after.totalAmount.toFixed(2)).toBe("250.00");
+    expect(after.paymentAccountId).toBe(account.id);
+  });
+
+  it("lista os dois, marcados pelo serviço que os governa", async () => {
+    const user = await makeUser();
+    const account = await makeAccount(user.id, { initialBalance: "1000.00" });
+    const category = await makeCategory(user.id);
+    const person = await makePerson(user.id);
+    const card = await makeCreditCard(user.id, { closingDay: 20, dueDay: 5 });
+
+    await createTransaction(user.id, input({ accountId: account.id, description: "Mercado" }));
+
+    await createDebt(user.id, {
+      personId: person.id,
+      categoryId: category.id,
+      accountId: account.id,
+      type: "LENT",
+      description: "Empréstimo",
+      amount: 200,
+      currency: "BRL",
+      date: "2026-08-06",
+      dueDate: null,
+      manualFxRate: null,
+    });
+
+    await createCardPurchase(user.id, {
+      creditCardId: card.id,
+      categoryId: null,
+      description: "Compra",
+      amount: 250,
+      currency: "BRL",
+      date: "2026-08-15",
+      installments: 1,
+      manualFxRate: null,
+    });
+
+    const [invoice] = await listCardInvoices(user.id, card.id);
+    await payInvoice(user.id, invoice!.id, {
+      accountId: account.id,
+      date: "2026-08-25",
+      manualFxRate: null,
+    });
+
+    // Os três aparecem; o que muda é quem pode editá-los.
+    for (const listed of [
+      await listMonthTransactions(user.id, 2026, 8),
+      await listRecentTransactions(user.id),
+    ]) {
+      expect(listed).toHaveLength(3);
+      expect(listed.map((item) => item.managedBy).sort()).toEqual(["debt", "invoice", null]);
+      expect(listed.find((item) => item.description === "Mercado")?.managedBy).toBeNull();
+    }
   });
 });

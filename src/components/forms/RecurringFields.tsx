@@ -13,7 +13,8 @@ import {
   TARGET_CARD_PREFIX,
 } from "@/lib/recurringTarget";
 import { FREQUENCY_OPTIONS } from "@/lib/recurrence";
-import type { AccountOption, Option } from "./options";
+import { useFormValue } from "@/components/ui/useFormValue";
+import type { AccountOption, Option } from "@/lib/options";
 
 /** `type`, não `interface`: index signature implícita exigida pelo zod4Resolver. */
 export type RecurringFormValues = {
@@ -80,8 +81,7 @@ export function RecurringFields(props: RecurringFieldsProps) {
     },
   ];
 
-  const values = form.getValues();
-  const isWeekly = values.frequency === "WEEKLY";
+  const isWeekly = useFormValue(form, "frequency") === "WEEKLY";
 
   return (
     <>

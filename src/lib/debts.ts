@@ -5,7 +5,7 @@ import { InvalidOperationError, NotFoundError } from "@/lib/errors";
 import { getExchangeRate, FX_RATE_SCALE } from "@/lib/fxService";
 import { convertMoney, money, toStorage, type Money } from "@/lib/money";
 import { parseCalendarDate } from "@/lib/dates";
-import { applyToBalance, balanceDelta, type Tx } from "@/lib/accountBalance";
+import { applyToBalance, balanceDelta, lockTransaction, type Tx } from "@/lib/accountBalance";
 import { assertCategoryOwned, assertPersonOwned, requireAccount } from "@/lib/ownership";
 import { deriveDebtStatus } from "@/lib/debtStatus";
 import type { DebtTypeCode } from "@/lib/debtTypes";
@@ -156,11 +156,13 @@ export async function settleDebt(
       date,
       manualRate: input.manualFxRate,
     }),
+    // Taxa própria: reaproveitar `manualFxRate` debitaria a conta pela cotação
+    // da dívida.
     getExchangeRate({
       from: input.currency,
       to: debt.currency,
       date,
-      manualRate: input.manualFxRate,
+      manualRate: input.manualDebtFxRate,
     }),
   ]);
 
@@ -250,20 +252,32 @@ export async function deleteSettlement(userId: string, transactionId: string): P
     to: debt.currency,
     date: settlement.date,
   });
-  const towardsDebt = convertMoney(settlement.amount, rate);
 
   await prisma.$transaction(async (tx) => {
     const locked = await lockDebt(tx, debt.id);
+    // Mesma ordem de lock em todo o módulo: primeiro a dívida, depois a
+    // movimentação. Inverter em um só lugar basta para dois estornos
+    // simultâneos travarem em sentidos opostos.
+    const previous = await lockTransaction(tx, transactionId);
+
+    if (!previous) {
+      throw new NotFoundError("Movimentação não encontrada");
+    }
+
+    // O valor volta a partir do que está gravado agora, não do que foi lido
+    // antes do lock: a taxa depende da moeda e da data, que não mudaram, mas o
+    // valor pode ter mudado entre as duas leituras.
+    const towardsDebt = convertMoney(previous.amount, rate);
 
     await tx.transaction.delete({ where: { id: transactionId } });
 
     // Só reverte o que chegou a somar: uma amortização `PENDING` nunca tocou o
     // saldo, e estorná-la criaria dinheiro.
-    if (settlement.accountId && settlement.status === "CONFIRMED") {
+    if (previous.accountId && previous.status === "CONFIRMED") {
       await applyToBalance(
         tx,
-        settlement.accountId,
-        balanceDelta(settlement.type, settlement.convertedAmount).negated(),
+        previous.accountId,
+        balanceDelta(previous.type, previous.convertedAmount).negated(),
       );
     }
 
@@ -325,6 +339,12 @@ export async function updateDebt(userId: string, debtId: string, input: DebtInpu
 
   return prisma.$transaction(async (tx) => {
     const locked = await lockDebt(tx, debtId);
+    // Mesma ordem de `deleteSettlement`: dívida, depois movimentação.
+    const previousOrigin = await lockTransaction(tx, origin.id);
+
+    if (!previousOrigin) {
+      throw new NotFoundError("Movimentação de origem não encontrada");
+    }
 
     // O já abatido é o que o novo total precisa acomodar.
     const settled = money(locked.originalAmount).minus(locked.remainingAmount);
@@ -337,11 +357,11 @@ export async function updateDebt(userId: string, debtId: string, input: DebtInpu
     }
 
     // Idem: a origem pendente não somou ao saldo, então não há o que estornar.
-    if (origin.accountId && origin.status === "CONFIRMED") {
+    if (previousOrigin.accountId && previousOrigin.status === "CONFIRMED") {
       await applyToBalance(
         tx,
-        origin.accountId,
-        balanceDelta(origin.type, origin.convertedAmount).negated(),
+        previousOrigin.accountId,
+        balanceDelta(previousOrigin.type, previousOrigin.convertedAmount).negated(),
       );
     }
 

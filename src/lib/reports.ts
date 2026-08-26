@@ -1,7 +1,7 @@
 import type { Currency } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
-import { monthRange } from "@/lib/dates";
+import { monthRange, utcDate, lastDayOfMonth } from "@/lib/dates";
 import { money, type Money, type MoneyInput } from "@/lib/money";
 import { resolveRatesToBase } from "@/lib/fxService";
 import {
@@ -64,6 +64,20 @@ async function categoryRefs(userId: string): Promise<CategoryRef[]> {
   });
 }
 
+/**
+ * Data em que a competência é cotada: o último dia do mês, ou hoje enquanto o
+ * mês não fechou — não existe cotação de data futura.
+ *
+ * É o que faz o total de um mês fechado parar de mudar sozinho. Saldo e projeção
+ * continuam na cotação de hoje, porque perguntam sobre agora e não sobre um mês
+ * encerrado.
+ */
+function competencyFxDate(year: number, month: number, now: Date = new Date()): Date {
+  const lastDay = utcDate(year, month, lastDayOfMonth(year, month));
+
+  return lastDay.getTime() > now.getTime() ? now : lastDay;
+}
+
 export async function getMonthSummary(
   userId: string,
   year: number,
@@ -107,6 +121,7 @@ export async function getMonthSummary(
       ...cardRows.map((row) => row.creditCard?.currency),
     ].filter((currency): currency is Currency => currency !== undefined && currency !== null),
     baseCurrency,
+    competencyFxDate(year, month),
   );
 
   /** Converte para a moeda base, ou `null` quando não há cotação. */

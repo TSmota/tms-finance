@@ -169,7 +169,7 @@ describe("exclusão", () => {
 
     // Apagar levaria o histórico e deixaria a transação de pagamento órfã.
     await expect(deleteCreditCard(user.id, card.id)).rejects.toThrow(
-      /faturas pagas/,
+      /fatura\(s\) paga\(s\)/,
     );
     await expect(prisma.creditCard.count()).resolves.toBe(1);
   });

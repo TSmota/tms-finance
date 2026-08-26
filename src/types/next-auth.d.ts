@@ -11,5 +11,7 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT {
     id?: string;
+    /** Instante do login, em segundos. Fixo: a renovação da sessão não o reescreve. */
+    authTime?: number;
   }
 }

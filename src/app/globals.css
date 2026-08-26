@@ -8,7 +8,7 @@ a {
 }
 
 /*
- * Tokens de contraste. O porquê está em ARCHITECTURE — UI, Acessibilidade.
+ * Tokens de contraste, corrigidos para WCAG 2.2 AA.
  *
  * O seletor precisa casar o do Mantine (`:root[data-mantine-color-scheme=...]`,
  * 0,2,0): um `:root` seco perde, mesmo importado depois.

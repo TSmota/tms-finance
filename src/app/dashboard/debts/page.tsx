@@ -1,4 +1,5 @@
 import {
+  Alert,
   Badge,
   Card,
   Grid,
@@ -9,7 +10,7 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { ArrowDownLeft, ArrowUpRight, ChevronRight } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChevronRight, TriangleAlert } from "lucide-react";
 
 import { requireUser } from "@/lib/session";
 import { listDebts, type DebtListItem } from "@/lib/debts";
@@ -26,7 +27,8 @@ import {
 import { toCalendarDate } from "@/lib/dates";
 import { AddDebtButton } from "@/components/forms/AddDebtButton";
 import { EditDebtButton } from "@/components/forms/EditDebtButton";
-import { DeleteDebtButton } from "@/components/forms/DeleteDebtButton";
+import { deleteDebt } from "@/actions/debts";
+import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { SettleDebtButton } from "@/components/forms/SettleDebtButton";
 import { LinkButton } from "@/components/ui/AppLink";
 import { EmptyState } from "@/components/EmptyState";
@@ -81,6 +83,24 @@ export default async function DebtsPage({ searchParams }: DebtsPageProps) {
 
   const filteredPerson = people.find((entry) => entry.value === personId);
 
+  // Os três são obrigatórios no formulário: sem qualquer um deles o botão só
+  // abriria um modal impossível de enviar.
+  const missing = [
+    people.length === 0 ? "uma pessoa" : null,
+    options.accounts.length === 0 ? "uma conta" : null,
+    options.categories.length === 0 ? "uma categoria" : null,
+  ].filter((entry) => entry !== null);
+
+  const addButton = (
+    <AddDebtButton
+      people={people}
+      categories={options.categories}
+      accounts={options.accounts}
+      defaultPersonId={personId}
+      baseCurrency={user.baseCurrency}
+    />
+  );
+
   return (
     <Stack gap="lg">
       <PageHeader
@@ -90,16 +110,14 @@ export default async function DebtsPage({ searchParams }: DebtsPageProps) {
             ? `Empréstimos e pendências de ${filteredPerson.label}`
             : "Empréstimos feitos e recebidos, com o motivo de cada um"
         }
-        action={
-          <AddDebtButton
-            people={people}
-            categories={options.categories}
-            accounts={options.accounts}
-            defaultPersonId={personId}
-            baseCurrency={user.baseCurrency}
-          />
-        }
+        action={missing.length === 0 && addButton}
       />
+
+      {missing.length > 0 && (
+        <Alert color="blue" variant="light" icon={<TriangleAlert size={16} />}>
+          Para registrar uma dívida você precisa de {missing.join(", ")}.
+        </Alert>
+      )}
 
       {filteredPerson && (
         <Group>
@@ -110,11 +128,8 @@ export default async function DebtsPage({ searchParams }: DebtsPageProps) {
       {debts.length === 0 ? (
         <Card withBorder radius="md" padding="lg">
           <EmptyState
-            message={
-              people.length === 0
-                ? "Cadastre uma pessoa em Pessoas antes de registrar uma dívida."
-                : "Nenhuma dívida registrada."
-            }
+            message="Nenhuma dívida registrada."
+            action={missing.length === 0 ? addButton : undefined}
           />
         </Card>
       ) : (
@@ -235,7 +250,7 @@ function DebtCard({ debt, people, categories, accounts }: DebtCardProps) {
               debtId={debt.id}
               type={debt.type}
               remainingAmount={debt.remainingAmount}
-              currency={debt.currency as CurrencyCode}
+              currency={debt.currency}
               accounts={accounts}
               categories={categories}
               defaultCategoryId={debt.categoryId}
@@ -251,12 +266,15 @@ function DebtCard({ debt, people, categories, accounts }: DebtCardProps) {
             categories={categories}
             accounts={accounts}
             type={debt.type}
-            currency={debt.currency as CurrencyCode}
+            currency={debt.currency}
           />
-          <DeleteDebtButton
+          <DeleteEntityButton
             id={debt.id}
-            description={debt.description}
-            settlementCount={debt.settlementCount}
+            title="Remover dívida"
+            successMessage="Dívida removida"
+            question={`Remover "${debt.description}" devolve os saldos das contas ao que eram. Tem certeza?`}
+            action={deleteDebt}
+            impactTarget="debt"
           />
         </Group>
       </Group>

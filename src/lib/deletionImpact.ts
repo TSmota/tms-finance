@@ -1,16 +1,17 @@
 import { prisma } from "@/lib/db";
 import { NotFoundError } from "@/lib/errors";
 import { toCalendarDate, type CalendarDate } from "@/lib/dates";
+import { accountDeletionBlocker } from "@/lib/accounts";
+import { categoryDeletionBlocker } from "@/lib/categories";
+import { creditCardDeletionBlocker } from "@/lib/creditCards";
+import { personDeletionBlocker } from "@/lib/people";
 
 /**
  * Mede, antes de apagar, o que uma remoção levaria embora.
  *
- * O caso perigoso é `deleteAccount`: um `deleteMany` sem guarda sobre
- * `Transaction.accountId`, que é `onDelete: Cascade`. Suas irmãs se protegem,
- * essa não.
- *
- * As contagens têm de bater exatamente com o que a remoção apaga depois. Um
- * preview que subconta é pior que preview nenhum.
+ * As contagens têm de bater exatamente com o que a remoção apaga depois: um
+ * preview que subconta é pior que preview nenhum. `blockedBy` vem dos
+ * `*DeletionBlocker` dos serviços, para não existir uma segunda cópia da regra.
  */
 
 export const DELETION_TARGETS = ["account", "credit_card", "person", "category", "debt"] as const;
@@ -85,18 +86,18 @@ async function accountImpact(userId: string, id: string): Promise<DeletionImpact
     throw new NotFoundError("Conta não encontrada");
   }
 
-  const [transactions, recurring, invoicesPaid, paidInvoices, defaultForCards, oldest] =
+  const [transactions, recurring, invoicesPaid, defaultForCards, oldest, blockedBy] =
     await Promise.all([
       prisma.transaction.count({ where: { userId, accountId: id } }),
       prisma.recurringExpense.count({ where: { userId, accountId: id } }),
       prisma.invoice.count({ where: { userId, paymentAccountId: id } }),
-      prisma.invoice.count({ where: { userId, paymentAccountId: id, status: "PAID" } }),
       prisma.creditCard.count({ where: { userId, defaultPaymentAccountId: id } }),
       prisma.transaction.findFirst({
         where: { userId, accountId: id },
         orderBy: { date: "asc" },
         select: { date: true },
       }),
+      accountDeletionBlocker(userId, id),
     ]);
 
   return {
@@ -129,21 +130,7 @@ async function accountImpact(userId: string, id: string): Promise<DeletionImpact
         effect: "detach",
       },
     ]),
-    /**
-     * Fatura paga torna a remoção **impossível**, não apenas destrutiva:
-     * `Invoice.paymentAccountId` é `SetNull`, mas o CHECK
-     * `invoices_paid_consistency_check` exige `payment_account_id IS NOT NULL`
-     * quando `status = 'PAID'`. Os dois se contradizem e o `deleteMany` de
-     * `deleteAccount` estoura com erro cru do Postgres.
-     *
-     * Medir aqui converte isso numa explicação, mas não é a correção: bloquear
-     * ou não é decisão de domínio e pertence a `deleteAccount`.
-     */
-    blockedBy:
-      paidInvoices > 0
-        ? `Esta conta pagou ${paidInvoices} fatura(s) de cartão e não pode ser removida: ` +
-          "o histórico de pagamento exige a conta de origem. Desfaça os pagamentos antes."
-        : null,
+    blockedBy,
     oldestRecord: oldest ? toCalendarDate(oldest.date) : null,
   };
 }
@@ -159,9 +146,8 @@ async function creditCardImpact(userId: string, id: string): Promise<DeletionImp
     throw new NotFoundError("Cartão não encontrado");
   }
 
-  const [invoices, paidInvoices, transactions, recurring, oldest] = await Promise.all([
+  const [invoices, transactions, recurring, oldest, blockedBy] = await Promise.all([
     prisma.invoice.count({ where: { userId, creditCardId: id } }),
-    prisma.invoice.count({ where: { userId, creditCardId: id, status: "PAID" } }),
     prisma.transaction.count({ where: { userId, creditCardId: id } }),
     prisma.recurringExpense.count({ where: { userId, creditCardId: id } }),
     prisma.transaction.findFirst({
@@ -169,6 +155,7 @@ async function creditCardImpact(userId: string, id: string): Promise<DeletionImp
       orderBy: { date: "asc" },
       select: { date: true },
     }),
+    creditCardDeletionBlocker(userId, id),
   ]);
 
   return {
@@ -190,10 +177,7 @@ async function creditCardImpact(userId: string, id: string): Promise<DeletionImp
         effect: "destroy",
       },
     ]),
-    blockedBy:
-      paidInvoices > 0
-        ? `Este cartão tem ${paidInvoices} fatura(s) paga(s) e não pode ser removido — o histórico de pagamentos seria perdido.`
-        : null,
+    blockedBy,
     oldestRecord: oldest ? toCalendarDate(oldest.date) : null,
   };
 }
@@ -215,15 +199,15 @@ async function personImpact(userId: string, id: string): Promise<DeletionImpact>
     throw new NotFoundError("Pessoa não encontrada");
   }
 
-  const [debts, openDebts, orphanedTransactions, oldest] = await Promise.all([
+  const [debts, orphanedTransactions, oldest, blockedBy] = await Promise.all([
     prisma.debt.count({ where: { userId, personId: id } }),
-    prisma.debt.count({ where: { userId, personId: id, status: { not: "PAID" } } }),
     prisma.transaction.count({ where: { userId, debt: { personId: id } } }),
     prisma.transaction.findFirst({
       where: { userId, debt: { personId: id } },
       orderBy: { date: "asc" },
       select: { date: true },
     }),
+    personDeletionBlocker(userId, id),
   ]);
 
   return {
@@ -244,10 +228,7 @@ async function personImpact(userId: string, id: string): Promise<DeletionImpact>
         effect: "detach",
       },
     ]),
-    blockedBy:
-      openDebts > 0
-        ? `Esta pessoa tem ${openDebts} dívida(s) em aberto. Quite ou remova as dívidas antes.`
-        : null,
+    blockedBy,
     oldestRecord: oldest ? toCalendarDate(oldest.date) : null,
   };
 }
@@ -256,8 +237,7 @@ async function personImpact(userId: string, id: string): Promise<DeletionImpact>
  * Categoria: cascateia subcategorias, e os lançamentos perdem a categoria.
  *
  * Bloqueia quando uma recorrente ou uma dívida aponta para ela: `categoryId` é
- * obrigatório nos dois models, sem `onDelete`, então a recusa vem do banco por
- * FK, não do serviço.
+ * obrigatório nos dois models.
  */
 async function categoryImpact(userId: string, id: string): Promise<DeletionImpact> {
   const category = await prisma.category.findFirst({
@@ -277,21 +257,10 @@ async function categoryImpact(userId: string, id: string): Promise<DeletionImpac
 
   const affectedIds = [id, ...subcategories.map((row) => row.id)];
 
-  const [transactions, recurring, debts] = await Promise.all([
+  const [transactions, blockedBy] = await Promise.all([
     prisma.transaction.count({ where: { userId, categoryId: { in: affectedIds } } }),
-    prisma.recurringExpense.count({ where: { userId, categoryId: { in: affectedIds } } }),
-    prisma.debt.count({ where: { userId, categoryId: { in: affectedIds } } }),
+    categoryDeletionBlocker(userId, id),
   ]);
-
-  const blockers: string[] = [];
-
-  if (recurring > 0) {
-    blockers.push(`${recurring} gasto(s) recorrente(s)`);
-  }
-
-  if (debts > 0) {
-    blockers.push(`${debts} dívida(s)`);
-  }
 
   return {
     target: "category",
@@ -311,10 +280,7 @@ async function categoryImpact(userId: string, id: string): Promise<DeletionImpac
         effect: "detach",
       },
     ]),
-    blockedBy:
-      blockers.length > 0
-        ? `Esta categoria é obrigatória para ${blockers.join(" e ")}. Reaponte-os antes de remover.`
-        : null,
+    blockedBy,
     oldestRecord: null,
   };
 }

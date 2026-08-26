@@ -8,6 +8,7 @@ import { FxUnavailableError } from "@/lib/fxService";
 import { recordAgentCall, type AgentVerdict } from "@/lib/agentAudit";
 import { checkAgentRateLimit } from "@/lib/agentRateLimit";
 import { describeDeletionImpact, type DeletionTarget } from "@/lib/deletionImpact";
+import { REVALIDATION_TARGETS, type RevalidationDomain } from "@/lib/revalidation";
 import { agentContextFrom, type AgentContext } from "@/mcp/context";
 import { scopeForTool } from "@/mcp/scopes";
 import { readConfirmation, requestConfirmation } from "@/mcp/confirm";
@@ -145,27 +146,20 @@ function classify(error: unknown): { failure: ToolFailure; verdict: AgentVerdict
   };
 }
 
-/** Caminhos revalidados por domínio, espelhando os `revalidateAll` das actions. */
-export const REVALIDATE = {
-  transactions: ["/dashboard", "/dashboard/transactions", "/dashboard/accounts"],
-  cards: ["/dashboard", "/dashboard/cards", "/dashboard/transactions"],
-  invoices: ["/dashboard", "/dashboard/cards", "/dashboard/accounts", "/dashboard/transactions"],
-  debts: ["/dashboard", "/dashboard/debts", "/dashboard/people", "/dashboard/transactions"],
-  recurring: ["/dashboard", "/dashboard/recurring", "/dashboard/transactions"],
-  setup: ["/dashboard", "/dashboard/accounts", "/dashboard/cards", "/dashboard/categories"],
-  people: ["/dashboard", "/dashboard/people", "/dashboard/debts"],
-} as const;
-
 /**
  * Invalida o cache das telas afetadas — e **nunca** propaga erro.
  *
  * Roda depois de a escrita ter commitado e sido auditada como `OK`. Deixar a
  * falha subir devolveria fracasso ao agente para uma operação que deu certo.
+ *
+ * A lista de caminhos vem de {@link REVALIDATION_TARGETS}, a mesma que as
+ * actions consomem: a tabela que existia aqui se declarava espelho da de lá e
+ * divergia em quatro domínios.
  */
-function revalidate(paths: readonly string[]): void {
-  for (const path of paths) {
+function revalidate(domain: RevalidationDomain): void {
+  for (const [path, type] of REVALIDATION_TARGETS[domain]) {
     try {
-      revalidatePath(path);
+      revalidatePath(path, type);
     } catch (error) {
       console.error(`Falha ao revalidar ${path} após ferramenta MCP:`, error);
     }
@@ -245,8 +239,8 @@ export interface RunToolParams<TInput, TResult> {
   serialize: (result: TResult, agent: AgentContext) => unknown;
   /** IDs tocados — é o que permite reconstituir e desfazer depois. */
   affected?: (result: TResult) => string[];
-  /** Caminhos a revalidar. Ausente = leitura, nada a invalidar. */
-  revalidatePaths?: readonly string[];
+  /** Domínio afetado. Ausente = leitura, nada a invalidar. */
+  revalidates?: RevalidationDomain;
 }
 
 export async function runTool<TInput, TResult>(
@@ -301,8 +295,8 @@ export async function runTool<TInput, TResult>(
 
     await log("OK", auth.agent, null, affectedIds);
 
-    if (params.revalidatePaths) {
-      revalidate(params.revalidatePaths);
+    if (params.revalidates) {
+      revalidate(params.revalidates);
     }
 
     return jsonResult({ ok: true, data: params.serialize(result, auth.agent) });
@@ -322,7 +316,7 @@ export interface RunDestructiveToolParams {
   input: unknown;
   schema: ZodType<{ id: string }>;
   run: (agent: AgentContext, id: string) => Promise<void>;
-  revalidatePaths: readonly string[];
+  revalidates: RevalidationDomain;
 }
 
 /**
@@ -409,7 +403,7 @@ export async function runDestructiveTool(
     await params.run(auth.agent, id);
     await log("OK", auth.agent, null, [id]);
 
-    revalidate(params.revalidatePaths);
+    revalidate(params.revalidates);
 
     return jsonResult({
       ok: true,

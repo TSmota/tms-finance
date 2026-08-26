@@ -25,7 +25,7 @@ disable-model-invocation: false
 
    ```bash
    npm run dev &        # em outro terminal
-   npm run test:a11y    # axe-core nas 13 rotas, WCAG 2.2 AA; sai 1 se houver violação
+   npm run test:a11y    # axe-core em todas as rotas, WCAG 2.2 AA; sai 1 se houver violação
    ```
 
    Em seguida invoque `/ui-validation` para o que o axe não alcança: fluxo, estados e as armadilhas de Server Component.

@@ -1,11 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
 import { requireUser } from "@/lib/session";
 import { debtSchema, debtSettlementSchema } from "@/lib/validations";
 import * as service from "@/lib/debts";
-import { parseId, runAction } from "./guard";
+import { parseId, revalidateDomain, runAction } from "./guard";
 import type { ActionResult } from "./types";
 
 /**
@@ -13,12 +11,7 @@ import type { ActionResult } from "./types";
  * saldo e de fluxo de caixa, não só as de dívida.
  */
 function revalidateAll() {
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/debts");
-  revalidatePath("/dashboard/debts/[id]", "page");
-  revalidatePath("/dashboard/people");
-  revalidatePath("/dashboard/accounts");
-  revalidatePath("/dashboard/transactions");
+  revalidateDomain("debts");
 }
 
 export async function createDebt(input: unknown): Promise<ActionResult> {

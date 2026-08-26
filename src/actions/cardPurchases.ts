@@ -1,18 +1,13 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
 import { requireUser } from "@/lib/session";
 import { cardPurchaseSchema } from "@/lib/validations";
 import * as service from "@/lib/cardPurchases";
-import { parseId, runAction } from "./guard";
+import { parseId, revalidateDomain, runAction } from "./guard";
 import type { ActionResult } from "./types";
 
 function revalidateAll() {
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/cards");
-  // As páginas de fatura são dinâmicas por cartão; revalida a árvore.
-  revalidatePath("/dashboard/cards/[id]", "page");
+  revalidateDomain("cardPurchases");
 }
 
 export async function createCardPurchase(input: unknown): Promise<ActionResult> {

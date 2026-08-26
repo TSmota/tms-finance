@@ -1,6 +1,5 @@
 "use client";
 
-import { ActionIcon } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import { Pencil } from "lucide-react";
@@ -8,6 +7,7 @@ import { Pencil } from "lucide-react";
 import { personSchema } from "@/lib/validations";
 import { updatePerson } from "@/actions/people";
 import { FormModal } from "@/components/ui/FormModal";
+import { IconButton } from "@/components/ui/IconButton";
 import { useActionModal } from "@/components/ui/useActionModal";
 import { PersonFields, type PersonFormValues } from "./PersonFields";
 
@@ -39,9 +39,9 @@ export function EditPersonButton(props: EditPersonButtonProps) {
 
   return (
     <>
-      <ActionIcon variant="subtle" color="gray" aria-label="Editar pessoa" onClick={handleOpen}>
+      <IconButton label="Editar pessoa" onClick={handleOpen}>
         <Pencil size={16} />
-      </ActionIcon>
+      </IconButton>
       <FormModal
         opened={opened}
         onClose={close}

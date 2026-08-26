@@ -5,7 +5,22 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+/**
+ * Pool explícito.
+ *
+ * Sem isto o `pg` cai no default de 10 conexões **por instância** e
+ * `connectionTimeoutMillis` fica `undefined` — sem timeout, uma requisição que
+ * não encontra conexão livre espera até o timeout da função em vez de falhar.
+ * Em serverless o número de instâncias é que cresce, então o teto por instância
+ * precisa ser pequeno; `DB_POOL_MAX` existe para o processo de longa duração,
+ * onde o oposto vale.
+ */
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL,
+  max: Number(process.env.DB_POOL_MAX ?? 5),
+  connectionTimeoutMillis: 5_000,
+  idleTimeoutMillis: 10_000,
+});
 
 export const prisma =
   globalForPrisma.prisma ??

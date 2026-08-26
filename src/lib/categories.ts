@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { Category } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
@@ -92,17 +93,71 @@ export async function updateCategory(
   });
 }
 
+/** Ids da categoria e das suas subcategorias — a hierarquia é de dois níveis. */
+async function categoryFamily(userId: string, id: string): Promise<string[]> {
+  const children = await prisma.category.findMany({
+    where: { userId, parentId: id },
+    select: { id: true },
+  });
+
+  return [id, ...children.map((child) => child.id)];
+}
+
+/**
+ * Motivo pelo qual a categoria não pode ser removida, ou `null`. Fonte única,
+ * como `accountDeletionBlocker`.
+ *
+ * `categoryId` é obrigatório em `RecurringExpense` e em `Debt`, sem `onDelete`:
+ * sem a guarda a recusa vem do banco por FK, em inglês.
+ */
+export async function categoryDeletionBlocker(
+  userId: string,
+  id: string,
+): Promise<string | null> {
+  const affectedIds = await categoryFamily(userId, id);
+
+  const [recurring, debts] = await Promise.all([
+    prisma.recurringExpense.count({ where: { userId, categoryId: { in: affectedIds } } }),
+    prisma.debt.count({ where: { userId, categoryId: { in: affectedIds } } }),
+  ]);
+
+  const blockers: string[] = [];
+
+  if (recurring > 0) {
+    blockers.push(`${recurring} gasto(s) recorrente(s)`);
+  }
+
+  if (debts > 0) {
+    blockers.push(`${debts} dívida(s)`);
+  }
+
+  return blockers.length > 0
+    ? `Esta categoria é obrigatória para ${blockers.join(" e ")}. Reaponte-os antes de remover.`
+    : null;
+}
+
 /**
  * Remove a categoria e, em cascata, suas subcategorias. As transações que a
  * usavam ficam com `categoryId` nulo (`onDelete: SetNull`); recorrentes e
- * dívidas bloqueiam a remoção no banco, porque a categoria é obrigatória lá.
+ * dívidas recusam a remoção, por {@link categoryDeletionBlocker}.
  */
 export async function deleteCategory(userId: string, id: string): Promise<void> {
-  const { count } = await prisma.category.deleteMany({ where: { id, userId } });
+  const category = await prisma.category.findFirst({
+    where: { id, userId },
+    select: { id: true },
+  });
 
-  if (count === 0) {
+  if (!category) {
     throw new NotFoundError("Categoria não encontrada");
   }
+
+  const blocker = await categoryDeletionBlocker(userId, id);
+
+  if (blocker) {
+    throw new InvalidOperationError(blocker);
+  }
+
+  await prisma.category.delete({ where: { id } });
 }
 
 export interface CategoryNode {
@@ -139,8 +194,11 @@ export async function listCategoryTree(userId: string): Promise<CategoryNode[]> 
 /**
  * Categorias em lista plana para `Select`, com a subcategoria rotulada como
  * "Pai > Filho" para ficar inequívoca quando dois pais têm filhos homônimos.
+ *
+ * `cache()` por requisição: o painel lê esta lista por três caminhos distintos
+ * numa única renderização.
  */
-export async function listCategoryOptions(
+export const listCategoryOptions = cache(async function listCategoryOptions(
   userId: string,
 ): Promise<Array<{ value: string; label: string }>> {
   const tree = await listCategoryTree(userId);
@@ -152,4 +210,4 @@ export async function listCategoryOptions(
       label: `${root.name} > ${child.name}`,
     })),
   ]);
-}
+});

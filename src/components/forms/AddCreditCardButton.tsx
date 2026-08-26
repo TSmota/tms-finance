@@ -11,7 +11,7 @@ import { createCreditCard } from "@/actions/creditCards";
 import { FormModal } from "@/components/ui/FormModal";
 import { useActionModal } from "@/components/ui/useActionModal";
 import { CreditCardFields, type CreditCardFormValues } from "./CreditCardFields";
-import type { Option } from "./options";
+import type { Option } from "@/lib/options";
 
 /**
  * Valores iniciais. Função e não constante de módulo porque a moeda de partida

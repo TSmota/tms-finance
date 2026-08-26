@@ -5,7 +5,7 @@ import { deleteAccount } from "@/lib/accounts";
 import { deletePerson } from "@/lib/people";
 import { createDebt, settleDebt } from "@/lib/debts";
 import { createTransaction } from "@/lib/transactions";
-import { REVALIDATE, runDestructiveTool } from "@/mcp/guard";
+import { runDestructiveTool } from "@/mcp/guard";
 import { confirmCodec, resetConfirmCodec, type ConfirmPayload } from "@/mcp/confirm";
 import { idArgs } from "@/mcp/args";
 import { makeAccount, makeCategory, makePerson, makeUser } from "../factories";
@@ -65,7 +65,7 @@ function deleteAccountTool(
     input: { id },
     schema: idArgs,
     run: (a, target) => deleteAccount(a.userId, target),
-    revalidatePaths: REVALIDATE.setup,
+    revalidates: "setup",
   });
 }
 
@@ -155,7 +155,7 @@ describe("primeira fase", () => {
       input: { id: person.id },
       schema: idArgs,
       run: (a, id) => deletePerson(a.userId, id),
-      revalidatePaths: REVALIDATE.people,
+      revalidates: "people",
     });
     const payload = readResult(result);
 
@@ -324,7 +324,7 @@ describe("remoção de dívida reverte o caixa", () => {
         input: { id: debt.id },
         schema: idArgs,
         run: (a, id) => import("@/lib/debts").then((m) => m.deleteDebt(a.userId, id)),
-        revalidatePaths: REVALIDATE.debts,
+        revalidates: "debts",
       });
 
     // 1ª fase: nada muda, nem a dívida nem o saldo.

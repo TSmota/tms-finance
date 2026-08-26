@@ -5,7 +5,8 @@ import { prisma } from "@/lib/db";
 import { recomputeBalance } from "@/lib/accountBalance";
 import { createTransaction, deleteTransaction } from "@/lib/transactions";
 import { transactionSchema } from "@/lib/validations";
-import { REVALIDATE, runTool } from "@/mcp/guard";
+import { REVALIDATION_TARGETS } from "@/lib/revalidation";
+import { runTool } from "@/mcp/guard";
 import { makeAccount, makeCategory, makeUser } from "../factories";
 import { setRates } from "../setup-fx";
 import { auditFor, ctxFor, ctxWithoutIdentity, makeAgent, readResult } from "../mcpHarness";
@@ -61,7 +62,7 @@ function createTool(ctx: ReturnType<typeof ctxFor>, input: unknown) {
     run: (agent, parsed) => createTransaction(agent.userId, parsed),
     serialize: (row) => ({ id: row.id }),
     affected: (row) => [row.id],
-    revalidatePaths: REVALIDATE.transactions,
+    revalidates: "transactions",
   });
 }
 
@@ -173,8 +174,8 @@ describe("sucesso", () => {
     expect(entry.verdict).toBe("OK");
     expect(entry.affectedIds).toEqual([created]);
 
-    for (const path of REVALIDATE.transactions) {
-      expect(revalidatePath).toHaveBeenCalledWith(path);
+    for (const [path, type] of REVALIDATION_TARGETS.transactions) {
+      expect(revalidatePath).toHaveBeenCalledWith(path, type);
     }
   });
 
@@ -208,7 +209,7 @@ describe("erro de domínio", () => {
       schema: z.object({ id: z.uuid() }),
       run: (agent, input) => deleteTransaction(agent.userId, input.id),
       serialize: () => ({ deleted: true }),
-      revalidatePaths: REVALIDATE.transactions,
+      revalidates: "transactions",
     });
     const payload = readResult(result);
 

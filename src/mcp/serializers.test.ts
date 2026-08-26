@@ -96,6 +96,7 @@ const transaction = {
   categoryName: "Mercado",
   categoryColor: "#fff",
   isEstimated: false,
+  managedBy: null,
 };
 
 const debt = {

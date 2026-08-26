@@ -20,3 +20,12 @@ export class NotFoundError extends DomainError {}
 
 /** Estado inválido que o Zod não cobre porque depende do banco. */
 export class InvalidOperationError extends DomainError {}
+
+/**
+ * Escrita que mexeria no total de uma fatura já paga.
+ *
+ * Subclasse porque para a UI é uma recusa de domínio como outra qualquer. O
+ * tipo próprio existe para a materialização de recorrentes, que roda dentro da
+ * renderização e precisa pular em vez de derrubar a página.
+ */
+export class PaidInvoiceError extends InvalidOperationError {}

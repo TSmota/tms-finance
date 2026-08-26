@@ -10,12 +10,16 @@ import {
 } from "@/mcp/scopes";
 
 /**
- * Este arquivo é a trava que impede uma ferramenta nova de entrar sem escopo.
+ * Este arquivo trava o vocabulário de escopos; quem trava a existência das
+ * ferramentas é `tests/integration/mcpRegistry.test.ts`.
+ *
+ * A divisão não é arbitrária: as listas daqui são a única fonte que este teste
+ * conhece, então ele não consegue ver uma ferramenta registrada e esquecida no
+ * mapa. Para isso é preciso importar `registerTools`, e com ele o Prisma.
  *
  * O `runTool` falha fechado quando `scopeForTool` devolve `undefined`, então uma
  * ferramenta esquecida não roda aberta — ela simplesmente não funciona. Isso é o
- * comportamento seguro, mas é um bug silencioso. Estes testes o transformam em
- * falha de CI.
+ * comportamento seguro, mas é um bug silencioso.
  */
 
 describe("mapa de escopos", () => {

@@ -1,11 +1,11 @@
 "use client";
 
-import { ActionIcon } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { Pencil } from "lucide-react";
 
 import { updateRecurringExpense } from "@/actions/recurring";
 import { FormModal } from "@/components/ui/FormModal";
+import { IconButton } from "@/components/ui/IconButton";
 import { useActionModal } from "@/components/ui/useActionModal";
 import { splitTarget } from "@/lib/recurringTarget";
 import {
@@ -13,7 +13,7 @@ import {
   validateRecurring,
   type RecurringFormValues,
 } from "./RecurringFields";
-import type { AccountOption, Option } from "./options";
+import type { AccountOption, Option } from "@/lib/options";
 
 interface EditRecurringButtonProps {
   id: string;
@@ -48,14 +48,9 @@ export function EditRecurringButton(props: EditRecurringButtonProps) {
 
   return (
     <>
-      <ActionIcon
-        variant="subtle"
-        color="gray"
-        aria-label="Editar recorrência"
-        onClick={handleOpen}
-      >
+      <IconButton label="Editar recorrência" onClick={handleOpen}>
         <Pencil size={16} />
-      </ActionIcon>
+      </IconButton>
       <FormModal
         opened={opened}
         onClose={close}
