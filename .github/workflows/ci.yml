@@ -102,7 +102,12 @@ jobs:
       # A auditoria recusa rodar quando as telas de detalhe não são alcançáveis.
       - run: npm run db:seed
 
+      # `next start` roda em produção, e aí o Auth.js exige que o Host seja
+      # declarado confiável: sem isto toda rota /api/auth responde UntrustedHost
+      # e o login da auditoria morre. Na Vercel a própria plataforma declara.
       - name: Subir o app
+        env:
+          AUTH_TRUST_HOST: "true"
         run: |
           npm run build
           npm run start &

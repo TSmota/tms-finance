@@ -289,6 +289,32 @@ async function discoverDetailRoutes(cdp: Cdp): Promise<string[]> {
   return found;
 }
 
+/**
+ * Espera o `pathname` sair de `origem`, do lado de fora da página.
+ *
+ * O clique que envia o formulário pode navegar, e a navegação destrói o
+ * contexto de qualquer `evaluate` pendente: esperar dentro da página troca a
+ * causa real por `-32000 Inspected target navigated or closed`.
+ */
+async function waitForNavigation(cdp: Cdp, origem: string): Promise<string> {
+  let atual = origem;
+
+  for (let i = 0; i < 40; i += 1) {
+    await new Promise((r) => setTimeout(r, 250));
+    try {
+      atual = (await cdp.evaluate("location.pathname")) as string;
+    } catch {
+      continue; // contexto destruído no meio da navegação
+    }
+
+    if (atual !== origem) {
+      return atual;
+    }
+  }
+
+  return atual;
+}
+
 async function main() {
   const chrome = resolveChrome();
   const port = 9222 + Math.floor(process.uptime() * 1000) % 300;
@@ -325,7 +351,7 @@ async function main() {
     // Sem sessão, todas as rotas redirecionam para /login e a auditoria mediria
     // a mesma tela em toda iteração — passando.
     await cdp.goto(`${BASE}/login`);
-    await cdp.evaluate(`(async () => {
+    await cdp.evaluate(`(() => {
       const inputs = Array.from(document.querySelectorAll('input'));
       const senha = inputs.find((i) => i.type === 'password');
       // O TextInput do Mantine não emite \`type\`: identifica por exclusão.
@@ -345,13 +371,15 @@ async function main() {
       setValue(email, ${JSON.stringify(EMAIL)});
       setValue(senha, ${JSON.stringify(PASSWORD)});
       document.querySelector('button[type="submit"]').click();
-      await new Promise((r) => setTimeout(r, 3000));
     })()`);
 
-    const url = (await cdp.evaluate("location.pathname")) as string;
-    if (url === "/login") {
+    const destino = await waitForNavigation(cdp, "/login");
+    if (!destino.startsWith("/dashboard")) {
       throw new Error(
-        `Login falhou com ${EMAIL}. Rode 'npm run db:seed' ou ajuste A11Y_EMAIL/A11Y_PASSWORD.`,
+        `Login com ${EMAIL} parou em ${destino}, não no /dashboard. ` +
+          "/api/auth/error é o Auth.js recusando o Host — sirva o build com " +
+          "AUTH_TRUST_HOST=true. /login é credencial: rode 'npm run db:seed' " +
+          "ou ajuste A11Y_EMAIL/A11Y_PASSWORD.",
       );
     }
 

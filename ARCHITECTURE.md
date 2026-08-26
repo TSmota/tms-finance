@@ -652,6 +652,17 @@ abrir formulário não aparece, em vez de auditar menos telas e sair 0: um gate
 que degrada em silêncio não é gate. Na prática isso significa `npm run db:seed`
 antes.
 
+**Contra o build de produção, exporte `AUTH_TRUST_HOST=true`** — é o que o CI
+faz ao subir o app. Com `NODE_ENV=production` o Auth.js exige que o Host seja
+declarado confiável (na Vercel a plataforma declara por nós, com `npm run dev`
+o modo de desenvolvimento dispensa) e, sem isso, toda rota `/api/auth` responde
+`UntrustedHost`: o login da auditoria vai parar em `/api/auth/error`. A
+navegação para essa página é o que torna a falha ilegível — ela destrói o
+contexto de qualquer `evaluate` pendente, e o CDP devolve `-32000 Inspected
+target navigated or closed` no lugar da causa. Por isso a espera pelo pós-login
+mora fora da página, e o script exige chegar ao `/dashboard`, não apenas sair
+do `/login`.
+
 **Por que fora do Vitest:** a regra `color-contrast` do axe compara a cor
 computada do texto com a do fundo pintado atrás dele — precisa de layout e de
 cascata resolvida, e o jsdom não tem nenhum dos dois. Um teste de contraste em
