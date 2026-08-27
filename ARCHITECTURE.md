@@ -1,43 +1,31 @@
 # TMS Finance — decisões técnicas, padrões e regras
 
-Este documento é a referência de como o código deste repositório é escrito, e
-**por quê**. Cada regra vem com o motivo: sem ele, a regra parece arbitrária e é
-a primeira coisa que alguém contorna sob pressão.
+Este documento registra decisões técnicas que não ficam evidentes no código:
+contratos entre camadas, invariantes e alternativas que falham.
 
 Escopo e precedência:
 
 | Documento | O que manda |
-|---|---|
+| --- | --- |
 | [docs/business-rules.md](docs/business-rules.md) | O domínio: RN-01 a RN-05. É a fonte de verdade do *o quê*. |
-| [prisma/schema.prisma](prisma/schema.prisma) + `prisma/migrations/*.sql` | O modelo de dados e as `CHECK`. Nenhuma regra aqui sobrepõe uma constraint de lá. |
+| [prisma/schema.prisma](prisma/schema.prisma) + `prisma/migrations/*/migration.sql` | O modelo de dados e as `CHECK`. Nenhuma regra aqui sobrepõe uma constraint de lá. |
 | [AGENTS.md](AGENTS.md) | As 5 regras financeiras críticas, o portão de qualidade e o aviso sobre a versão do Next.js. |
 | **Este arquivo** | O *como*: camadas, padrões, armadilhas conhecidas. |
 | [.github/skills/](.github/skills/) | Procedimento por tarefa. Não contém regra própria: aponta para a regra daqui. |
 | [README.md](README.md) | Subir e configurar o projeto. Não decide nada sobre o código. |
 
-**Afirmação factual sobre o código perde para o código, qualquer que seja o
-posto do documento.** A tabela ordena assunto, não verdade: quando um `grep`
-contradiz uma frase daqui, quem encontrou corrige a prosa no mesmo commit — ou
-corrige o código, se era a frase que estava certa. O que não serve é deixar as
-duas.
-
-O código TypeScript **não** cita este documento nem as RN. Comentário explica a
-linha que está ao lado; contexto de projeto mora aqui. Quando as duas coisas se
-cruzam, quem procura chega por busca de nome, não por referência cruzada que
-envelhece.
-
-A exceção é o SQL das migrations, que cita RN de propósito — o motivo está em
-Convenções de código.
+Afirmação factual perde para o código, qualquer que seja o documento. A tabela
+ordena assuntos, não verdade; divergências são corrigidas no mesmo commit.
+TypeScript não cita este documento nem as RN. O SQL de migrations pode citar RN
+porque é append-only (Convenções de código).
 
 ---
 
 ## 1. Três camadas
 
-A separação existe por um motivo prático: **o que é testável**. Antes dela, uma
-única função misturava autenticação, validação, câmbio, Prisma e revalidação, e
-não havia como testá-la sem mockar metade do Next.
+A separação mantém regras de negócio testáveis sem depender do Next.
 
-```
+```text
 src/app/**/page.tsx      Server Component: lê (requireUser + serviços), renderiza
 src/actions/<domínio>.ts Casca fina: auth → zod → serviço → revalidate → ActionResult
 src/lib/<domínio>.ts     Serviço: regra de negócio + Prisma. É aqui que os testes batem.
@@ -54,8 +42,7 @@ src/lib/<domínio>.ts     Serviço: regra de negócio + Prisma. É aqui que os t
   propósito.
 - As guardas de posse moram em [src/lib/ownership.ts](src/lib/ownership.ts)
   (`requireAccount`, `assertAccountOwned`, `assertCategoryOwned`,
-  `assertPersonOwned`). Serviço nenhum reimplementa a sua: a checagem já esteve
-  copiada em vários serviços, e corrigir uma cópia deixava as outras erradas.
+  `assertPersonOwned`). Serviços não as reimplementam.
 
 Única exceção: [src/lib/session.ts](src/lib/session.ts) chama `auth()` e
 `redirect()`, porque **é** o módulo de sessão. Nenhum outro módulo de `src/lib`
@@ -63,32 +50,26 @@ pode fazer isso.
 
 ### Serviço de entrada e helper de transação
 
-`src/lib/` tem dois tipos de função exportada, e confundi-los faz a regra do
-`userId` explícito parecer violada:
+`src/lib/` expõe dois tipos de função:
 
-- **Serviço de entrada** — `createTransaction(userId, input)`, `payInvoice(userId,
-  invoiceId, input)`, `deleteDebt(userId, id)`. Recebe `userId` primeiro, é o que
-  a action e a ferramenta MCP chamam, e **é ele** quem abre o `$transaction`.
+- **Serviço de entrada** — recebe `userId` primeiro, é chamado por actions e
+  ferramentas MCP e abre o `$transaction`.
 - **Helper de transação** — recebe `tx: Tx` primeiro e **nenhum** `userId`. Roda
-  *dentro* de um `$transaction` já aberto, sobre linhas que o serviço de entrada
-  já resolveu e cuja posse ele já conferiu.
+  dentro de uma transação, sobre linhas cuja posse o serviço já conferiu.
 
-São cinco, e a lista é fechada: `applyToBalance` e `lockTransaction` em
+Os helpers exportados são `applyToBalance` e `lockTransaction` em
 [src/lib/accountBalance.ts](src/lib/accountBalance.ts); `resolveInvoice`,
 `recalcInvoiceTotal` e `recalcInvoiceTotals` em
 [src/lib/invoices.ts](src/lib/invoices.ts).
 
-Eles não recebem `userId` de propósito: recheco de posse dentro da transação
-seria uma consulta a mais por linha tocada para reafirmar o que a entrada já
-provou. O preço é que **helper de transação nunca é ponto de entrada** — se uma
-action ou ferramenta MCP chamar um deles direto, não há checagem de posse
-nenhuma no caminho. Helper novo com `tx` primeiro entra nesta lista ou vira
+**Helper de transação nunca é ponto de entrada:** chamá-lo direto pula a
+checagem de posse. Helper novo com `tx` primeiro entra nesta lista ou permanece
 privado do módulo.
 
 ### Onde mexer, por tarefa
 
 | Tarefa | Comece por |
-|---|---|
+| --- | --- |
 | Campo novo num formulário | [src/lib/validations.ts](src/lib/validations.ts) → `<domínio>Fields.tsx` → `data` de **cada** escrita do serviço → [src/mcp/serializers.ts](src/mcp/serializers.ts) |
 | Regra de negócio nova | `src/lib/<domínio>.ts`, e a `CHECK` na migration se ela for invariante |
 | Ferramenta MCP nova | [src/mcp/scopes.ts](src/mcp/scopes.ts) → `src/mcp/tools/<tipo>.ts` com `defineTool` → `tests/integration/mcpRegistry.test.ts` acusa o esquecimento |
@@ -126,21 +107,14 @@ podem ser qualquer coisa. Tipar a entrada daria uma falsa garantia — o
 `safeParse` é a garantia real.
 
 [src/actions/guard.ts](src/actions/guard.ts) é a única fronteira entre erro de
-domínio e `ActionResult`. Ele também é o único lugar que sabe repassar o
-`redirect()` do Next, que sinaliza por exceção (`digest` começando com
-`NEXT_REDIRECT`) e seria engolido por um `catch` ingênuo.
+domínio e `ActionResult` e repassa o `redirect()` do Next (`NEXT_REDIRECT`).
 
 ---
 
 ## 2. Dinheiro
 
-**Regra 1: `number` nunca participa de operação monetária.** `0.1 + 0.2 ===
-0.30000000000000004`, e o erro acumula a cada soma.
-
-Toda aritmética passa por [src/lib/money.ts](src/lib/money.ts), que usa
-`Prisma.Decimal` — a implementação decimal.js que já vem com o `@prisma/client`,
-sem dependência nova, e o mesmo tipo que o Prisma devolve ao ler colunas
-`DECIMAL`.
+**Regra 1: `number` nunca participa de operação monetária.** Toda aritmética
+passa por [src/lib/money.ts](src/lib/money.ts), com `Prisma.Decimal`.
 
 `number` é permitido em exatamente dois lugares:
 
@@ -151,29 +125,19 @@ sem dependência nova, e o mesmo tipo que o Prisma devolve ao ler colunas
   fim da linha: nada soma depois deles.
 
 Toda escrita no banco passa por `toStorage()`, que devolve **string** com 2
-casas. String e não `number` para que o valor não passe por float no caminho até
-o Postgres.
+casas para que o valor não passe por float até o Postgres.
 
-**Regra 2: o resto dos centavos vai na primeira parcela.** Uma regra de divisão,
-dois pontos de entrada. A aritmética mora em
+**Regra 2: o resto dos centavos vai na primeira parcela.** A aritmética mora em
 [src/lib/installmentSplit.ts](src/lib/installmentSplit.ts) (`splitCents`,
-centavos inteiros, sem imports) e existe separada por um motivo só: o
-formulário precisa da prévia sem arrastar o `Decimal` do Prisma, que é
-server-only, para o navegador.
+centavos inteiros) para a prévia funcionar no cliente sem importar Prisma.
 [src/lib/installments.ts](src/lib/installments.ts) é a porta do servidor:
 `splitInstallments` valida o número de parcelas, o teto de `MAX_INSTALLMENTS` e
 o total mínimo — parcela de zero centavo `transactions_positive_amounts_check`
 recusa — converte de e para `Decimal`, e **delega**. Chamar `splitCents` direto
 no servidor pula as três validações.
 
-Há teste afirmando que as duas portas concordam para uma tabela de totais ×
-parcelas. Ele prova menos do que parece — compara um wrapper com o que ele
-delega — e é bom que prove menos: não há duas fontes para divergir. O que ele
-trava é a conversão de ida e volta entre `Decimal` e centavos.
-
-Invariante: **a soma das parcelas é sempre exatamente o total.** Qualquer
-mudança nessa divisão precisa manter isso, e há teste de propriedade para
-provar.
+Invariante: **a soma das parcelas é sempre exatamente o total.** Os testes
+travam essa propriedade e a conversão entre `Decimal` e centavos.
 
 Ao ler dinheiro de SQL cru, use `::text` no `SELECT` e passe por `money()` —
 nunca `Number()`. Ver `lockDebt` em [src/lib/debts.ts](src/lib/debts.ts).
@@ -193,16 +157,14 @@ Regras:
    passa por [src/lib/dates.ts](src/lib/dates.ts), que só usa `Date.UTC` e
    `getUTC*`. Isso vale também para `prisma/seed.ts` e para os testes.
 2. No limite cliente↔servidor, datas viajam como string `YYYY-MM-DD`
-   (`CalendarDate`) — o formato que o `DatePickerInput` do Mantine 9 emite.
-   Assim o fuso do navegador também sai da conta.
+  (`CalendarDate`), formato emitido pelo `DatePickerInput` do Mantine 9.
 3. `parseCalendarDate` rejeita datas inexistentes (`2026-02-30`), que o
    construtor de `Date` aceitaria transbordando para o mês seguinte.
 4. Dias vindos de configuração do usuário (`closingDay`, `dueDay`) passam por
    `utcDateClamped`, que limita ao último dia do mês.
 5. Duas funções usam componentes **locais** de propósito, e só elas:
    `todayCalendarDate()` e `currentCompetency()`. "Hoje" é um conceito do fuso
-   do usuário — às 22h do dia 20 em São Paulo já é dia 21 em UTC, e oferecer 21
-   como data padrão estaria errado para ele.
+  do usuário, não de UTC.
 6. Ao renderizar, sempre `toLocaleDateString("pt-BR", { timeZone: "UTC" })`. Sem
    o `timeZone`, o navegador desloca a data de volta.
 
@@ -221,61 +183,42 @@ qualquer movimentação de dívida.
 O caso mais importante é o **valor denormalizado**. Há três no sistema:
 
 | Campo | Mantido por | Verificado por |
-|---|---|---|
+| --- | --- | --- |
 | `financial_accounts.current_balance` | `applyToBalance` em todo `$transaction` que escreve transação | `recomputeBalance` |
 | `invoices.total_amount` | `recalcInvoiceTotal` / `recalcInvoiceTotals` | soma dos lançamentos no teste |
 | `debts.remaining_amount` | `writeRemaining`, junto do `status` derivado | `originalAmount − Σ amortizações` |
 
-Nenhuma escrita pode tocar um lado só. Todo teste de integração que altera
-dinheiro afirma sobre **as duas pontas**, e é assim que a invariante fica
-protegida de regressão.
+Nenhuma escrita pode tocar um lado só. Testes que alteram dinheiro afirmam
+sobre as duas pontas.
 
-### Padrões de concorrência já pagos com bug
+### Padrões de concorrência
 
-Estes padrões existem porque a alternativa ingênua falhou em teste. Não os
-simplifique.
+**Get-or-create usa `createMany({ skipDuplicates })`.** `upsert` pode virar
+SELECT + INSERT; capturar uma violação e reler falha porque o Postgres já
+abortou a transação. `skipDuplicates` produz `ON CONFLICT DO NOTHING`. Ver
+`resolveInvoice` e `insertAccountOccurrences`.
 
-**Get-or-create → `createMany({ skipDuplicates })`.** Nem `upsert` nem try/catch
-servem: o Prisma pode traduzir o upsert como SELECT seguido de INSERT, que perde
-a corrida; e uma violação de constraint **aborta a transação** no Postgres,
-então capturar o erro e reler dentro do mesmo `$transaction` falha com *"current
-transaction is aborted"*. `createMany` com `skipDuplicates` compila para `INSERT
-... ON CONFLICT DO NOTHING`, que nunca levanta erro. Ver `resolveInvoice` e
-`insertAccountOccurrences`.
+**Recomputar denormalizado exige `SELECT ... FOR UPDATE` antes de agregar.** Sem
+o lock, operações simultâneas calculam snapshots distintos e a última gravação
+perde valor. Ver `recalcInvoiceTotal` e `lockDebt`.
 
-**Recomputar denormalizado → `SELECT ... FOR UPDATE` antes de agregar.** Sem o
-lock, duas operações simultâneas agregam cada uma o próprio snapshot e a última
-gravação vence, perdendo valor. Com ele, a segunda espera a primeira confirmar
-e, em READ COMMITTED, sua agregação tira um snapshot novo. Ver
-`recalcInvoiceTotal` e `lockDebt`.
+**Estorno lê a pre-image sob o mesmo lock.** Uma leitura anterior à transação
+pode envelhecer antes da escrita. Use `lockTransaction`
+([src/lib/accountBalance.ts](src/lib/accountBalance.ts)); `payInvoice` também
+relê `total_amount` sob lock.
 
-**Estorno lê a pre-image sob o mesmo lock, nunca a leitura de fora.** Editar ou
-apagar um lançamento é desfazer o efeito antigo e aplicar o novo — e o retrato
-lido antes de abrir a `$transaction` pode ter envelhecido no meio, porque entre
-as duas coisas há uma chamada de câmbio. Estornar por ele devolve o valor errado
-à conta errada. `lockTransaction`
-([src/lib/accountBalance.ts](src/lib/accountBalance.ts)) é o único caminho, e
-vale também para o **valor** que a operação vai usar: `payInvoice` relê
-`total_amount` sob o lock, porque uma compra lançada no intervalo muda o que a
-fatura deve.
+**Ordem de lock é consistente.** `recalcInvoiceTotals` trava faturas por
+competência crescente; `debts.ts` trava dívida antes de movimentação. Ordens
+distintas permitem deadlock.
 
-**Ordem de lock consistente.** Faturas são sempre travadas em **ordem crescente
-de competência** — é o que `recalcInvoiceTotals` garante. Iterar um `Set` deixa
-a ordem dependendo do que o Postgres devolveu, e duas operações sobre as mesmas
-duas faturas podem travar em sentidos opostos. Em `debts.ts` a ordem é dívida,
-depois movimentação, nas duas escritas que travam as duas.
+**Materialização usa dois mecanismos de idempotência.** `lastGeneratedAt` torna
+a exclusão de uma pendência definitiva; o índice único
+`(recurring_expense_id, date)` segura execuções simultâneas.
 
-**Idempotência da materialização: dois mecanismos, não um.** A materialização de
-recorrentes usa o marcador `lastGeneratedAt` ("tudo até esta data já foi
-gerado") **e** o índice único `(recurring_expense_id, date)`. O marcador é o que
-faz apagar uma pendência indesejada ser definitivo; o índice é o que segura duas
-execuções simultâneas — o cron e uma escrita, por exemplo.
+### Rede fora da transação
 
-### Chamada de rede nunca dentro de `$transaction`
-
-Resolva o câmbio **antes** de abrir a transação. Uma chamada HTTP lá dentro
-mantém a transação aberta esperando a API, segurando locks por tempo
-indeterminado.
+Resolva o câmbio **antes** de abrir `$transaction`; uma chamada HTTP mantém a
+transação e seus locks abertos enquanto espera a API.
 
 ---
 
@@ -289,47 +232,38 @@ provável do sistema:
   campo que move saldo e fatura. Nunca `amount`.
 - `user.baseCurrency` — a moeda dos relatórios.
 
-Consequência que já causou um bug: somar `convertedAmount` de contas em moedas
-diferentes dá um número sem significado. Agregações fazem uma **segunda**
-conversão, via `resolveRatesToBase`. Ver
+Somar `convertedAmount` de contas em moedas diferentes não tem significado.
+Agregações fazem uma **segunda** conversão via `resolveRatesToBase`. Ver
 [src/lib/reports.ts](src/lib/reports.ts),
 [src/lib/projection.ts](src/lib/projection.ts) e
 [src/lib/people.ts](src/lib/people.ts).
 
 ### Fluxo de caixa e gasto por categoria são números diferentes
 
-Compra no cartão não sai da conta (RN-03.2); o que sai é o pagamento da fatura,
-que não tem categoria. Construir "gasto por categoria" a partir do fluxo de
-caixa jogaria **todo** gasto de cartão em "Sem categoria" e tornaria a
-categorização das compras inútil. Então `getMonthSummary` devolve as duas
-visões:
+Compra no cartão não sai da conta (RN-03.2); o pagamento da fatura sai, mas não
+tem categoria. Por isso `getMonthSummary` devolve duas visões:
 
 - `income` / `expenses` — fluxo de caixa: o que entrou e saiu das contas no mês,
   incluindo pagamento de fatura.
 - `byCategory` / `spendingTotal` — onde o dinheiro foi gasto: despesas de conta
   mais compras no cartão pela data da compra, excluindo pagamento de fatura.
 
-A relação é explícita e tem teste: `expenses = spendingTotal − cardSpending +
-invoicePayments`. Qualquer mudança em uma das visões que esqueça a outra quebra
-essa identidade na hora.
+A relação testada é `expenses = spendingTotal − cardSpending +
+invoicePayments`.
 
-A UI **precisa** rotular a diferença. "Saídas de caixa do mês" e "Gasto por
-categoria" são rótulos distintos de propósito; chamar os dois de "despesas"
-produziria dois números diferentes com o mesmo nome na mesma tela.
+A UI usa rótulos distintos: "Saídas de caixa do mês" e "Gasto por categoria".
 
-Invariante por linha: `amount × exchangeRate = convertedAmount`, garantida por
-`transactions_exchange_rate_check` no banco. Numa compra parcelada em moeda
-estrangeira, isso significa dividir o total na moeda do lançamento e converter
-cada parcela — a soma dos convertidos pode diferir do total convertido em um
-centavo, e essa é a escolha deliberada. A divergência é entre a **soma** e o
-total, nunca dentro de uma linha, e por isso a constraint continua valendo.
+`transactions_exchange_rate_check` garante por linha `amount × exchangeRate =
+convertedAmount`. Compra parcelada em moeda estrangeira divide o total original
+e converte cada parcela; a soma convertida pode diferir do total convertido,
+mas cada linha continua coerente.
 
 **Falta de cotação nunca produz número errado.** O total sai marcado como
 incompleto (`complete: false`) e a UI avisa. Quem escreve no banco lança
 `FxUnavailableError`, que a action traduz em `needsManualFxRate` para o
-formulário pedir a taxa. A exceção é a materialização de recorrentes, que roda
-durante a renderização de página: lá o erro é engolido, a recorrência volta em
-`skipped` e a página renderiza.
+formulário pedir a taxa. Na materialização de recorrentes, a regra afetada volta
+em `skipped`, sem avançar o marcador, para ser tentada novamente pelo cron ou
+por uma escrita posterior.
 
 Moeda de conta, cartão e dívida é **imutável** depois de criada. Trocá-la
 reinterpretaria todo o histórico: R$ 100 viraria US$ 100 sem conversão.
@@ -337,14 +271,10 @@ reinterpretaria todo o histórico: R$ 100 viraria US$ 100 sem conversão.
 ### A moeda base é a exceção: mutável, e por quê
 
 `user.baseCurrency` é configurável em `/dashboard/settings`
-([src/lib/settings.ts](src/lib/settings.ts)) e não compartilha a imutabilidade
-das outras três. O motivo é assimétrico e vale registrar: aquelas são gravadas
-em cada linha e definem o *significado* do valor armazenado; esta só é **lida**,
-como parâmetro da agregação. Trocá-la não reescreve nenhuma coluna — não há
-migration, backfill nem reinterpretação de histórico, e há teste de integração
-que tira um retrato de toda coluna monetária antes e depois da troca e afirma
-que nada mudou
-([tests/integration/settings.test.ts](tests/integration/settings.test.ts)).
+([src/lib/settings.ts](src/lib/settings.ts)). Diferente das moedas gravadas nas
+linhas, ela é apenas parâmetro de agregação; trocá-la não reescreve nem
+reinterpreta valores armazenados. Isso é testado em
+[tests/integration/settings.test.ts](tests/integration/settings.test.ts).
 
 ### A segunda conversão: cotação da competência no passado, de hoje no presente
 
@@ -352,35 +282,27 @@ que nada mudou
 deliberada:
 
 | Pergunta | Onde | Data |
-|---|---|---|
+| --- | --- | --- |
 | "quanto gastei em janeiro" | `getMonthSummary` | último dia da competência |
 | "quanto eu tenho" | `getAccountBalances` | nenhuma (mais recente) |
 | "quanto sai deste mês" | `projection.ts` | nenhuma |
 | "quanto me devem" | `getOpenInvoices`, `getDebtsByCategory`, `people.ts` | nenhuma |
 
-O relatório de um mês fechado não pode mudar de valor todo dia; saldo,
-patrimônio e projeção **são** perguntas sobre o presente, e reexpressá-los pela
-cotação de hoje é o certo. A UI diz isso ao usuário na descrição do campo de
-moeda base.
+Mês fechado usa a cotação do fim da competência para não mudar depois. Posição
+e projeção usam a cotação atual. Enquanto a competência está aberta, o limite é
+hoje.
 
-A conversão **da época por lançamento** já está gravada no `exchangeRate` que
-satisfaz `amount × exchangeRate = convertedAmount`; esta segunda conversão é
-outra coisa — a re-expressão de moedas distintas numa só, que `convertedAmount`
-sozinho não resolve porque está na moeda da conta.
-
-Quando a competência ainda não fechou, a data é hoje: não existe cotação de data
-futura.
+`exchangeRate` continua sendo a conversão histórica do lançamento para a moeda
+da conta; `resolveRatesToBase` reexpressa moedas de contas distintas na moeda
+base.
 
 ### A taxa é arredondada antes de converter, não depois
 
 O invariante por linha `amount × exchangeRate = convertedAmount` só vale porque
 `toStoredRate` reduz a taxa às 4 casas da coluna `exchange_rate` **antes** de
-qualquer multiplicação ([src/lib/fxService.ts](src/lib/fxService.ts)). Gravar
-`rate.toFixed(4)` mas converter com a taxa cheia deixa o invariante falso no
-banco: uma taxa manual de `5,12345678` sobre R$ 1.000,00 diverge em 4 centavos.
-O bug existiu e passava despercebido nos testes porque
-[tests/setup-fx.ts](tests/setup-fx.ts) usava taxas exatas em 4 casas. Hoje o
-Postgres recusaria a linha, e o teste da recusa vive em
+qualquer multiplicação ([src/lib/fxService.ts](src/lib/fxService.ts)). Converter
+com a taxa cheia e só depois persistir `rate.toFixed(4)` viola a constraint. O
+teste da recusa vive em
 [tests/integration/schema.test.ts](tests/integration/schema.test.ts).
 
 ---
@@ -405,10 +327,9 @@ migration escrita à mão: XOR de `account_id`/`credit_card_id`, valores
 positivos, coerência de parcelas, faixa de dias do mês, `remaining <= original`,
 categoria que não é pai de si mesma, e outras. Estão **enumeradas por nome** em
 [tests/integration/schema.test.ts](tests/integration/schema.test.ts), que
-reprova tanto constraint nova sem entrada na lista quanto constraint removida —
-uma contagem em prosa aqui já divergiu do banco uma vez. O Zod valida para dar
-mensagem boa; o `CHECK` garante que nenhum caminho de código escape. Enums em
-`CHECK` precisam de cast explícito: `"status" <>
+reprova constraint nova sem entrada na lista ou constraint removida. O Zod
+valida para dar mensagem boa; o `CHECK` impede que outro caminho escape. Enums
+em `CHECK` precisam de cast explícito: `"status" <>
 'PAID'::"finance"."InvoiceStatus"`.
 
 **Uma `CHECK` só enxerga a própria linha, e isso decide o que não entra.** A
@@ -461,35 +382,27 @@ action vaza mensagem interna.
 
 ## 8. Server Components
 
-Nenhuma das quatro aparece em `tsc --noEmit`, em `next build` ou nos testes.
-Todas foram encontradas abrindo a página. **Verifique cada tela nova no
-navegador.**
+Estas armadilhas não aparecem em typecheck, build ou testes. **Verifique cada
+tela nova no navegador.**
 
-1. **`component={Link}` de um Server Component** → *"Functions cannot be passed
-   directly to Client Components"*. `Link` é uma função e componentes Mantine
-   são client. Use
+1. **`component={Link}` em Server Component:** `Link` é uma função e componentes
+   Mantine são client. Use
    [src/components/ui/AppLink.tsx](src/components/ui/AppLink.tsx) (`LinkButton`,
-   `BackLink`), que é client e concentra a composição. Dentro de um módulo `"use
-   client"`, `component={Link}` é normal.
+   `BackLink`). Em módulo `"use client"`, `component={Link}` é válido.
 
-2. **Notação de ponto em componente client dentro de Server Component** →
-   *"Element type is invalid ... got: undefined"*. Importar um componente client
-   de um Server Component devolve uma **referência**, e propriedades estáticas
-   não sobrevivem: `Table.ScrollContainer` é `undefined`. Use os exports
-   nomeados (`TableScrollContainer`, `TableThead`, …). Em componente client, o
-   ponto funciona.
+2. **Notação de ponto em componente client dentro de Server Component:**
+   propriedades estáticas não sobrevivem à referência client;
+   `Table.ScrollContainer` fica `undefined`. Use exports nomeados como
+   `TableScrollContainer` e `TableThead`.
 
 3. **Import de efeito colateral em Server Component não alcança o cliente.**
-   `import "dayjs/locale/pt-br"` em `layout.tsx` só chegava ao bundle do
-   servidor, e o calendário mostrava "August de 2026". Providers e imports de
-   locale vivem em
+   Providers e imports de locale vivem em
    [src/components/AppProviders.tsx](src/components/AppProviders.tsx), que é
    `"use client"`.
 
-4. **Função utilitária exportada de módulo `"use client"` e chamada do
-   servidor** → *"Attempted to call joinTarget() from the server but joinTarget
-   is on the client"*. Helper compartilhado entre formulário e página vai para
-   `src/lib/`, sem `"use client"`. Ver
+4. **Função exportada por módulo `"use client"` não é utilitário de servidor.**
+   Helper compartilhado entre formulário e página vai para `src/lib/`, sem
+   `"use client"`. Ver
    [src/lib/recurringTarget.ts](src/lib/recurringTarget.ts).
 
 **Corolário sobre `src/lib/`:** um módulo que entra no bundle do cliente não
@@ -518,12 +431,12 @@ Padrão de formulário em modal, repetido em todos os domínios:
 
 - `<Domínio>Fields.tsx` — só os campos, compartilhado entre criar e editar.
 - `Add<Domínio>Button.tsx` / `Edit<Domínio>Button.tsx` — estado e submissão.
-- `Delete<Domínio>Button.tsx` — `modals.openConfirmModal` + `useTransition`.
+- `DeleteEntityButton` — remoção genérica, com confirmação e impacto quando o
+  domínio o expõe.
 
 **Os valores do formulário são declarados com `type`, não `interface`.** O
 TypeScript concede index signature implícita a type aliases, e sem ela o tipo
-não é atribuível ao `Record<string, unknown>` que o `zod4Resolver` espera. Esse
-detalhe causou 6 erros de compilação de uma vez.
+não é atribuível ao `Record<string, unknown>` esperado por `zod4Resolver`.
 
 **`transformValues` do Mantine não alimenta o `validate`.** A validação roda nos
 valores crus. Quando o formulário tem um campo composto (o `Select` único de
@@ -540,10 +453,8 @@ Filtro que vem da URL é validado e ignorado quando inválido, nunca vira erro:
 usuário, não estado interno.
 
 O `PieChart` do Mantine 9 **não tem legenda** — só rótulos sobre as fatias, que
-se sobrepõem quando as fatias são finas.
-[CategoryPie](src/components/CategoryPie.tsx) resolve com uma lista ao lado, e
-agrupa a cauda em "Outras" via `capSlices`: vinte categorias produzem um gráfico
-ilegível e uma legenda maior que ele.
+se sobrepõem em fatias finas. [CategoryPie](src/components/CategoryPie.tsx) usa
+uma lista ao lado e agrupa a cauda em "Outras" via `capSlices`.
 
 `formatCurrency` usa locale `pt-BR` fixo com o código de moeda passado, então
 uma base em dólar sai como `US$ 1.234,56`: símbolo americano, separadores
@@ -551,140 +462,80 @@ brasileiros. É consequência esperada de um app em pt-BR — não um bug de moe
 base — e não vira parâmetro sem que haja preferência de locale para alimentá-lo.
 
 Ordenação alfabética acontece **na aplicação**, com `Intl.Collator`
-([src/lib/sorting.ts](src/lib/sorting.ts)), nunca em `ORDER BY`. O Postgres
-deste projeto está em collation `C.UTF-8`, que ordena por byte: "Água" e "Óleo"
-caem depois de "Zebra". Fazer na aplicação também elimina a dependência da
-collation do banco de produção.
+([src/lib/sorting.ts](src/lib/sorting.ts)), nunca em `ORDER BY`: a collation
+`C.UTF-8` do Postgres ordena por byte e trata acentos incorretamente.
 
 ### Acessibilidade
 
-Alvo: **WCAG 2.2 nível AA**. O portal estava com 53 violações só no painel; hoje
-todas as rotas do app fecham em zero, medidas com axe-core em Chrome real.
+Alvo: **WCAG 2.2 nível AA**, medido com axe-core em Chrome real.
 
-O contraste é resolvido nos **tokens**, não tela a tela. Três decisões carregam
-quase tudo, e as três estão em [src/theme.ts](src/theme.ts) e
-[src/app/globals.css](src/app/globals.css):
-
-| Onde | O quê | Por quê |
-| --- | --- | --- |
-| `primaryShade: { light: 9 }` | teal 9 no claro | O teal 6 rendia **2.55:1** como texto sobre branco *e* como fundo de botão com rótulo branco — era a violação mais repetida |
-| `colors` | tom 9 escurecido em teal, orange, green, yellow, lime | O tom 9 de fábrica não alcança AA nessas cinco: orange dá 4.30, green 4.37, yellow 3.00 |
-| `--mantine-color-dimmed` | gray-6 → gray-7 | `c="dimmed"` é o token mais usado do portal, e gray-6 rende 3.32:1 |
+O contraste é resolvido nos **tokens**, não tela a tela. As decisões ficam em
+[src/theme.ts](src/theme.ts) e [src/app/globals.css](src/app/globals.css):
+`primaryShade.light` usa teal 9; o tom 9 de teal, orange, green, yellow e lime é
+escurecido; `--mantine-color-dimmed` usa gray 7. [src/theme.test.ts](src/theme.test.ts)
+trava esses valores.
 
 **As sobrescritas de `-light-color` em `globals.css` precisam casar a
 especificidade do Mantine.** Ele define os tokens em
 `:root[data-mantine-color-scheme="light"]`, que é 0,2,0; um `:root` seco é 0,1,0
-e perde, mesmo importado depois. Custou uma rodada de medição descobrir isso.
+e perde, mesmo importado depois.
 
 **Cor escolhida pelo usuário não pode carregar texto por conta própria.** As
 categorias vêm de um `ColorInput`, então são hex arbitrário: nenhuma paleta fixa
-cobre uma cor desconhecida. Com `variant="light"` o Mantine pintava o texto com
-a própria cor sobre um fundo tingido dela — 2.17:1 num verde comum.
-[CategoryBadge](src/components/ui/CategoryBadge.tsx) é a fonte única da regra:
-`variant="filled"` e a decisão vai para o `autoContrast`.
+cobre uma cor desconhecida. [CategoryBadge](src/components/ui/CategoryBadge.tsx)
+é a fonte única: `variant="filled"` com `autoContrast`.
 
-**O `luminanceThreshold` do Mantine é 0.3, e está errado.** Ele decide entre
-rótulo preto e branco. Branco sobre luminância L rende `1.05 / (L + 0.05)`;
-preto rende `(L + 0.05) / 0.05`. Os dois se cruzam em `(L + 0.05)² = 1.05 × 0.05`,
-ou seja **L ≈ 0.179**. Com 0.3 a escolha pende para branco cedo demais: o laranja
-`#f76707` (L = 0.295) ganhava rótulo branco a 3.04:1 quando preto dava 6.9. No
-cruzamento o pior caso vale 4.58:1 — daí o limiar garantir AA para *qualquer*
-hex.
+**`luminanceThreshold` é 0.179, não o default 0.3 do Mantine.** É o ponto em
+que o contraste de preto e branco se cruza; o pior caso fica em 4.58:1 e garante
+AA para qualquer hex.
 
-**`aria-hidden` sobre gráfico do Recharts é armadilha.** O Recharts marca o
-`<svg>` como `role="application"` e deixa ele e o grupo das fatias com
-`tabindex="0"`. Envolver isso em `aria-hidden` troca ruído de leitor de tela por
-uma violação pior — `aria-hidden-focus`, o foco pousando num nó que não é
-anunciado. A saída é desligar a camada na origem: `accessibilityLayer: false` via
-`pieChartProps` / `barChartProps`, mais `rootTabIndex: -1` em `pieProps` — note
-`rootTabIndex`, não `tabIndex`, que é o prop com que o `Pie` monta o `<g>`.
-`inert` resolveria também, mas mataria o tooltip de hover junto.
+**Não use `aria-hidden` nos gráficos do Recharts:** seus nós continuam
+focáveis. Desligue a camada na origem com `accessibilityLayer: false` em
+`pieChartProps` / `barChartProps` e `rootTabIndex: -1` em `pieProps`.
 
 O `<caption>` da tabela e os rótulos só-para-leitor usam `.visually-hidden` de
 `globals.css`. Ícone decorativo leva `aria-hidden`; botão só com ícone leva
 `aria-label`.
 
-**Botão só de ícone que o Mantine renderiza por conta própria também precisa de
-rótulo, e o lugar disso é o tema.** Três nascem sem nome acessível — o "x" do
-`Modal`, o do `clearable` de `Select` e `DatePickerInput`
-(`InputClearButton`), e o da `Notification`. Ficam em `components` de
-[src/theme.ts](src/theme.ts) e não no componente que os usa: o modal de
-confirmação nasce do `modals` manager e a notificação do
-`notifications.show`, então não há JSX nosso onde passar o prop. Os dois
-primeiros foram achados pelo passe com modal aberto do `test:a11y`; o terceiro
-não — a notificação some antes de o axe rodar.
+**Ícones criados pelo Mantine recebem rótulo no tema.** O fechamento de `Modal`,
+o `InputClearButton` e o fechamento de `Notification` são configurados em
+[src/theme.ts](src/theme.ts), pois nem sempre existe JSX nosso para rotulá-los.
 
-**O modo escuro não está ligado** — não há toggle e o padrão é `light`. Os
-tokens já foram corrigidos para ele (31 violações → 1), mas o resíduo é
-estrutural: o Mantine resolve `--button-color` **inline, no SSR**, para o esquema
-configurado, então alternar o atributo em runtime não recalcula. Ligar o escuro
-de verdade é recurso, não correção de acessibilidade, e não foi feito.
-
----
+**O modo escuro não está ligado.** O Mantine resolve `--button-color` inline no
+SSR para o esquema configurado; trocar apenas o atributo em runtime não o
+recalcula. Um alternador exige resolver esse comportamento antes.
 
 ---
 
 ## 10. Testes
 
-Dois projects em [vitest.config.mts](vitest.config.mts), e a divisão não é
-estética:
+Há três níveis:
 
-| Project | Onde | Banco | O que testa |
-|---|---|---|---|
-| `unit` | `src/**/*.test.ts`, ao lado do código | nenhum | lógica pura: dinheiro, calendário, divisão de parcelas, derivação de status |
-| `integration` | `tests/integration/**` | `tms_finance_test` real | serviços de `src/lib` contra Postgres, sem mock do Next |
+- `unit` em `src/**/*.test.ts`: lógica pura, sem banco.
+- `integration` em `tests/integration/**`: serviços contra o Postgres
+  `tms_finance_test`, sem mock do Prisma.
+- `npm run test:a11y` em [scripts/a11y-audit.ts](scripts/a11y-audit.ts):
+  axe-core em Chrome real, com dev server e banco populado.
 
-Fora do Vitest, há um terceiro nível:
-
-| Comando | Onde | Precisa de | O que testa |
-|---|---|---|---|
-| `npm run test:a11y` | [scripts/a11y-audit.ts](scripts/a11y-audit.ts) | dev server + Chrome + banco com dados | axe-core em todas as rotas do app, contra WCAG 2.2 AA |
-
-**Duas passagens, e a segunda é a que achava coisa.** A primeira audita as
-rotas; a segunda abre o formulário de cada tela que tem um e audita de novo.
-Todo formulário deste app vive dentro de um `Modal`, e o conteúdo só existe no
-DOM depois do clique — as sete telas com formulário estavam inteiramente fora da
-medição, e o primeiro passe com elas abertas encontrou dois `button-name`
-críticos.
+O a11y audita cada rota e depois abre seu formulário para auditar o conteúdo do
+modal, que antes do clique não existe no DOM.
 
 O script **recusa** quando não alcança as rotas de detalhe ou quando um botão de
 abrir formulário não aparece, em vez de auditar menos telas e sair 0: um gate
 que degrada em silêncio não é gate. Na prática isso significa `npm run db:seed`
 antes.
 
-**Contra o build de produção, exporte `AUTH_TRUST_HOST=true`** — é o que o CI
-faz ao subir o app. Com `NODE_ENV=production` o Auth.js exige que o Host seja
-declarado confiável (na Vercel a plataforma declara por nós, com `npm run dev`
-o modo de desenvolvimento dispensa) e, sem isso, toda rota `/api/auth` responde
-`UntrustedHost`: o login da auditoria vai parar em `/api/auth/error`. A
-navegação para essa página é o que torna a falha ilegível — ela destrói o
-contexto de qualquer `evaluate` pendente, e o CDP devolve `-32000 Inspected
-target navigated or closed` no lugar da causa. Por isso a espera pelo pós-login
-mora fora da página, e o script exige chegar ao `/dashboard`, não apenas sair
-do `/login`.
+Contra build de produção, exporte `AUTH_TRUST_HOST=true`; sem isso o Auth.js
+responde `UntrustedHost`. O script só considera o login concluído ao chegar em
+`/dashboard`.
 
-**A subida do Chrome é handshake, não espera cega.** A porta vem de
-`--remote-debugging-port=0` e é lida do `DevToolsActivePort` que o Chrome
-escreve no perfil. A versão anterior chutava (`9222 + uptime % 300`), o que não
-é sorteio nenhum: `process.uptime()` naquele ponto é sempre pequeno, então uma
-tentativa nova reincidia quase na mesma porta, e um choque virava `Chrome não
-abriu o endpoint do CDP`. E a prontidão se mede pela **aba**, não por
-`/json/version` — aquele responde antes de existir alvo do tipo `page`, e
-conectar nessa janela pega um alvo prestes a ser trocado, devolvendo o mesmo
-`-32000` do parágrafo acima por causa completamente diferente. O orçamento é de
-60s porque o runner do CI ainda segura `next start`, Postgres e seed; o laço sai
-assim que fica pronto, então a folga não custa tempo. A saída do Chrome vai para
-arquivo, e as últimas linhas entram na mensagem de erro: com `/dev/null` a falha
-chegava ao CI sem uma linha de diagnóstico, que foi como esse job passou a
-piscar sem ninguém saber por quê.
+O Chrome escolhe a porta com `--remote-debugging-port=0`; o script a lê de
+`DevToolsActivePort` e espera um alvo `page`, não apenas `/json/version`. O
+handshake tem 60s e inclui as últimas linhas do log do Chrome na falha.
 
-**Por que fora do Vitest:** a regra `color-contrast` do axe compara a cor
-computada do texto com a do fundo pintado atrás dele — precisa de layout e de
-cascata resolvida, e o jsdom não tem nenhum dos dois. Um teste de contraste em
-jsdom **passa sempre**, o que é pior que não ter teste. O par barato dele é
-[src/theme.test.ts](src/theme.test.ts), que roda em milissegundos, trava os
-tokens do tema e roda no `npm test` normal. Os dois se cobrem: o unitário pega
-regressão de token, o script pega combinação nova numa tela.
+O axe fica fora do Vitest porque contraste exige layout e cascata reais, que o
+jsdom não oferece. [src/theme.test.ts](src/theme.test.ts) trava os tokens; o
+script encontra combinações problemáticas nas telas.
 
 Regras:
 
@@ -712,19 +563,11 @@ Regras:
 - O global setup se recusa a rodar se `DATABASE_URL` não contiver
   `tms_finance_test`.
 
-Nota de operação: rodar a suíte com o `npm run dev` ativo em WSL já produziu uma
-falha isolada por contenção de recurso, contra `testTimeout: 20_000`. Pare o dev
-server antes de rodar os testes.
+Pare o dev server antes dos testes para evitar contenção de recursos em WSL.
 
 ---
 
 ## 11. Deploy
-
-**O runtime é Node 22**, declarado em `.nvmrc` e em `engines` do
-[package.json](package.json) — os dois têm de continuar batendo, ou o `npm ci`
-deixa de reclamar e a divergência só aparece em produção. `@types/node` ainda
-está na linha 20.x, o que é conservador e não perigoso: ele descreve menos API
-do que existe, nunca mais. Quando subir, sobe sozinho.
 
 Dois scripts de build, porque os dois ambientes querem coisas diferentes:
 
@@ -752,13 +595,10 @@ Cuidados do lado da Vercel:
 - O seed se recusa a rodar com `NODE_ENV=production` ou `VERCEL_ENV=production`.
   Mantenha essa guarda.
 
-As 30 dependências são pinadas exatas, por reprodutibilidade, e quem as move é o
-Renovate ([renovate.json](renovate.json)). O agrupamento não é estético: Mantine,
-Prisma e Next saem em PR único porque versões desalinhadas dentro de cada bloco
-quebram em runtime, e `next-auth` e o SDK do MCP saem **isolados** porque o
-primeiro gateia todo o `/dashboard` e o segundo gateia a escrita do agente — os
-dois estão em beta ou major recente, e revisar isso no meio de um lote de
-dezoito bumps é como não revisar.
+As dependências são pinadas e atualizadas pelo Renovate
+([renovate.json](renovate.json)). Mantine, Prisma e Next são agrupados por
+compatibilidade interna; `next-auth` e o SDK MCP ficam isolados por controlarem
+autenticação e escrita do agente.
 
 ---
 
@@ -766,39 +606,15 @@ dezoito bumps é como não revisar.
 
 - Comentários em **pt-BR**; mensagens de commit em **inglês** (`tipo(escopo):
   descrição`).
-- Comentário é direto. Diz **por que**, nunca o que a linha faz, e só quando o
-  código não consegue dizer sozinho: uma armadilha de concorrência, um campo que
-  parece intercambiável e não é, uma alternativa que falha.
-- Curto não é críptico. Corte a narrativa, não a informação — quem lê tem de
-  entender sem decifrar. Uma ou duas linhas bastam para comentário inline.
-- **O cabeçalho do módulo é exceção ao tamanho, não à disciplina.** Pode ocupar
-  um parágrafo, ou uma tabela, porque é onde mora o que não cabe em linha
-  nenhuma: o que o módulo existe para impedir, o contrato que ele impõe a quem
-  chama, e a alternativa óbvia que não funciona. O que ele não faz é enumerar as
-  funções do arquivo, repetir as assinaturas nem contar como o módulo chegou ao
-  formato atual — isso o código ao lado já diz, e envelhece sozinho. Cabeçalho
-  que se lê inteiro sem aprender nada é ruído, só que longo.
-- Campo de interface ou prop recebe comentário quando o tipo não diz o que o
-  leitor precisa: unidade, faixa, invariante, ou qual de dois campos parecidos é
-  o certo. "Na moeda da conta — é este que moveu o saldo" ganha o seu lugar;
-  "ícone opcional" sobre `icon?: LucideIcon` não.
-- Boa parte dos comentários deste repositório documenta um bug já pago. O que
-  fica é a **regra que o bug produziu**, não a crônica do refactor que a
-  produziu — "fonte única: duas listas espelhadas divergiam e a tela ficava
-  velha conforme quem escrevesse", e não "antes eram duas tabelas, o MCP
-  revalidava uma coisa e a action outra". Antes de apagar um comentário que
-  parece óbvio, confira se não é o aviso que impede o bug de voltar.
+- Comentário explica **por que** o código existe: contrato, invariante,
+  alternativa que falha, unidade ou faixa que o tipo não expressa. Não repete a
+  linha nem narra o histórico da refatoração.
+- Cabeçalho de módulo pode ser maior para registrar o contrato do conjunto, mas
+  não enumera funções nem repete assinaturas.
 - Comentário em TypeScript não cita documento, seção, RN, fase nem histórico de
-  dependência: isso envelhece sem ninguém notar e não ajuda quem está lendo a
-  linha. Se a informação importa ali, escreva a informação, não o ponteiro.
-- Banner que separa seções dentro de um arquivo é permitido, e é sintoma: ele só
-  ajuda quando o arquivo é grande, e arquivo grande costuma ser dois módulos que
-  ainda não se separaram. Antes de acrescentar um, pergunte se aquela seção não
-  deveria ser um arquivo.
+  dependência. Escreva a informação relevante, não o ponteiro.
 - **A exceção é o SQL de migration, que cita RN.** Migration é append-only: o
-  SQL daquele arquivo nunca muda, então a citação não pode divergir do código ao
-  lado dela — e é exatamente ali que alguém pergunta por que uma `CHECK` existe.
-  O motivo de proibir em TypeScript é o envelhecimento, e ele não se aplica.
+  SQL não muda e a citação explica por que uma `CHECK` existe.
 - Componentes recebem `props` num objeto tipado e desestruturado na primeira
   linha da função.
 - Nomes de domínio em português na UI e nos dados (`descricao` em teste,
@@ -820,85 +636,56 @@ dezoito bumps é como não revisar.
 Um endpoint MCP em `POST /api/agent/mcp` dá a um agente externo leitura e
 escrita sobre os dados de um usuário, autenticado por token opaco com escopos.
 [src/app/api/agent/mcp/route.ts](src/app/api/agent/mcp/route.ts) é a entrada;
-[src/mcp/](src/mcp/) é a casca; os serviços de `src/lib/` não foram tocados.
-
-Isto foi baratíssimo de construir por um motivo, e o motivo é a regra de Três
-camadas:
-**todo serviço recebe `userId` explícito, nunca chama `auth()`, e escopa toda
-consulta por ele.** A camada de serviço já era uma API sem sessão. O trabalho
-foi escrever uma segunda casca sobre ela.
+[src/mcp/](src/mcp/) é a casca sobre os mesmos serviços de `src/lib/` usados
+pela UI.
 
 ### `src/mcp/` é irmã de `src/actions/`, não cliente dela
 
-```
+```text
 src/app/**/page.tsx        Server Component  ─┐
 src/actions/<domínio>.ts   Server Action     ─┼→ src/lib/<domínio>.ts
 src/mcp/tools/*.ts         MCP tool          ─┘
 ```
 
-A duplicação das duas cascas é deliberada. Duas diferenças a sustentam:
+A duplicação das cascas é deliberada:
 
-1. Toda action começa com `requireUser()`, que faz `redirect("/login")`. É por
-   isso que [src/actions/guard.ts](src/actions/guard.ts) precisa repassar o
-   `NEXT_REDIRECT`. Em `src/mcp/` esse caminho **não existe**: a autenticação é
-   bearer token e a falha é um 401 antes do guard. Repassar redirect ali seria
-   código morto.
-2. `ActionResult` carrega mensagem em pt-BR pronta para um formulário Mantine. O
-   agente precisa de erro **classificado** — um `code` estável sobre o qual
-   decidir, e um `retry` dizendo o que mudar.
+1. Actions autenticam por sessão e podem redirecionar; MCP autentica por bearer
+   token e responde 401.
+2. Actions devolvem `ActionResult` para formulários; MCP devolve erro
+   classificado com `code` e `retry`.
 
 O que as duas compartilham é o que importa: os schemas de
 [src/lib/validations.ts](src/lib/validations.ts), sem alteração. O agente não
-consegue gravar nada que a UI recusaria. E isso rende no protocolo: o SDK valida
-o `inputSchema` declarado no seam e devolve **as mensagens em pt-BR do próprio
-módulo** — `"Data inválida"` para `2026-02-30`, sem uma linha escrita para isso.
+consegue gravar nada que a UI recusaria, e o SDK expõe as mesmas mensagens em
+pt-BR pelo `inputSchema`.
 
 ### Dinheiro sai como string
 
-Dinheiro permite `number` na borda de saída "porque nada soma depois dela", e
-para a UI é verdade. Para um LLM não é: ele *vai* somar o que receber. Então
-[src/mcp/serializers.ts](src/mcp/serializers.ts) emite string de 2 casas, e a
-`description` de cada ferramenta manda usar as agregações prontas.
+Como o consumidor pode recalcular os valores,
+[src/mcp/serializers.ts](src/mcp/serializers.ts) emite dinheiro como string de 2
+casas. As descrições orientam a usar agregações prontas.
 
-Pelo mesmo motivo de Multi-moeda, fluxo de caixa e gasto por categoria saem com
-**nomes distintos** (`cash_flow.cash_out` × `spending.total`) e um campo
-`relation` com a identidade entre eles. A exigência de rotular a diferença é
-mais forte aqui que na UI: o agente escreve prosa sobre os números, e dois
-valores diferentes com o mesmo nome produzem uma frase errada.
-
-Cor de categoria é descartada em toda projeção: é dado de renderização.
+Fluxo de caixa e gasto por categoria usam nomes distintos
+(`cash_flow.cash_out` e `spending.total`) e um campo `relation` com a identidade
+entre eles. Cor de categoria, dado de renderização, não sai nas projeções.
 
 ### O nome da ferramenta é escrito uma vez
 
 Ferramenta nova entra por `defineTool` ou `defineDestructiveTool`
 ([src/mcp/define.ts](src/mcp/define.ts)), nunca por `server.registerTool` direto.
-A forma manual repetia o nome três vezes — no registro, no `tool:` do guard e em
-[src/mcp/scopes.ts](src/mcp/scopes.ts) — e o schema duas, como `inputSchema` e
-como `schema` da validação. Divergir em qualquer uma era silencioso: o
-`tools/list` anunciaria uma coisa e a validação aplicaria outra, ou a auditoria
-gravaria o nome errado.
+Isso mantém nome e schema únicos. [tests/integration/mcpRegistry.test.ts](tests/integration/mcpRegistry.test.ts)
+compara o registro real com `TOOL_SCOPES` e verifica a primeira rodada das
+ferramentas destrutivas.
 
-O helper come duas dessas ocorrências. A terceira é fechada por
-`tests/integration/mcpRegistry.test.ts`, que registra num `McpServer` de mentira
-e compara os nomes de fato registrados com as chaves de `TOOL_SCOPES` — e que
-chama o callback registrado de cada destrutiva para afirmar que a primeira
-chamada devolve `input_required`. `src/mcp/scopes.test.ts` não podia fazer isso:
-as listas de `scopes.ts` são a única fonte que ele conhece, então ele comparava
-o mapa consigo mesmo.
-
-`defineTool` faz uma erasure de tipo sobre `registerTool`, e ela é necessária: o
-SDK deriva o tipo dos argumentos por condicional sobre o `inputSchema`, e um
-genérico ainda não resolvido a mantém diferida — nenhuma das duas sobrecargas
-casa. A erasure fica dentro do helper, uma vez; o call site continua tipado.
+`defineTool` concentra uma erasure necessária pelas sobrecargas genéricas do
+SDK; os call sites continuam tipados.
 
 ### Leitura não materializa recorrentes
 
-O painel materializa durante a renderização (Estado atual e lacunas, "é escrita
-num GET"), e para
-um humano abrindo uma página isso é aceitável: idempotente e barato. Para um
-chamador de máquina que pode disparar cem leituras, escrita implícita em leitura
-é armadilha. `get_balance_projection` expõe `pending_count` e o agente chama
-`materialize_recurring` **explicitamente**, sob escopo de escrita.
+Leituras não produzem ocorrências. Na aplicação web, o cron diário e as escritas
+de recorrência chamam `materializeDue`; no MCP, `get_balance_projection` expõe
+`pending_count` e o agente chama `materialize_recurring` **explicitamente**, sob
+escopo de escrita.
 
 ### Remoção em cascata é em duas fases
 
@@ -909,42 +696,29 @@ o impacto em [src/lib/deletionImpact.ts](src/lib/deletionImpact.ts) e devolve
 `inputRequired({ inputRequests: { confirm }, requestState })`.
 
 O risco que isto endereça é específico. Este app **registra** transações, não
-movimenta dinheiro: não há transferência a reverter nem terceiro lesado. O único
-dano irreversível é **perda silenciosa de histórico**. Um lançamento errado se
-corrige editando; uma conta apagada leva todos os lançamentos dela por
-`onDelete: Cascade` e não volta. Daí o teto de valor por operação ter sido
-descartado como cerimônia sem função, e a proteção mirar só a cascata.
+movimenta dinheiro. O dano irreversível é a perda silenciosa de histórico por
+`onDelete: Cascade`; por isso a confirmação protege cascatas, não valores.
 
-Por que o padrão multi-round-trip do protocolo em vez de um parâmetro
-`confirmationToken`: a pergunta vai **ao cliente**, não ao agente. Um host com
-humano na frente exibe o prompt; sem humano, o agente decide, mas tendo lido o
-impacto.
+O protocolo pergunta ao **cliente**, que pode exibir a confirmação a um humano;
+um parâmetro comum perguntaria apenas ao agente.
 
 O orçamento dessa resposta é `AGENT_CONFIRM_TTL_SECONDS`, default **120s**
 ([src/mcp/confirm.ts](src/mcp/confirm.ts)). Passou disso, o `requestState`
-expirou e a remoção é recusada — um humano que leve três minutos para decidir
-recomeça. O `roundTimeoutMs` de 600s que aparece no SDK não governa isto: ele é
-o `DEFAULT_LEGACY_SHIM_ROUND_TIMEOUT_MS`, do caminho que a seção abaixo declara
-impossível em serving stateless.
+expira e a remoção é recusada. O `roundTimeoutMs` do legacy shim não governa
+esse prazo.
 
-**Integridade do `requestState`.** Ele volta pelo cliente e é entrada controlada
-pelo atacante na reentrada; a spec exige HMAC/AEAD e o SDK não aplica nada por
-default. [src/mcp/confirm.ts](src/mcp/confirm.ts) usa o
-`createRequestStateCodec` do próprio SDK, com `bind` no `clientId` (o id do
-token) e no método — o MUST de user-binding. O `verify` entra em
-`ServerOptions.requestState.verify`, que roda **antes** do handler: state
-adulterado vira `-32602` e nunca chega à ferramenta. O `bind` cobre principal e
-método, **não os argumentos** — conferir que o state foi emitido para *este* id
-é trabalho do `readConfirmation`, e há teste para cada forma de forjar.
+**Integridade do `requestState`.** Como o valor volta pelo cliente,
+[src/mcp/confirm.ts](src/mcp/confirm.ts) usa `createRequestStateCodec` com HMAC e
+`bind` no `clientId` e no método. `ServerOptions.requestState.verify` rejeita
+state adulterado antes do handler; `readConfirmation` confere os argumentos,
+que não fazem parte do `bind`.
 
-**Mecânica de protocolo que custou tempo para descobrir.** O `input_required`
-existe só na revisão **2026-07-28**, e o `initialize` **negocia para 2025-11-25**
-— `SUPPORTED_PROTOCOL_VERSIONS` do SDK não lista a 2026-07-28. Ela não é
-negociada por handshake: é declarada **por requisição**, o que é o que a mantém
-stateless. Esse pressuposto está travado: `MCP_PROTOCOL_REVISION` em
+`input_required` pertence à revisão **2026-07-28**, que não aparece em
+`SUPPORTED_PROTOCOL_VERSIONS`; o `initialize` negocia 2025-11-25. A revisão é
+declarada por requisição para manter o endpoint stateless. O pressuposto está
+travado por `MCP_PROTOCOL_REVISION` em
 [src/mcp/confirm.ts](src/mcp/confirm.ts) e um teste em `confirm.test.ts` que
-reprova no dia em que o SDK promover a revisão — sem ele, este parágrafo
-apenas viraria falso, sem nada falhar.
+reprova se o SDK promover a revisão.
 
 Um `tools/call` 2026-era precisa de:
 
@@ -953,10 +727,8 @@ Um `tools/call` 2026-era precisa de:
   `io.modelcontextprotocol/clientCapabilities` (com `elicitation`).
 
 Sem isso a conexão é tratada como 2025-era, e aí o legacy shim tentaria um
-`elicitation/create` server→client — impossível em serving stateless. O
-resultado é um erro claro e **nenhuma remoção**: falha fechado, que é o
-comportamento certo, mas significa que um cliente incapaz de elicitação
-simplesmente não usa as ferramentas destrutivas.
+`elicitation/create` server→client, impossível em serving stateless. A chamada
+falha sem remover nada; clientes sem elicitação não usam ferramentas destrutivas.
 
 ### Credenciais
 
@@ -964,32 +736,23 @@ Token opaco de 256 bits guardado **só** como HMAC-SHA256 com o pepper de
 `AGENT_TOKEN_PEPPER` ([src/lib/agentTokens.ts](src/lib/agentTokens.ts)).
 
 - **Não JWT:** JWT não é revogável antes de expirar, e a única forma de
-  invalidar em massa seria reciclar `AUTH_SECRET` — que derrubaria todas as
-  sessões web. O oposto de contenção. Aqui revogar é um `UPDATE`.
+  invalidar em massa afetaria também as sessões web. Aqui revogar é um `UPDATE`.
 - **Não bcrypt:** 256 bits aleatórios não são força-brutáveis, então o KDF não
-  compra nada e entraria no caminho quente de toda chamada. O pepper dá a defesa
-  em profundidade que interessa: dump do banco sem o ambiente não monta a tabela
-  de hashes.
+  acrescenta segurança útil. O pepper protege um dump sem acesso ao ambiente.
 - Emissão por `npm run agent:token` — o valor em claro existe uma vez, no
-  stdout. Uma tela faria o token passar pelo histórico do navegador e pelo
-  payload de RSC.
+  stdout; não há tela que o persista no navegador.
 - `setup:write` está no vocabulário mas **sem ferramenta**, e a razão é uma só:
   criar conta ou cartão fixa a moeda, que é imutável depois (Multi-moeda). Errar
   ali não se corrige editando.
 
-  A moeda base **não** cai nessa razão — ela é mutável (Multi-moeda), então
-  `set_base_currency` seria a primeira ferramenta legítima do escopo. Decidido
-  junto com a tela de configurações **não** criá-la: trocar a moeda base
-  reexpressa todo número que o
-  agente lê depois, e é a decisão que mais muda a interpretação dos relatórios
-  por menos esforço. Quem a toma deve estar olhando a tela onde a consequência
-  está escrita. Configuração fica no navegador — e agora essa frase vale sem
-  exceção, porque a tela existe (`/dashboard/settings`).
+  `set_base_currency` também não existe: embora a moeda base seja mutável,
+  trocá-la reexpressa todos os relatórios. Essa decisão fica na tela de
+  configurações, onde a consequência está visível.
 
 `/api/agent/mcp` **não** entra no matcher de [src/proxy.ts](src/proxy.ts), que
 cobre só `/dashboard/:path*`. A autenticação é bearer token, e a doc do Next 16
-diz que proxy "não é solução de autorização" — deixá-lo interceptar produziria
-um redirect para `/login` em vez de um 401 honesto.
+não trata proxy como autorização. Interceptar o endpoint produziria redirect
+para `/login` em vez de 401.
 
 ### Auditoria: o que ela pega e o que não pega
 
@@ -999,109 +762,42 @@ uma remoção; uma linha dessas sem o `OK` correspondente diz que o agente pediu
 viu o impacto e desistiu.
 
 **Todas as ferramentas são registradas para todo token**, e a recusa por escopo
-acontece no guard. Filtrar o `tools/list` por escopo foi tentado e revertido:
-uma ferramenta não registrada não é chamável, então a tentativa morre como
-`-32602 "Tool not found"` **antes** do guard, sem deixar rastro — e um token
-só-leitura sondando `delete_account` é exatamente o evento que se quer ver
-depois. O custo é uma ida e volta desperdiçada; em troca a recusa é auditada e
-**nomeia o escopo faltante**, acionável quando a negação foi má configuração.
+acontece no guard. Filtrar `tools/list` faria a tentativa morrer antes do guard,
+sem auditoria. O registro completo preserva o rastro e informa o escopo ausente.
 
 Duas lacunas reais, pelo mesmo mecanismo — o seam do SDK recusa antes do guard:
 
 - violação do `inputSchema` declarado (valor negativo, data inexistente);
 - `requestState` adulterado.
 
-As duas produzem resposta correta ao agente e **não** geram linha. Fechá-las
-exigiria declarar `inputSchema` frouxo, o que tiraria do `tools/list` a única
-forma de o agente saber como chamar as ferramentas — troca ruim. As categorias
-que importam num incidente (escopo, cota, erro de domínio, confirmação, sucesso)
-são todas auditadas.
+As duas produzem resposta correta, mas **não** geram linha. Auditá-las exigiria
+afrouxar `inputSchema` e degradar a descoberta das ferramentas. Escopo, cota,
+erro de domínio, confirmação e sucesso continuam auditados.
 
 Rate limit é janela deslizante em SQL sobre `rate_limit_hits`
 ([src/lib/rateLimit.ts](src/lib/rateLimit.ts), consumido por
 [src/lib/agentRateLimit.ts](src/lib/agentRateLimit.ts)). No Postgres e não em
 memória porque o Fluid Compute reusa instâncias mas não garante que duas
-chamadas caiam na mesma: um bucket em processo contaria cada instância
-separadamente e o limite real seria N vezes o configurado — pior que não ter
-limite, porque parece ter. Contém loop desgovernado, não fraude.
-
-A contagem já morou na própria trilha de auditoria, que dispensava tabela nova.
-Não servia, e a razão vale para qualquer limitador: **a tentativa é gravada
-antes de ser contada**. A auditoria só é escrita depois de a ferramenta rodar,
-então N chamadas simultâneas contavam todas zero e passavam juntas — o padrão
-exato de uma ferramenta automatizada. Com a gravação antes, cada requisição
-enxerga ao menos a própria linha e o excedente fica limitado ao que estiver de
-fato em voo. A mesma tabela serve login e cadastro; os baldes estão em
-`rateLimit.ts`.
+chamadas caiam na mesma; um bucket em processo multiplicaria o limite pelo
+número de instâncias. **A tentativa é gravada antes de ser contada**, evitando
+que chamadas simultâneas leiam o mesmo total antigo. A tabela também atende
+login e cadastro.
 
 ---
 
-## 14. Estado atual e lacunas
+## 14. Limitações conhecidas
 
-**Fases 0 a 6 concluídas — as RN-01 a RN-05 estão implementadas, sem exceção.**
-A última a fechar foi a primeira metade da RN-01.2, hoje a tela
-`/dashboard/settings` sobre [src/lib/settings.ts](src/lib/settings.ts); o motivo
-de a moeda base ser a única moeda mutável está em Multi-moeda.
-
-Lacunas reais, não escondidas. Aqui fica **o mecanismo** — o que é, por que é
-assim, o que quebra; a fila e a prioridade ficam no `ACTION-PLAN.md`, e o número
-entre parênteses é o item de lá que resolve cada uma. Um dono cada: duas listas
-sem referência mútua divergem.
-
-- Não há teste automatizado de UI **funcional** (46). `npm run test:a11y` cobre
-  acessibilidade em todas as rotas com axe-core em Chrome real, e desde o passe
-  de modais também com cada formulário aberto — mas não exercita fluxo:
-  submissão, estado de erro e as armadilhas de Server Components seguem
-  dependendo de verificação manual no navegador, e por isso ela não é opcional.
-  O tema escuro continua fora da medição, e vai continuar enquanto não houver
-  alternador: hoje ele é inalcançável (Acessibilidade).
-- `deletePerson` remove o histórico de dívidas quitadas junto (cascade). Os
-  lançamentos no fluxo de caixa permanecem, mas o agrupamento por dívida é
-  perdido. Recusamos apenas quando há posição em aberto.
-- Ajustar uma cobrança de recorrente no cartão corrige **aquele ciclo**; os
-  próximos exigem editar a recorrência. Isso é intencional, mas a UI só diz isso
-  num aviso dentro do modal.
-- A materialização de recorrentes saiu da renderização (31). Quem a dispara é
-  `/api/cron/materialize-recurring`, diário, e as escritas de
-  [src/actions/recurring.ts](src/actions/recurring.ts) — senão a recorrência
-  recém-criada esperaria até o dia seguinte. O horizonte não é mais "a
-  competência que o usuário abriu": `materializationHorizon` pergunta às próprias
-  regras até onde ir, e uma anual pede até o mês do aniversário enquanto uma
-  mensal pede o mês seguinte. Consequência: navegar para um mês além desse
-  horizonte mostra projeção sem as ocorrências daquele mês, e a tela de
-  recorrentes avisa quais ainda não foram geradas.
-- Só a página de um cartão tem algo próximo de paginação — faturas pagas
-  recolhidas num accordion (28). `listRecentTransactions` limita as linhas e as
-  demais listas trazem tudo; com anos de histórico isso vira problema.
-- **A remoção é recusada com mensagem e confirmada com número** (23).
-  `accountDeletionBlocker` e `categoryDeletionBlocker` são fonte única — o
-  serviço recusa por eles e [src/lib/deletionImpact.ts](src/lib/deletionImpact.ts)
-  os consulta, em vez de reescrever a regra —, então conta com fatura paga ou
-  movimentação de dívida, e categoria exigida por recorrente ou dívida, param
-  em `InvalidOperationError` em pt-BR e não em erro cru do Postgres. No caso
-  **permitido**, `DeleteEntityButton` — único botão de remoção do app — mostra o
-  que cascateia via `DeletionImpactPreview`, para os cinco alvos que existem em
-  `DELETION_TARGETS`. A contagem é buscada só depois de
-  o modal abrir — medi-la ao renderizar a lista custaria uma consulta por linha
-  —, e por isso o botão "Remover" nasce habilitado e é desabilitado por
-  `modals.updateModal` quando o impacto chega com `blockedBy`. As quatro
-  remoções restantes (compra, transação, recorrente, movimentação) não têm alvo
-  em `DELETION_TARGETS` e seguem com texto fixo.
-- **A revogação de sessão só é aplicada no runtime Node.** A comparação de
-  `passwordChangedAt` contra o `authTime` do token vive no callback `jwt` de
-  [src/auth.ts](src/auth.ts), porque consulta o Postgres;
-  [src/auth.config.ts](src/auth.config.ts), que o proxy carrega no edge, não
-  pode. Um cookie revogado ainda passa pelo proxy e é cortado no primeiro
-  `auth()` — o que gateia dado, porque toda página e toda action começam por
-  `requireUser()`. O custo seria uma consulta por requisição, que o
-  `React.cache()` de [src/lib/session.ts](src/lib/session.ts) deduplica.
-- **O veredito `INVALID_INPUT` é inalcançável em produção.** Toda ferramenta
-  declara o *mesmo* objeto zod como `inputSchema` do seam e como `schema` do
-  guard, e o SDK lança `InvalidParams` antes de chamar o handler — então o
-  `safeParse` de [src/mcp/guard.ts](src/mcp/guard.ts), única origem do veredito,
-  nunca dispara, e a recusa não deixa linha na trilha (Superfície de agente). Os
-  testes que o afirmam passam porque
-  [tests/mcpHarness.ts](tests/mcpHarness.ts) chama `runTool` direto, sem o seam:
-  eles provam que o guard valida, não que a trilha registre.
-  `tests/integration/mcpRegistry.test.ts` **não** fecha isso: ele chama o
-  callback registrado, que é o handler, e não o seam que roda antes dele.
+- Não há teste automatizado de UI funcional. `npm run test:a11y` cobre
+  acessibilidade, mas submissão, estados de erro e integração entre Server e
+  Client Components ainda exigem validação manual no navegador.
+- `deletePerson` remove por cascade o histórico das dívidas quitadas. Os
+  lançamentos permanecem no fluxo de caixa, mas perdem o agrupamento por dívida;
+  a remoção só é recusada quando há posição em aberto.
+- Ajustar uma cobrança recorrente no cartão corrige apenas aquele ciclo. Os
+  seguintes exigem editar a regra de recorrência.
+- Com exceção das transações recentes e das faturas recolhidas na página do
+  cartão, as listas não têm paginação e crescem com todo o histórico.
+- A revogação por `passwordChangedAt` ocorre no runtime Node, em
+  [src/auth.ts](src/auth.ts), porque consulta o Postgres. O proxy edge ainda
+  aceita o cookie, mas o primeiro `auth()` antes de qualquer acesso a dados o
+  rejeita.
