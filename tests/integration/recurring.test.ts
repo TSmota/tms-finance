@@ -814,7 +814,7 @@ describe("definições", () => {
     expect((await recomputeBalance(account.id)).toFixed(2)).toBe("900.00");
   });
 
-  it("apagar remove o item de uma fatura em aberto e recalcula o total", async () => {
+  it("apagar remove o item de uma fatura em aberto, que some por ficar vazia", async () => {
     const user = await makeUser();
     const card = await makeCreditCard(user.id);
     const category = await makeCategory(user.id);
@@ -827,11 +827,7 @@ describe("definições", () => {
     await materializeRecurring(user.id, 2026, 8, NOW);
     await deleteRecurringExpense(user.id, recurring.id);
 
-    const invoices = await listCardInvoices(user.id, card.id);
-
-    expect(invoices).toHaveLength(1);
-    expect(invoices[0]!.itemCount).toBe(0);
-    expect(invoices[0]!.total.toFixed(2)).toBe("0.00");
+    await expect(listCardInvoices(user.id, card.id)).resolves.toEqual([]);
   });
 
   it("lista com inativas no fim", async () => {

@@ -1,7 +1,7 @@
 import type { CreditCard, Currency, Invoice } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
-import { NotFoundError, PaidInvoiceError } from "@/lib/errors";
+import { InvalidOperationError, NotFoundError, PaidInvoiceError } from "@/lib/errors";
 import { money, toStorage, type Money } from "@/lib/money";
 import type { Tx } from "@/lib/accountBalance";
 import { invoiceCycleDates, type Competency } from "@/lib/invoiceCycle";
@@ -10,7 +10,8 @@ import { invoiceCycleDates, type Competency } from "@/lib/invoiceCycle";
  * Faturas de cartão.
  *
  * A fatura nasce quando o primeiro lançamento da competência é registrado, não
- * por rotina agendada. `resolveInvoice` é o único caminho para obtê-la.
+ * por rotina agendada, e some quando o último sai. `resolveInvoice` é o único
+ * caminho para obtê-la; `recalcInvoiceTotal`, o único que a apaga.
  */
 
 interface ResolveInvoiceParams {
@@ -45,6 +46,12 @@ interface ResolveInvoiceParams {
  * recebem, e o total de uma fatura paga é o valor que já saiu da conta: subi-lo
  * deixaria a fatura `PAID` por um número que ninguém pagou. A guarda vive aqui
  * porque este é o único caminho — nos chamadores, seriam três cópias.
+ *
+ * **Repete uma vez se a linha sumir.** `recalcInvoiceTotal` apaga a fatura que
+ * fica vazia, e ela pode ser a que estamos esperando: quem espera no `FOR
+ * UPDATE` volta sem linha alguma quando a exclusão concorrente commita. A
+ * segunda passada reinsere — o `ON CONFLICT DO NOTHING` vira INSERT de verdade
+ * — e a linha nova é nossa até o fim da transação.
  */
 export async function resolveInvoice(tx: Tx, params: ResolveInvoiceParams): Promise<Invoice> {
   const { userId, card, competency } = params;
@@ -56,30 +63,40 @@ export async function resolveInvoice(tx: Tx, params: ResolveInvoiceParams): Prom
     year: competency.year,
   };
 
-  await tx.invoice.createMany({
-    data: [{ ...identity, userId, closingDate, dueDate, currency: card.currency }],
-    skipDuplicates: true,
-  });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await tx.invoice.createMany({
+      data: [{ ...identity, userId, closingDate, dueDate, currency: card.currency }],
+      skipDuplicates: true,
+    });
 
-  await tx.$queryRaw`
-    SELECT id FROM finance.invoices
-     WHERE credit_card_id = ${card.id}::uuid
-       AND month = ${competency.month}
-       AND year = ${competency.year}
-     FOR UPDATE`;
+    await tx.$queryRaw`
+      SELECT id FROM finance.invoices
+       WHERE credit_card_id = ${card.id}::uuid
+         AND month = ${competency.month}
+         AND year = ${competency.year}
+       FOR UPDATE`;
 
-  const invoice = await tx.invoice.findUniqueOrThrow({
-    where: { creditCardId_month_year: identity },
-  });
+    const invoice = await tx.invoice.findUnique({
+      where: { creditCardId_month_year: identity },
+    });
 
-  if (invoice.status === "PAID") {
-    throw new PaidInvoiceError(
-      `A fatura de ${competency.month}/${competency.year} já foi paga. ` +
-        "Desfaça o pagamento antes de lançar nela.",
-    );
+    if (!invoice) {
+      continue;
+    }
+
+    if (invoice.status === "PAID") {
+      throw new PaidInvoiceError(
+        `A fatura de ${competency.month}/${competency.year} já foi paga. ` +
+          "Desfaça o pagamento antes de lançar nela.",
+      );
+    }
+
+    return invoice;
   }
 
-  return invoice;
+  throw new InvalidOperationError(
+    `Não foi possível abrir a fatura de ${competency.month}/${competency.year}. Tente de novo.`,
+  );
 }
 
 /**
@@ -93,6 +110,16 @@ export async function resolveInvoice(tx: Tx, params: ResolveInvoiceParams): Prom
  *
  * Faturas são sempre travadas em ordem crescente de competência, o que evita
  * deadlock entre compras parceladas concorrentes.
+ *
+ * **Apaga a fatura que ficou sem lançamento nenhum**, fechando o ciclo de vida
+ * que `resolveInvoice` abre: mover a última compra para outro mês deixaria uma
+ * fatura em aberto de zero, que a tela não sabe pagar nem remover.
+ *
+ * A condição inteira mora no `where`, sob o lock que a função já toma: conferir
+ * e apagar em dois passos abriria janela para um lançamento no meio. O filtro é
+ * sobre *todos* os lançamentos, e não sobre a soma acima — `Transaction.invoice`
+ * é `onDelete: Cascade`, então apagar uma fatura ainda referenciada levaria o
+ * histórico junto, em silêncio.
  */
 export async function recalcInvoiceTotal(tx: Tx, invoiceId: string): Promise<Money> {
   await tx.$queryRaw`SELECT id FROM finance.invoices WHERE id = ${invoiceId}::uuid FOR UPDATE`;
@@ -103,6 +130,14 @@ export async function recalcInvoiceTotal(tx: Tx, invoiceId: string): Promise<Mon
   });
 
   const total = money(aggregate._sum.convertedAmount ?? 0);
+
+  const removed = await tx.invoice.deleteMany({
+    where: { id: invoiceId, status: { not: "PAID" }, transactions: { none: {} } },
+  });
+
+  if (removed.count > 0) {
+    return total;
+  }
 
   await tx.invoice.update({
     where: { id: invoiceId },

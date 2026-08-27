@@ -215,6 +215,16 @@ distintas permitem deadlock.
 a exclusão de uma pendência definitiva; o índice único
 `(recurring_expense_id, date)` segura execuções simultâneas.
 
+**Fatura tem ciclo de vida simétrico.** `resolveInvoice` a cria com o primeiro
+lançamento da competência e `recalcInvoiceTotal` a apaga quando o último sai —
+mover ou remover a única compra deixaria uma fatura em aberto de zero, que a
+tela não sabe pagar nem remover. A exclusão é um `deleteMany` cuja condição
+inteira (não paga, sem lançamento algum) mora no `where`, sob o lock que a
+função já tomou: `transactions.invoice_id` é `ON DELETE CASCADE`, e apagar uma
+fatura ainda referenciada levaria o histórico junto. Em troca, `resolveInvoice`
+repete `createMany` + `FOR UPDATE` uma vez: quem espera o lock pode voltar sem
+linha nenhuma quando a exclusão concorrente commita.
+
 ### Rede fora da transação
 
 Resolva o câmbio **antes** de abrir `$transaction`; uma chamada HTTP mantém a

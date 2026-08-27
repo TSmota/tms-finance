@@ -8,7 +8,7 @@ import {
   listCreditCards,
   updateCreditCard,
 } from "@/lib/creditCards";
-import { createCardPurchase } from "@/lib/cardPurchases";
+import { createCardPurchase, deleteCardPurchase } from "@/lib/cardPurchases";
 import { listCardInvoices } from "@/lib/invoices";
 import { payInvoice } from "@/lib/invoicePayments";
 import type { CreditCardInput } from "@/lib/validations";
@@ -215,6 +215,19 @@ describe("limite usado e disponível", () => {
 
     expect(summary?.usedLimit).toBeCloseTo(0, 2);
     expect(summary?.availableLimit).toBeCloseTo(5000, 2);
+    expect(summary?.openInvoiceCount).toBe(0);
+  });
+
+  it("não conta a fatura que ficou sem lançamento", async () => {
+    const user = await makeUser();
+    const card = await makeCreditCard(user.id, { creditLimit: "5000.00", closingDay: 20, dueDay: 5 });
+
+    const [purchase] = await buy(user.id, card.id, 300);
+    await deleteCardPurchase(user.id, purchase!.id);
+
+    const [summary] = await listCreditCards(user.id);
+
+    expect(summary?.usedLimit).toBeCloseTo(0, 2);
     expect(summary?.openInvoiceCount).toBe(0);
   });
 
