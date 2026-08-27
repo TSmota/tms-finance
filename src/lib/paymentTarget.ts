@@ -1,8 +1,9 @@
 /**
- * Codificação do destino de uma recorrência num único valor de `Select`.
+ * Codificação do destino de pagamento num único valor de `Select`.
  *
- * O destino é um XOR: conta bancária **ou** cartão. Dois campos separados
- * convidariam a preencher os dois e só descobrir o erro na submissão.
+ * Usado por gastos recorrentes e pela origem de uma dívida. O destino é um XOR:
+ * conta bancária **ou** cartão. Dois campos separados convidariam a preencher os
+ * dois e só descobrir o erro na submissão.
  *
  * Mora em `src/lib` sem `"use client"` porque o formulário é client e a página
  * que monta os valores iniciais é Server Component. No módulo client, chamá-las

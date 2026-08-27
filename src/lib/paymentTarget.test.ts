@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { joinTarget, splitTarget } from "./recurringTarget";
+import { joinTarget, splitTarget } from "./paymentTarget";
 
 /**
  * Conta e cartão como destino mutuamente exclusivo de uma recorrência

@@ -11,7 +11,7 @@ import {
   splitTarget,
   TARGET_ACCOUNT_PREFIX,
   TARGET_CARD_PREFIX,
-} from "@/lib/recurringTarget";
+} from "@/lib/paymentTarget";
 import { FREQUENCY_OPTIONS } from "@/lib/recurrence";
 import { useFormValue } from "@/components/ui/useFormValue";
 import type { AccountOption, Option } from "@/lib/options";

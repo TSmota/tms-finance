@@ -37,7 +37,7 @@ import { deleteRecurringExpense } from "@/actions/recurring";
 import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { RecurringActiveToggle } from "@/components/forms/RecurringActiveToggle";
 import { ConfirmPendingButton } from "@/components/forms/ConfirmPendingButton";
-import { joinTarget } from "@/lib/recurringTarget";
+import { joinTarget } from "@/lib/paymentTarget";
 import type { RecurringFormValues } from "@/components/forms/RecurringFields";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
