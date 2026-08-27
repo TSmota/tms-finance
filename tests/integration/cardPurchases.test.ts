@@ -491,10 +491,9 @@ describe("exclusão de compra parcelada", () => {
     // Apagar pela parcela do meio deve levar o grupo inteiro.
     await deleteCardPurchase(user.id, created[1]!.id);
 
+    // Agosto sobrevive pela segunda compra; setembro e outubro ficaram vazias.
     expect(await invoices(user.id, card.id)).toEqual([
       { competencia: "2026-08", total: "40.00", itens: 1, status: "OPEN" },
-      { competencia: "2026-09", total: "0.00", itens: 0, status: "OPEN" },
-      { competencia: "2026-10", total: "0.00", itens: 0, status: "OPEN" },
     ]);
   });
 
@@ -510,6 +509,7 @@ describe("exclusão de compra parcelada", () => {
     await deleteCardPurchase(user.id, created[0]!.id);
 
     await expect(prisma.transaction.count()).resolves.toBe(0);
+    await expect(prisma.invoice.count()).resolves.toBe(0);
   });
 
   it("recusa lançamento de outro usuário", async () => {
@@ -729,11 +729,10 @@ describe("edição da compra", () => {
     );
 
     expect(await group(user.id)).toHaveLength(2);
-    // A fatura de outubro perdeu sua parcela e foi zerada, não ficou órfã.
+    // A fatura de outubro perdeu sua parcela e sumiu, não ficou órfã.
     expect(await invoices(user.id, card.id)).toEqual([
       { competencia: "2026-08", total: "45.00", itens: 1, status: "OPEN" },
       { competencia: "2026-09", total: "45.00", itens: 1, status: "OPEN" },
-      { competencia: "2026-10", total: "0.00", itens: 0, status: "OPEN" },
     ]);
   });
 
@@ -753,8 +752,34 @@ describe("edição da compra", () => {
       purchaseInput({ creditCardId: card.id, amount: 50, date: "2026-08-25" }),
     );
 
+    // Agosto ficou sem lançamento nenhum e some: sem ela, restaria uma fatura
+    // em aberto de zero, sem como pagar nem remover.
     expect(await invoices(user.id, card.id)).toEqual([
-      { competencia: "2026-08", total: "0.00", itens: 0, status: "OPEN" },
+      { competencia: "2026-09", total: "50.00", itens: 1, status: "OPEN" },
+    ]);
+  });
+
+  it("mantém a fatura de origem quando outra compra continua nela", async () => {
+    const user = await makeUser();
+    const card = await makeCreditCard(user.id, { closingDay: 20, dueDay: 5 });
+
+    const [purchase] = await createCardPurchase(
+      user.id,
+      purchaseInput({ creditCardId: card.id, amount: 50, date: "2026-08-15" }),
+    );
+    await createCardPurchase(
+      user.id,
+      purchaseInput({ creditCardId: card.id, amount: 30, date: "2026-08-16" }),
+    );
+
+    await updateCardPurchase(
+      user.id,
+      purchase!.id,
+      purchaseInput({ creditCardId: card.id, amount: 50, date: "2026-08-25" }),
+    );
+
+    expect(await invoices(user.id, card.id)).toEqual([
+      { competencia: "2026-08", total: "30.00", itens: 1, status: "OPEN" },
       { competencia: "2026-09", total: "50.00", itens: 1, status: "OPEN" },
     ]);
   });
@@ -854,9 +879,7 @@ describe("edição da compra", () => {
       purchaseInput({ creditCardId: target.id, amount: 70 }),
     );
 
-    expect(await invoices(user.id, origin.id)).toEqual([
-      { competencia: "2026-08", total: "0.00", itens: 0, status: "OPEN" },
-    ]);
+    expect(await invoices(user.id, origin.id)).toEqual([]);
     expect(await invoices(user.id, target.id)).toEqual([
       { competencia: "2026-08", total: "70.00", itens: 1, status: "OPEN" },
     ]);

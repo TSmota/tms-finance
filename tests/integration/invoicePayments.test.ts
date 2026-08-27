@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { InvalidOperationError, NotFoundError } from "@/lib/errors";
 import { recomputeBalance } from "@/lib/accountBalance";
 import { createCardPurchase } from "@/lib/cardPurchases";
-import { listCardInvoices } from "@/lib/invoices";
+import { listCardInvoices, recalcInvoiceTotal } from "@/lib/invoices";
 import { payInvoice, undoInvoicePayment } from "@/lib/invoicePayments";
 import { makeAccount, makeCreditCard, makeUser } from "../factories";
 import { setFxAvailable, setRates } from "../setup-fx";
@@ -180,6 +180,22 @@ describe("pagamento", () => {
 });
 
 describe("proteções", () => {
+  it("recálculo não apaga fatura paga, mesmo sem lançamento algum", async () => {
+    const { user, account, invoice } = await scenario({ amount: 250 });
+
+    await payInvoice(user.id, invoice.id, { accountId: account.id, ...payment });
+
+    // Estado que nenhum serviço produz, montado à mão para exercitar a guarda
+    // de status: sem ela, a fatura paga sumiria junto com o que já foi debitado.
+    await prisma.transaction.deleteMany({ where: { invoiceId: invoice.id } });
+
+    await prisma.$transaction((tx) => recalcInvoiceTotal(tx, invoice.id));
+
+    await expect(
+      prisma.invoice.findUnique({ where: { id: invoice.id }, select: { status: true } }),
+    ).resolves.toEqual({ status: "PAID" });
+  });
+
   it("recusa pagar a mesma fatura duas vezes, sem debitar de novo", async () => {
     const { user, account, invoice } = await scenario({ amount: 250 });
 
