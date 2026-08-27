@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { MonthPickerInput } from "@mantine/dates";
 
-import { currentCompetency } from "@/lib/dates";
+import { resolveCompetency } from "@/lib/competency";
 
 /**
  * Seletor de competência. O valor vive na query string (`?month=YYYY-MM`) para
@@ -18,10 +18,11 @@ export function MonthSelector() {
   const pathname = usePathname();
   const params = useSearchParams();
 
-  const monthParam = params.get("month");
-  const { year, month } = currentCompetency();
-  const fallback = `${year}-${String(month).padStart(2, "0")}`;
-  const value = `${monthParam ?? fallback}-01`;
+  // Pela mesma regra do servidor, e não só por causa de URL manipulada: sem ela
+  // `?month=2026-9` rende "setembro" no rótulo com os números de agosto, porque
+  // o servidor recusa o mês sem zero à esquerda e cai no corrente.
+  const { year, month } = resolveCompetency(params.get("month") ?? undefined);
+  const value = `${year}-${String(month).padStart(2, "0")}-01`;
 
   return (
     <MonthPickerInput
