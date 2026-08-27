@@ -59,7 +59,7 @@ function toFormValues(item: RecurringListItem): RecurringFormValues {
     dueDay: item.dueDay,
     isEstimated: item.isEstimated,
     startDate: toCalendarDate(item.startDate),
-    endDate: item.endDate ? toCalendarDate(item.endDate) : "",
+    endDate: item.endDate ? toCalendarDate(item.endDate) : null,
     categoryId: item.categoryId,
     target: joinTarget(item.accountId, item.creditCardId),
   };

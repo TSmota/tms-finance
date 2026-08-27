@@ -94,7 +94,7 @@ export default async function DebtDetailPage({
                 currency: debt.currency,
                 accountId: debt.originAccountId ?? options.accounts[0]?.value ?? "",
                 date: toCalendarDate(debt.originDate ?? debt.createdAt),
-                dueDate: debt.dueDate ? toCalendarDate(debt.dueDate) : "",
+                dueDate: debt.dueDate ? toCalendarDate(debt.dueDate) : null,
                 manualFxRate: undefined,
               }}
               people={people}

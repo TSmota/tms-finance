@@ -50,7 +50,7 @@ export function AddDebtButton(props: AddDebtButtonProps) {
     currency: accounts[0]?.currency ?? baseCurrency,
     accountId: accounts[0]?.value ?? "",
     date: todayCalendarDate(),
-    dueDate: "",
+    dueDate: null,
     manualFxRate: undefined,
   };
 

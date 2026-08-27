@@ -25,7 +25,8 @@ export type RecurringFormValues = {
   dueDay: number;
   isEstimated: boolean;
   startDate: string;
-  endDate: string;
+  /** `null`, não `""`: vazio do `DatePickerInput` é `null`. */
+  endDate: string | null;
   categoryId: string;
   /** Destino: exatamente um dos dois fica preenchido. */
   target: string;

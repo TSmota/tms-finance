@@ -20,7 +20,8 @@ export type DebtFormValues = {
   currency: string;
   accountId: string;
   date: string;
-  dueDate: string;
+  /** `null`, não `""`: vazio do `DatePickerInput` é `null`. */
+  dueDate: string | null;
   manualFxRate?: number | undefined;
 };
 

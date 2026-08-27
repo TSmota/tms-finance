@@ -43,7 +43,7 @@ export function AddRecurringButton(props: AddRecurringButtonProps) {
     dueDay: Number(today.slice(8, 10)),
     isEstimated: false,
     startDate: today,
-    endDate: "",
+    endDate: null,
     categoryId: categories[0]?.value ?? "",
     target: "",
   };
