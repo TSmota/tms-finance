@@ -99,7 +99,10 @@ function resolveChrome(): string {
   );
 }
 
-/** Orçamento da subida do Chrome. O laço sai assim que fica pronto. */
+/**
+ * Orçamento da subida do Chrome: folga para o runner do CI, que também segura
+ * `next start`, Postgres e seed.
+ */
 const CHROME_TIMEOUT = 60_000;
 
 /** Repete `passo` a cada 250ms até devolver não-nulo, ou `null` no estouro. */
@@ -190,7 +193,9 @@ async function connect(wsUrl: string): Promise<Cdp> {
   const goto = async (url: string) => {
     await send("Page.navigate", { url });
 
-    // O axe antes da hidratação mede o HTML do servidor, não a tela real.
+    // `readyState` cobre o carregamento; a espera fixa no fim cobre a
+    // hidratação, que não tem sinal observável daqui. O axe antes dela mede o
+    // HTML do servidor, não a tela real.
     for (let i = 0; i < 80; i += 1) {
       await new Promise((r) => setTimeout(r, 250));
       try {
@@ -332,8 +337,10 @@ async function main() {
   const perfil = mkdtempSync(join(tmpdir(), "a11y-chrome-"));
   const log = join(perfil, "chrome.log");
 
-  // Porta 0 e saída em arquivo: ARCHITECTURE — Acessibilidade explica por que
-  // chutar porta e descartar a saída faziam este job piscar no CI.
+  // Porta 0 e o Chrome publica a escolhida: chutar a partir de `process.uptime()`
+  // reincidia quase na mesma porta, e o choque virava falha intermitente. A
+  // saída vai para arquivo porque com `/dev/null` a falha chegava ao CI sem uma
+  // linha de diagnóstico.
   const proc = execFileSync("bash", [
     "-lc",
     `nohup "${chrome}" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage ` +

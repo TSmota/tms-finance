@@ -529,9 +529,24 @@ Contra build de produção, exporte `AUTH_TRUST_HOST=true`; sem isso o Auth.js
 responde `UntrustedHost`. O script só considera o login concluído ao chegar em
 `/dashboard`.
 
-O Chrome escolhe a porta com `--remote-debugging-port=0`; o script a lê de
-`DevToolsActivePort` e espera um alvo `page`, não apenas `/json/version`. O
-handshake tem 60s e inclui as últimas linhas do log do Chrome na falha.
+A subida do Chrome é handshake, não espera cega. A porta vem de
+`--remote-debugging-port=0` e é lida do `DevToolsActivePort`; a prontidão se
+mede por um alvo `page`, não por `/json/version`; a saída do Chrome vai para
+arquivo. Os três detalhes são o que tirou este job do piscar:
+
+- Chutar a porta a partir de `process.uptime()` não é sorteio nenhum — naquele
+  ponto o uptime é sempre pequeno, então uma tentativa nova reincidia quase na
+  mesma porta e um choque virava `Chrome não abriu o endpoint do CDP`.
+- `/json/version` responde antes de existir alvo do tipo `page`. Conectar nessa
+  janela pega um alvo prestes a ser trocado e devolve o mesmo
+  `-32000 Inspected target navigated or closed` da espera pelo pós-login, por
+  causa completamente diferente.
+- Com a saída em `/dev/null`, a falha chegava ao CI sem uma linha de
+  diagnóstico — foi assim que o job passou a piscar sem ninguém saber por quê.
+
+O handshake tem 60s porque o runner ainda segura `next start`, Postgres e seed;
+o laço sai assim que fica pronto, então a folga não custa tempo. As últimas
+linhas do log entram na mensagem de erro.
 
 O axe fica fora do Vitest porque contraste exige layout e cascata reais, que o
 jsdom não oferece. [src/theme.test.ts](src/theme.test.ts) trava os tokens; o
@@ -594,6 +609,21 @@ Cuidados do lado da Vercel:
 - `prisma migrate dev` nunca em CI ou deploy.
 - O seed se recusa a rodar com `NODE_ENV=production` ou `VERCEL_ENV=production`.
   Mantenha essa guarda.
+
+### Pool de conexões
+
+[src/lib/db.ts](src/lib/db.ts) configura o `PrismaPg` explicitamente porque os
+defaults do `pg` são hostis a serverless: `max` vale **10 por instância** e
+`connectionTimeoutMillis` fica `undefined` — sem timeout, a requisição que não
+encontra conexão livre espera o timeout da função em vez de falhar rápido. Como
+ali quem cresce é o número de instâncias, o teto por instância tem de ser
+pequeno; `DB_POOL_MAX` existe para o processo de longa duração, onde vale o
+oposto.
+
+**Valor inválido cai no default em vez de ser repassado.** O `pg` resolve `max`
+com `||`, então `0` e `NaN` reativam em silêncio justamente os 10 que essa
+configuração existe para evitar — e `DB_POOL_MAX=""`, que é o que
+[.env.example](.env.example) entrega, produzia `0`.
 
 As dependências são pinadas e atualizadas pelo Renovate
 ([renovate.json](renovate.json)). Mantine, Prisma e Next são agrupados por

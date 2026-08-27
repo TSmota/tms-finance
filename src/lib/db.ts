@@ -6,19 +6,9 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 /**
- * Pool explícito.
- *
- * Sem isto o `pg` cai no default de 10 conexões **por instância** e
- * `connectionTimeoutMillis` fica `undefined` — sem timeout, uma requisição que
- * não encontra conexão livre espera até o timeout da função em vez de falhar.
- * Em serverless o número de instâncias é que cresce, então o teto por instância
- * precisa ser pequeno; `DB_POOL_MAX` existe para o processo de longa duração,
- * onde o oposto vale.
- *
- * O parse cai no default em vez de repassar o que veio do ambiente: o `pg`
- * resolve `max` com `||`, então `0` e `NaN` — o que `Number("")` e
- * `Number("dez")` produzem — viram silenciosamente os 10 que este bloco existe
- * para evitar.
+ * Pool explícito: sem ele o `pg` usa 10 conexões por instância e nenhum timeout
+ * de aquisição. O guard existe porque `max` é resolvido com `||`, então `0` e
+ * `NaN` reativam esses 10 em silêncio.
  */
 const poolMax = Number.parseInt(process.env.DB_POOL_MAX ?? "", 10);
 
