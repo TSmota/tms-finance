@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 
 import { DomainError, NotFoundError } from "@/lib/errors";
 import { FxUnavailableError } from "@/lib/fxService";
@@ -23,6 +24,8 @@ export async function runAction(operation: () => Promise<unknown>): Promise<Acti
 
     return { ok: true };
   } catch (error) {
+    unstable_rethrow(error);
+
     if (error instanceof FxUnavailableError) {
       return {
         ok: false,
@@ -35,25 +38,10 @@ export async function runAction(operation: () => Promise<unknown>): Promise<Acti
       return { ok: false, error: error.message };
     }
 
-    // `redirect()` do Next sinaliza por exceção — precisa continuar subindo.
-    if (isRedirectError(error)) {
-      throw error;
-    }
-
     console.error("Erro inesperado em server action:", error);
 
     return { ok: false, error: "Ocorreu um erro inesperado. Tente novamente." };
   }
-}
-
-function isRedirectError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "digest" in error &&
-    typeof (error as { digest?: unknown }).digest === "string" &&
-    (error as { digest: string }).digest.startsWith("NEXT_REDIRECT")
-  );
 }
 
 const idSchema = z.uuid();
