@@ -709,6 +709,11 @@ Fluxo de caixa e gasto por categoria usam nomes distintos
 (`cash_flow.cash_out` e `spending.total`) e um campo `relation` com a identidade
 entre eles. Cor de categoria, dado de renderização, não sai nas projeções.
 
+A exceção é `list_categories`, onde a categoria é o recurso e não o rótulo de um
+número. Como `update_*` substitui o estado inteiro em vez de aplicar um patch, um
+campo ausente da leitura é um campo que o agente apaga ao editar sem nunca ter
+sabido que existia — então `color` e `icon` saem por lá.
+
 ### O nome da ferramenta é escrito uma vez
 
 Ferramenta nova entra por `defineTool` ou `defineDestructiveTool`
@@ -781,13 +786,18 @@ Token opaco de 256 bits guardado **só** como HMAC-SHA256 com o pepper de
   acrescenta segurança útil. O pepper protege um dump sem acesso ao ambiente.
 - Emissão por `npm run agent:token` — o valor em claro existe uma vez, no
   stdout; não há tela que o persista no navegador.
-- `setup:write` está no vocabulário mas **sem ferramenta**, e a razão é uma só:
-  criar conta ou cartão fixa a moeda, que é imutável depois (Multi-moeda). Errar
-  ali não se corrige editando.
+- `setup:write` cobre os cadastros de base **sem moeda**: criar e editar
+  categoria e pessoa. O recorte é esse porque criar conta ou cartão fixa a
+  moeda, que é imutável depois (Multi-moeda) — errar ali não se corrige
+  editando, então `create_account` e `create_credit_card` continuam fora.
 
   `set_base_currency` também não existe: embora a moeda base seja mutável,
   trocá-la reexpressa todos os relatórios. Essa decisão fica na tela de
   configurações, onde a consequência está visível.
+
+  Categoria e pessoa entraram porque a assimetria era pior que o risco: o agente
+  já podia **apagar** as duas, e não podia criá-las — `create_debt` exigia um
+  `personId` sem origem alcançável.
 
 `/api/agent/mcp` **não** entra no matcher de [src/proxy.ts](src/proxy.ts), que
 cobre só `/dashboard/:path*`. A autenticação é bearer token, e a doc do Next 16

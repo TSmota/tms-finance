@@ -201,12 +201,32 @@ describe("projeções para o agente", () => {
     });
   }
 
-  it("descarta cor de categoria — é dado de renderização", () => {
+  it("descarta cor de categoria nas projeções — é dado de renderização", () => {
     const payload = dto.transactionsDto([transaction]);
 
     for (const [path] of walk(payload)) {
       expect(path).not.toMatch(/color/i);
     }
+  });
+
+  /**
+   * A exceção à regra acima, e ela não é estética: `update_category` substitui o
+   * estado inteiro. Um campo que a listagem não devolve é um campo que o agente
+   * apaga ao editar, sem nunca ter sabido que existia.
+   */
+  it("devolve cor e ícone na listagem de categorias, nos dois níveis", () => {
+    const [root] = dto.categoriesDto([
+      {
+        id: "c1",
+        name: "Moradia",
+        color: "#40c057",
+        icon: "home",
+        subcategories: [{ id: "c2", name: "Luz", color: "#fab005", icon: null }],
+      },
+    ]);
+
+    expect(root).toMatchObject({ color: "#40c057", icon: "home" });
+    expect(root.subcategories[0]).toMatchObject({ color: "#fab005", icon: null });
   });
 
   it("entrega datas como YYYY-MM-DD, sem fuso", () => {

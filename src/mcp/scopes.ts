@@ -27,6 +27,7 @@ export const READ_TOOLS = [
   "list_recurring",
   "list_pending_occurrences",
   "list_categories",
+  "get_deletion_impact",
 ] as const;
 
 export const WRITE_TOOLS = {
@@ -52,6 +53,16 @@ export const WRITE_TOOLS = {
   set_recurring_active: "recurring:write",
   confirm_pending: "recurring:write",
   materialize_recurring: "recurring:write",
+
+  /**
+   * Cadastros de base. Conta e cartão ficam de fora deste bloco porque criá-los
+   * fixa a moeda, que é imutável depois; categoria e pessoa não têm moeda.
+   */
+  create_category: "setup:write",
+  update_category: "setup:write",
+
+  create_person: "setup:write",
+  update_person: "setup:write",
 } as const satisfies Record<string, AgentScope>;
 
 /**

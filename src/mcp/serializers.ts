@@ -33,7 +33,8 @@ import type { DeletionImpact } from "@/lib/deletionImpact";
  * escreve prosa sobre os números: chamar os dois de "despesa" produziria dois
  * valores distintos com o mesmo nome na mesma resposta.
  *
- * Cor de categoria é descartada em todas as projeções: o agente não renderiza.
+ * Cor de categoria é descartada nas projeções: o agente não renderiza. A
+ * exceção é `categoriesDto`, onde a categoria é o recurso editável.
  */
 
 /** Valor monetário como string de 2 casas. */
@@ -330,11 +331,22 @@ export function pendingOccurrencesDto(rows: PendingOccurrence[]) {
   }));
 }
 
+/**
+ * Exceção à regra de descartar cor: aqui a categoria é o recurso, não enfeite de
+ * projeção, e `update_category` substitui o estado inteiro.
+ */
 export function categoriesDto(nodes: CategoryNode[]) {
   return nodes.map((node) => ({
     id: node.id,
     name: node.name,
-    subcategories: node.subcategories.map((sub) => ({ id: sub.id, name: sub.name })),
+    color: node.color,
+    icon: node.icon,
+    subcategories: node.subcategories.map((sub) => ({
+      id: sub.id,
+      name: sub.name,
+      color: sub.color,
+      icon: sub.icon,
+    })),
   }));
 }
 

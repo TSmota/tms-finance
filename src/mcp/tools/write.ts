@@ -3,10 +3,12 @@ import { z } from "zod";
 
 import {
   cardPurchaseSchema,
+  categorySchema,
   confirmOccurrenceSchema,
   debtSchema,
   debtSettlementSchema,
   invoicePaymentSchema,
+  personSchema,
   recurringExpenseSchema,
   transactionSchema,
 } from "@/lib/validations";
@@ -15,6 +17,8 @@ import * as cardPurchases from "@/lib/cardPurchases";
 import * as invoicePayments from "@/lib/invoicePayments";
 import * as debts from "@/lib/debts";
 import * as recurring from "@/lib/recurring";
+import * as categories from "@/lib/categories";
+import * as people from "@/lib/people";
 import { competencyArgs, idArg, toCompetency } from "@/mcp/args";
 import { defineTool } from "@/mcp/define";
 
@@ -36,6 +40,11 @@ const FX_NOTE =
   "Se a resposta vier com `code: \"fx_unavailable\"`, repita a chamada " +
   "acrescentando `manualFxRate` com a cotação.";
 
+/** A hierarquia de 2 níveis é validada no serviço, não no schema. */
+const HIERARCHY_NOTE =
+  "A hierarquia tem exatamente dois níveis: `parentId` só aceita categoria " +
+  "raiz, e uma categoria que já tem subcategorias não pode virar subcategoria.";
+
 const idOnlyArgs = z.object({ id: idArg });
 const invoiceIdArgs = z.object({ invoice_id: idArg });
 
@@ -47,6 +56,8 @@ const settleDebtArgs = z.object({ debt_id: idArg, data: debtSettlementSchema });
 const updateRecurringArgs = z.object({ id: idArg, data: recurringExpenseSchema });
 const setActiveArgs = z.object({ id: idArg, active: z.boolean() });
 const confirmPendingArgs = z.object({ id: idArg, data: confirmOccurrenceSchema });
+const updateCategoryArgs = z.object({ id: idArg, data: categorySchema });
+const updatePersonArgs = z.object({ id: idArg, data: personSchema });
 
 export function registerWriteTools(server: McpServer): void {
   // -------------------------------------------------------------
@@ -306,5 +317,66 @@ export function registerWriteTools(server: McpServer): void {
     },
     serialize: (result) => result,
     revalidates: "recurring",
+  });
+
+  // -------------------------------------------------------------
+  // Cadastros de base — setup:write
+  // -------------------------------------------------------------
+
+  defineTool(server, "create_category", {
+    title: "Criar categoria",
+    description:
+      "Cria categoria raiz ou subcategoria. " +
+      HIERARCHY_NOTE +
+      " `color` é hexadecimal de 6 dígitos com `#`; ausente deixa a categoria " +
+      "sem cor. Os ids resultantes são o que `categoryId` espera nas demais " +
+      "ferramentas de escrita.",
+    schema: categorySchema,
+    run: (agent, input) => categories.createCategory(agent.userId, input),
+    serialize: (row) => ({ id: row.id }),
+    affected: (row) => [row.id],
+    revalidates: "categories",
+  });
+
+  defineTool(server, "update_category", {
+    title: "Editar categoria",
+    description:
+      "Substitui os dados da categoria. `data` é o estado completo, não um " +
+      "patch: leia list_categories antes e reenvie os campos que deve manter, " +
+      "inclusive `color` e o `parentId` da categoria que a contém na árvore. " +
+      "Omitir `parentId` promove a subcategoria a raiz; omitir `color` apaga a " +
+      "cor. " +
+      HIERARCHY_NOTE,
+    schema: updateCategoryArgs,
+    run: (agent, input) => categories.updateCategory(agent.userId, input.id, input.data),
+    serialize: (row) => ({ id: row.id }),
+    affected: (row) => [row.id],
+    revalidates: "categories",
+  });
+
+  defineTool(server, "create_person", {
+    title: "Criar pessoa",
+    description:
+      "Cria a pessoa de um empréstimo ou dívida. O id resultante é o que " +
+      "`personId` espera em create_debt — sem ele não há como registrar dívida " +
+      "de alguém ainda não cadastrado.",
+    schema: personSchema,
+    run: (agent, input) => people.createPerson(agent.userId, input),
+    serialize: (row) => ({ id: row.id }),
+    affected: (row) => [row.id],
+    revalidates: "people",
+  });
+
+  defineTool(server, "update_person", {
+    title: "Editar pessoa",
+    description:
+      "Substitui nome e observações da pessoa. `data` é o estado completo, não " +
+      "um patch: omitir `notes` apaga as observações. As dívidas dela não são " +
+      "tocadas.",
+    schema: updatePersonArgs,
+    run: (agent, input) => people.updatePerson(agent.userId, input.id, input.data),
+    serialize: (row) => ({ id: row.id }),
+    affected: (row) => [row.id],
+    revalidates: "people",
   });
 }

@@ -83,21 +83,14 @@ describe("mapa de escopos", () => {
     expect(readableByReadOnlyToken).toEqual([]);
   });
 
-  it("cobre todo escopo do vocabulário, exceto os deliberadamente sem ferramenta", () => {
+  /**
+   * Escopo sem ferramenta é escopo que um token pode carregar sem que ninguém
+   * saiba o que ele autoriza. O vocabulário e o mapa andam juntos.
+   */
+  it("cobre todo escopo do vocabulário", () => {
     const used = new Set(Object.values(TOOL_SCOPES));
 
-    // `setup:write` está no vocabulário mas ainda não tem ferramenta: criar
-    // conta ou cartão fixa a moeda, que é imutável depois, e isso é decisão de
-    // configuração, não de operação. O escopo existe para o dia em que essas
-    // ferramentas entrarem.
-    const intentionallyUnused = new Set(["setup:write"]);
-
     for (const scope of AGENT_SCOPES) {
-      if (intentionallyUnused.has(scope)) {
-        expect(used.has(scope), `${scope} deixou de ser não-usado — atualize este teste`).toBe(false);
-        continue;
-      }
-
       expect(used.has(scope), `escopo sem nenhuma ferramenta: ${scope}`).toBe(true);
     }
   });

@@ -5,6 +5,7 @@ import { getAccountBalances } from "@/lib/accounts";
 import { listCategoryTree } from "@/lib/categories";
 import { listCreditCards } from "@/lib/creditCards";
 import { getDebtDetail, listDebts } from "@/lib/debts";
+import { DELETION_TARGETS, describeDeletionImpact } from "@/lib/deletionImpact";
 import { listCardInvoices, listInvoiceItems } from "@/lib/invoices";
 import { getPeopleOverview } from "@/lib/people";
 import { getBalanceProjection } from "@/lib/projection";
@@ -48,6 +49,11 @@ const debtIdArgs = z.object({ debt_id: idArg });
 const listDebtsArgs = z.object({
   person_id: idArg.optional(),
   type: z.enum(DEBT_TYPE_CODES).optional(),
+});
+
+const deletionImpactArgs = z.object({
+  target: z.enum(DELETION_TARGETS),
+  id: idArg,
 });
 
 export function registerReadTools(server: McpServer): void {
@@ -232,9 +238,24 @@ export function registerReadTools(server: McpServer): void {
     title: "Categorias",
     description:
       "Categorias em árvore de dois níveis. Os ids daqui são o que `categoryId` " +
-      "espera nas ferramentas de escrita.",
+      "espera nas ferramentas de escrita. Traz `color` e `icon` porque " +
+      "update_category substitui o estado inteiro: sem lê-los aqui, uma edição " +
+      "os apagaria sem querer.",
     schema: noArgs,
     run: (agent) => listCategoryTree(agent.userId),
     serialize: (result) => dto.categoriesDto(result),
+  });
+
+  defineTool(server, "get_deletion_impact", {
+    title: "Impacto de uma remoção",
+    description:
+      "Mede o que uma remoção em cascata levaria embora, SEM remover nada. " +
+      "`destroys` desaparece junto, `detaches` sobrevive perdendo o vínculo, e " +
+      "`blocked_by` preenchido diz que a remoção seria recusada e por quê. " +
+      "As remoções em si exigem `destructive:write` e confirmação em duas fases; " +
+      "esta leitura serve para relatar a consequência antes de pedi-las.",
+    schema: deletionImpactArgs,
+    run: (agent, input) => describeDeletionImpact(agent.userId, input.target, input.id),
+    serialize: (result) => dto.deletionImpactDto(result),
   });
 }
