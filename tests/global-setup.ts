@@ -25,8 +25,18 @@ export default function setup() {
     );
   }
 
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    env: { ...process.env, DATABASE_URL: databaseUrl },
-    stdio: "pipe",
-  });
+  // `pipe` para não poluir a saída da suíte quando dá certo, mas o que o Prisma
+  // escreveu entra na mensagem quando dá errado: sem isso a falha chega ao
+  // runner como "Command failed", sem a causa.
+  try {
+    execFileSync("npx", ["prisma", "migrate", "deploy"], {
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+      stdio: "pipe",
+    });
+  } catch (error) {
+    const { stdout, stderr } = error as { stdout?: Buffer; stderr?: Buffer };
+    const saida = `${stdout?.toString() ?? ""}${stderr?.toString() ?? ""}`.trim();
+
+    throw new Error(`prisma migrate deploy falhou.${saida ? `\n\n${saida}` : ""}`);
+  }
 }
