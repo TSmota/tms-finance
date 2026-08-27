@@ -8,6 +8,7 @@ import { parseCalendarDate } from "@/lib/dates";
 import { applyToBalance, balanceDelta, lockTransaction, type Tx } from "@/lib/accountBalance";
 import { assertCategoryOwned, assertPersonOwned, requireAccount } from "@/lib/ownership";
 import { deriveDebtStatus } from "@/lib/debtStatus";
+import { createOrigin, loadOrigin } from "@/lib/debtOrigin";
 import type { DebtTypeCode } from "@/lib/debtTypes";
 import type { DebtInput, DebtSettlementInput } from "@/lib/validations";
 
@@ -112,24 +113,14 @@ export async function createDebt(userId: string, input: DebtInput): Promise<Debt
       },
     });
 
-    const origin = await tx.transaction.create({
-      data: {
-        userId,
-        type: originType(input.type),
-        status: "CONFIRMED",
-        description: input.description,
-        date,
-        amount: toStorage(input.amount),
-        currency: input.currency,
-        exchangeRate: rate.toFixed(FX_RATE_SCALE),
-        convertedAmount: toStorage(convertMoney(input.amount, rate)),
-        accountId: account.id,
-        categoryId: input.categoryId,
-        debtId: debt.id,
-      },
+    await createOrigin(tx, {
+      userId,
+      debtId: debt.id,
+      type: originType(input.type),
+      input,
+      date,
+      rate,
     });
-
-    await applyToBalance(tx, account.id, balanceDelta(origin.type, origin.convertedAmount));
 
     return debt;
   });
@@ -331,12 +322,9 @@ export async function updateDebt(userId: string, debtId: string, input: DebtInpu
   const account = await requireAccount(userId, input.accountId);
   const date = parseCalendarDate(input.date);
 
-  const origin = await prisma.transaction.findFirst({
-    where: { userId, debtId, type: originType(debt.type) },
-    orderBy: { createdAt: "asc" },
-  });
+  const origin = await loadOrigin(userId, debt);
 
-  if (!origin) {
+  if (origin.transactions.length === 0) {
     throw new NotFoundError("Movimentação de origem não encontrada");
   }
 
@@ -350,7 +338,7 @@ export async function updateDebt(userId: string, debtId: string, input: DebtInpu
   return prisma.$transaction(async (tx) => {
     const locked = await lockDebt(tx, debtId);
     // Mesma ordem de `deleteSettlement`: dívida, depois movimentação.
-    const previousOrigin = await lockTransaction(tx, origin.id);
+    const previousOrigin = await lockTransaction(tx, origin.transactions[0]!.id);
 
     if (!previousOrigin) {
       throw new NotFoundError("Movimentação de origem não encontrada");
@@ -376,7 +364,7 @@ export async function updateDebt(userId: string, debtId: string, input: DebtInpu
     }
 
     const updatedOrigin = await tx.transaction.update({
-      where: { id: origin.id },
+      where: { id: origin.transactions[0]!.id },
       data: {
         description: input.description,
         date,
