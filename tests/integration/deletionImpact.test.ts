@@ -193,6 +193,36 @@ describe("conta bancária — o caso sem nenhuma guarda", () => {
     expect(survivingCard.defaultPaymentAccountId).toBeNull();
   });
 
+  it("relata as dívidas que perdem a origem ao remover a conta", async () => {
+    const user = await makeUser();
+    const account = await makeAccount(user.id, { initialBalance: "1000.00" });
+    const category = await makeCategory(user.id);
+    const person = await makePerson(user.id);
+
+    await createDebt(user.id, {
+      personId: person.id,
+      categoryId: category.id,
+      type: "LENT",
+      description: "Empréstimo",
+      amount: 100,
+      currency: "BRL",
+      accountId: account.id,
+      creditCardId: null,
+      installments: 1,
+      date: "2026-08-06",
+      dueDate: null,
+      manualFxRate: null,
+    });
+
+    const impact = await describeDeletionImpact(user.id, "account", account.id);
+
+    expect(impact.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "debts_losing_origin", count: 1, effect: "detach" }),
+      ]),
+    );
+  });
+
   it("omite as linhas zeradas de uma conta isolada", async () => {
     const user = await makeUser();
     const account = await makeAccount(user.id);
@@ -282,6 +312,36 @@ describe("cartão de crédito", () => {
     expect(await prisma.invoice.count({ where: { creditCardId: card.id } })).toBe(0);
     expect(entry(impact, "transactions")).toBe(1);
     expect(entry(impact, "invoices")).toBe(1);
+  });
+
+  it("relata as dívidas que perdem a origem ao remover o cartão", async () => {
+    const user = await makeUser();
+    const card = await makeCreditCard(user.id, { closingDay: 20, dueDay: 5 });
+    const category = await makeCategory(user.id);
+    const person = await makePerson(user.id);
+
+    await createDebt(user.id, {
+      personId: person.id,
+      categoryId: category.id,
+      type: "LENT",
+      description: "Passagens do grupo",
+      amount: 300,
+      currency: "BRL",
+      accountId: null,
+      creditCardId: card.id,
+      installments: 3,
+      date: "2026-08-06",
+      dueDate: null,
+      manualFxRate: null,
+    });
+
+    const impact = await describeDeletionImpact(user.id, "credit_card", card.id);
+
+    expect(impact.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "debts_losing_origin", count: 1, effect: "detach" }),
+      ]),
+    );
   });
 });
 
