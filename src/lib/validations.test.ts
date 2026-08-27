@@ -89,6 +89,26 @@ const debtValid = {
   manualFxRate: null,
 };
 
+/**
+ * O `debtSchema` é a fronteira que o formulário e o MCP compartilham. O que
+ * estes testes protegem são os três `refine`: o XOR de destino, a restrição do
+ * cartão a `LENT` e o parcelamento só no cartão.
+ */
+const debtOriginBase = {
+  personId: "00000000-0000-4000-8000-000000000001",
+  categoryId: "00000000-0000-4000-8000-000000000002",
+  type: "LENT",
+  description: "Passagens do grupo",
+  amount: 300,
+  currency: "BRL",
+  date: "2026-08-06",
+  dueDate: null,
+  manualFxRate: null,
+};
+
+const debtOriginAccountId = "00000000-0000-4000-8000-000000000003";
+const debtOriginCreditCardId = "00000000-0000-4000-8000-000000000004";
+
 const CASES: SchemaCase[] = [
   {
     name: "loginSchema",
@@ -337,5 +357,91 @@ describe("normalização de texto opcional", () => {
 
   it('trata o "" do Select limpo como ausência de id', () => {
     expect(categorySchema.parse({ name: "Mercado", parentId: "" }).parentId).toBeNull();
+  });
+});
+
+describe("debtSchema: destino da origem", () => {
+  it("aceita origem em conta", () => {
+    const result = debtSchema.safeParse({
+      ...debtOriginBase,
+      accountId: debtOriginAccountId,
+      creditCardId: null,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.installments).toBe(1);
+  });
+
+  it("aceita origem em cartão parcelada", () => {
+    const result = debtSchema.safeParse({
+      ...debtOriginBase,
+      accountId: null,
+      creditCardId: debtOriginCreditCardId,
+      installments: 6,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.installments).toBe(6);
+  });
+
+  it("recusa os dois destinos ao mesmo tempo", () => {
+    const result = debtSchema.safeParse({
+      ...debtOriginBase,
+      accountId: debtOriginAccountId,
+      creditCardId: debtOriginCreditCardId,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe(
+      "Escolha a origem: conta bancária ou cartão de crédito",
+    );
+  });
+
+  it("recusa nenhum destino", () => {
+    const result = debtSchema.safeParse({
+      ...debtOriginBase,
+      accountId: null,
+      creditCardId: null,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(["accountId"]);
+  });
+
+  it("recusa cartão em dívida BORROWED", () => {
+    const result = debtSchema.safeParse({
+      ...debtOriginBase,
+      type: "BORROWED",
+      accountId: null,
+      creditCardId: debtOriginCreditCardId,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe(
+      "Só empréstimo feito pelo usuário pode ter origem no cartão",
+    );
+  });
+
+  it("recusa parcelamento em origem de conta", () => {
+    const result = debtSchema.safeParse({
+      ...debtOriginBase,
+      accountId: debtOriginAccountId,
+      creditCardId: null,
+      installments: 3,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(["installments"]);
+  });
+
+  it("recusa mais parcelas do que o limite", () => {
+    const result = debtSchema.safeParse({
+      ...debtOriginBase,
+      accountId: null,
+      creditCardId: debtOriginCreditCardId,
+      installments: 121,
+    });
+
+    expect(result.success).toBe(false);
   });
 });

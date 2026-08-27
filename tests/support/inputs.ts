@@ -87,14 +87,23 @@ export function cardPurchaseInput(
   };
 }
 
+type DebtOriginOverride =
+  | { accountId: string; creditCardId?: null }
+  | { accountId?: null; creditCardId: string };
+
 export function debtInput(
-  overrides: Partial<DebtInput> & { personId: string; categoryId: string; accountId: string },
+  overrides: Partial<DebtInput> &
+    { personId: string; categoryId: string } &
+    DebtOriginOverride,
 ): DebtInput {
   return {
     type: "LENT",
     description: "Empréstimo de teste",
     amount: 200,
     currency: "BRL",
+    accountId: null,
+    creditCardId: null,
+    installments: 1,
     date: "2026-08-06",
     dueDate: null,
     manualFxRate: null,

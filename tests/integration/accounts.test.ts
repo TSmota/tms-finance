@@ -193,6 +193,8 @@ describe("exclusão", () => {
       personId: person.id,
       categoryId: category.id,
       accountId: account.id,
+      creditCardId: null,
+      installments: 1,
       type: "LENT",
       description: "Empréstimo",
       amount: 200,

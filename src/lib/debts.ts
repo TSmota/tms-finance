@@ -80,6 +80,11 @@ export async function createDebt(userId: string, input: DebtInput): Promise<Debt
   await assertPersonOwned(userId, input.personId);
   await assertCategoryOwned(userId, input.categoryId);
 
+  // Temporário: a origem em cartão chega na tarefa seguinte.
+  if (!input.accountId) {
+    throw new InvalidOperationError("Escolha a origem: conta bancária ou cartão de crédito");
+  }
+
   const account = await requireAccount(userId, input.accountId);
   const date = parseCalendarDate(input.date);
 
@@ -317,6 +322,11 @@ export async function updateDebt(userId: string, debtId: string, input: DebtInpu
 
   await assertPersonOwned(userId, input.personId);
   await assertCategoryOwned(userId, input.categoryId);
+
+  // Temporário: a origem em cartão chega na tarefa seguinte.
+  if (!input.accountId) {
+    throw new InvalidOperationError("Escolha a origem: conta bancária ou cartão de crédito");
+  }
 
   const account = await requireAccount(userId, input.accountId);
   const date = parseCalendarDate(input.date);
