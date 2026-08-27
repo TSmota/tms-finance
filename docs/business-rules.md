@@ -108,3 +108,12 @@ em [ARCHITECTURE.md](../ARCHITECTURE.md).
   outra; escolhida, vale a escolhida. Herdar por padrão é o que preserva a
   RN-05.2: sem isso, metade do movimento de uma dívida sairia do relatório por
   origem.
+- **RN-05.5 (Origem em conta ou cartão):** a movimentação que origina a dívida
+  sai de uma conta bancária **ou** entra numa fatura de cartão — exatamente uma
+  das duas. No cartão ela é uma compra como qualquer outra: cai na fatura da sua
+  competência (RN-03.2), pode ser dividida em parcelas sequenciais (RN-03.3) e
+  não altera saldo de conta nenhum até a fatura ser paga. Só a dívida do tipo
+  `LENT` aceita origem em cartão — a origem de `BORROWED` é uma entrada, e o
+  total da fatura não tem sinal. Enquanto qualquer parcela da origem estiver em
+  fatura paga, a dívida não é editada nem removida (RN-03.5). A **amortização** é
+  sempre em conta, nos dois tipos.

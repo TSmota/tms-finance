@@ -364,6 +364,24 @@ erro de código.
 `migrate reset` tem proteção contra agentes de IA no Prisma 7 e exige
 consentimento explícito do usuário. Isso é correto — não contorne.
 
+### O grupo de origem de uma dívida é derivado, não marcado
+
+A movimentação que origina uma dívida pode ser mais de uma linha: no cartão ela
+é uma compra parcelada, com uma parcela por fatura (RN-05.5). Identificar esse
+grupo não precisou de coluna: `originType` e `settlementType` são **sempre
+opostos**, então o grupo de origem é toda transação daquela dívida cujo `type` é
+`originType(debt.type)`, e as amortizações são o resto.
+
+Uma coluna `is_origin` gravaria o que o tipo já diz, na tabela mais escrita do
+sistema, e criaria a chance de divergir dele. O que a heurística antiga fazia —
+"a **primeira** movimentação do tipo da origem" — só valia com origem de uma
+linha, e passou a estar errada.
+
+A consequência prática está em `updateDebt`: ele apaga o grupo inteiro e recria,
+como `updateCardPurchase` faz com uma compra. Casar linha por linha não serviria,
+porque trocar o número de parcelas, a data ou o cartão redistribui as parcelas
+por outras faturas.
+
 ---
 
 ## 7. Validação e erros
