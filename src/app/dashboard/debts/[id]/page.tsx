@@ -22,6 +22,7 @@ import { requireUser } from "@/lib/session";
 import { NotFoundError } from "@/lib/errors";
 import { getDebtDetail } from "@/lib/debts";
 import { listPersonOptions } from "@/lib/people";
+import { listCreditCardOptions } from "@/lib/creditCards";
 import { loadFormOptions } from "@/lib/formOptions";
 import { formatCurrency } from "@/lib/currency";
 import {
@@ -38,6 +39,7 @@ import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { BackLink } from "@/components/ui/AppLink";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CategoryBadge } from "@/components/ui/CategoryBadge";
+import { joinTarget, TARGET_ACCOUNT_PREFIX } from "@/lib/paymentTarget";
 
 export default async function DebtDetailPage({
   params,
@@ -54,9 +56,10 @@ export default async function DebtDetailPage({
     throw error;
   });
 
-  const [people, options] = await Promise.all([
+  const [people, options, cards] = await Promise.all([
     listPersonOptions(user.id),
     loadFormOptions(user.id),
+    listCreditCardOptions(user.id),
   ]);
 
   const progress =
@@ -92,7 +95,15 @@ export default async function DebtDetailPage({
                 description: debt.description,
                 amount: debt.originalAmount,
                 currency: debt.currency,
-                accountId: debt.originAccountId ?? options.accounts[0]?.value ?? "",
+                target: debt.originTarget
+                  ? joinTarget(
+                      debt.originTarget.kind === "account" ? debt.originTarget.id : null,
+                      debt.originTarget.kind === "card" ? debt.originTarget.id : null,
+                    )
+                  : options.accounts[0]
+                    ? `${TARGET_ACCOUNT_PREFIX}${options.accounts[0].value}`
+                    : "",
+                installments: debt.originInstallments,
                 date: toCalendarDate(debt.originDate ?? debt.createdAt),
                 dueDate: debt.dueDate ? toCalendarDate(debt.dueDate) : null,
                 manualFxRate: undefined,
@@ -100,8 +111,10 @@ export default async function DebtDetailPage({
               people={people}
               categories={options.categories}
               accounts={options.accounts}
+              cards={cards}
               type={debt.type}
               currency={debt.currency}
+              originLocked={debt.originLocked}
             />
           </Group>
         }
@@ -157,14 +170,22 @@ export default async function DebtDetailPage({
           Movimentações
         </Title>
 
-        <TableScrollContainer minWidth={640}>
+        <TableScrollContainer
+          minWidth={640}
+          scrollAreaProps={{
+            viewportProps: {
+              tabIndex: 0,
+              "aria-label": "Movimentações da dívida",
+            },
+          }}
+        >
           <Table highlightOnHover>
             <TableThead>
               <TableTr>
                 <TableTh>Data</TableTh>
                 <TableTh>Descrição</TableTh>
                 <TableTh>Categoria</TableTh>
-                <TableTh>Conta</TableTh>
+                <TableTh>Origem</TableTh>
                 <TableTh ta="right">Valor</TableTh>
                 <TableTh w={50} />
               </TableTr>
@@ -200,7 +221,11 @@ export default async function DebtDetailPage({
                         </Text>
                       )}
                     </TableTd>
-                    <TableTd>{movement.accountName ?? "—"}</TableTd>
+                    <TableTd>
+                      {movement.cardName
+                        ? `${movement.cardName}${movement.installmentNumber ? ` · ${movement.installmentNumber}/${movement.totalInstallments}` : ""}`
+                        : movement.accountName ?? "—"}
+                    </TableTd>
                     <TableTd ta="right">
                       <Stack gap={0} align="flex-end">
                         <Text fw={500}>

@@ -13,9 +13,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { useActionModal } from "@/components/ui/useActionModal";
 import {
   DebtFields,
-  resolveDebtTarget,
   type DebtFormValues,
-  type DebtSubmitValues,
   validateDebt,
 } from "./DebtFields";
 import type { AccountOption, CardOption, Option } from "@/lib/options";
@@ -26,12 +24,10 @@ interface EditDebtButtonProps {
   people: Option[];
   categories: Option[];
   accounts: AccountOption[];
-  /** Opcional só até as páginas passarem os cartões na Task 14. */
-  cards?: CardOption[];
+  cards: CardOption[];
   type: DebtTypeCode;
   currency: CurrencyCode;
-  /** Opcional só até as páginas calcularem o bloqueio na Task 14. */
-  originLocked?: boolean;
+  originLocked: boolean;
 }
 
 export function EditDebtButton(props: EditDebtButtonProps) {
@@ -41,30 +37,25 @@ export function EditDebtButton(props: EditDebtButtonProps) {
     people,
     categories,
     accounts,
-    cards = [],
+    cards,
     type,
     currency,
-    originLocked = false,
+    originLocked,
   } = props;
 
   const { opened, open, close, loading, run } = useActionModal({
     successMessage: "Dívida atualizada",
   });
   const [showManualFx, setShowManualFx] = useState(false);
-  const initialValues: DebtFormValues = {
-    ...values,
-    target: resolveDebtTarget(values),
-    installments: values.installments ?? 1,
-  };
+  const initialValues = values;
 
-  const form = useForm<DebtFormValues, DebtSubmitValues>({
+  const form = useForm<DebtFormValues>({
     mode: "uncontrolled",
     initialValues,
     validate: validateDebt,
     transformValues: (submitted) => ({
       ...submitted,
-      installments: submitted.installments ?? 1,
-      ...splitTarget(resolveDebtTarget(submitted)),
+      ...splitTarget(submitted.target),
     }),
   });
 

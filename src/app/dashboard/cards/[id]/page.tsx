@@ -16,6 +16,7 @@ import {
   TableThead,
   TableTr,
   Text,
+  Tooltip,
 } from "@mantine/core";
 
 import { requireUser } from "@/lib/session";
@@ -38,11 +39,12 @@ import { deleteCardPurchase } from "@/actions/cardPurchases";
 import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { BackLink } from "@/components/ui/AppLink";
+import { BackLink, LinkButton } from "@/components/ui/AppLink";
 import { toCalendarDate, formatDay, monthName } from "@/lib/dates";
 import type { CardPurchaseFormValues } from "@/components/forms/CardPurchaseFields";
 import type { AccountOption, CardOption, Option } from "@/lib/options";
 import { CategoryBadge } from "@/components/ui/CategoryBadge";
+import { MANAGED_BY_LABEL } from "@/lib/managedBy";
 
 const STATUS_LABELS: Record<InvoiceSummary["status"], string> = {
   OPEN: "Aberta",
@@ -359,7 +361,19 @@ function InvoiceItems(props: InvoiceItemsProps) {
                   </Stack>
                 </TableTd>
                 <TableTd>
-                  {invoice.status !== "PAID" && (
+                  {item.debtId ? (
+                    <Tooltip label={MANAGED_BY_LABEL.debt.hint}>
+                      <span>
+                        <LinkButton
+                          href={`/dashboard/debts/${item.debtId}`}
+                          size="compact-xs"
+                          variant="light"
+                        >
+                          {MANAGED_BY_LABEL.debt.label}
+                        </LinkButton>
+                      </span>
+                    </Tooltip>
+                  ) : invoice.status !== "PAID" ? (
                     <Group gap={4} wrap="nowrap" justify="flex-end">
                       <EditCardPurchaseButton
                         id={item.id}
@@ -381,7 +395,7 @@ function InvoiceItems(props: InvoiceItemsProps) {
                         action={deleteCardPurchase}
                       />
                     </Group>
-                  )}
+                  ) : null}
                 </TableTd>
               </TableTr>
             );

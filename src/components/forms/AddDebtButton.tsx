@@ -13,9 +13,7 @@ import { FormModal } from "@/components/ui/FormModal";
 import { useActionModal } from "@/components/ui/useActionModal";
 import {
   DebtFields,
-  resolveDebtTarget,
   type DebtFormValues,
-  type DebtSubmitValues,
   validateDebt,
 } from "./DebtFields";
 import type { AccountOption, CardOption, Option } from "@/lib/options";
@@ -24,8 +22,7 @@ interface AddDebtButtonProps {
   people: Option[];
   categories: Option[];
   accounts: AccountOption[];
-  /** Opcional só até as páginas passarem os cartões na Task 14. */
-  cards?: CardOption[];
+  cards: CardOption[];
   /** Pré-seleciona a pessoa quando o botão vive na linha de alguém. */
   defaultPersonId?: string;
   label?: string;
@@ -38,7 +35,7 @@ export function AddDebtButton(props: AddDebtButtonProps) {
     people,
     categories,
     accounts,
-    cards = [],
+    cards,
     defaultPersonId,
     label = "Nova dívida",
     baseCurrency,
@@ -63,14 +60,13 @@ export function AddDebtButton(props: AddDebtButtonProps) {
     manualFxRate: undefined,
   };
 
-  const form = useForm<DebtFormValues, DebtSubmitValues>({
+  const form = useForm<DebtFormValues>({
     mode: "uncontrolled",
     initialValues,
     validate: validateDebt,
     transformValues: (values) => ({
       ...values,
-      installments: values.installments ?? 1,
-      ...splitTarget(resolveDebtTarget(values)),
+      ...splitTarget(values.target),
     }),
   });
 

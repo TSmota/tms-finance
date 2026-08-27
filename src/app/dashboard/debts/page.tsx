@@ -9,12 +9,14 @@ import {
   Stack,
   Text,
   Title,
+  Tooltip,
 } from "@mantine/core";
 import { ArrowDownLeft, ArrowUpRight, ChevronRight, TriangleAlert } from "lucide-react";
 
 import { requireUser } from "@/lib/session";
 import { listDebts, type DebtListItem } from "@/lib/debts";
 import { listPersonOptions } from "@/lib/people";
+import { listCreditCardOptions } from "@/lib/creditCards";
 import { loadFormOptions } from "@/lib/formOptions";
 import { formatCurrency, type CurrencyCode } from "@/lib/currency";
 import {
@@ -35,6 +37,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { DebtFormValues } from "@/components/forms/DebtFields";
 import { CategoryBadge } from "@/components/ui/CategoryBadge";
+import { joinTarget, TARGET_ACCOUNT_PREFIX } from "@/lib/paymentTarget";
+import type { CardOption } from "@/lib/options";
 
 interface DebtsPageProps {
   /** `?person=<uuid>` filtra por pessoa, vindo da tela de pessoas. */
@@ -46,10 +50,11 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 /**
  * Valores iniciais do formulário de edição, a partir da dívida gravada.
  *
- * Conta e data vêm da **movimentação de origem**, não de um palpite: salvar sem
- * mexer nesses campos precisa deixar o lançamento exatamente onde ele está.
+ * O destino e a data vêm da **movimentação de origem**, não de um palpite:
+ * salvar sem mexer nesses campos precisa deixar o lançamento exatamente onde
+ * ele está.
  */
-function toFormValues(debt: DebtListItem, fallbackAccountId: string): DebtFormValues {
+function toFormValues(debt: DebtListItem, fallbackTarget: string): DebtFormValues {
   return {
     personId: debt.personId,
     categoryId: debt.categoryId,
@@ -57,7 +62,13 @@ function toFormValues(debt: DebtListItem, fallbackAccountId: string): DebtFormVa
     description: debt.description,
     amount: debt.originalAmount,
     currency: debt.currency,
-    accountId: debt.originAccountId ?? fallbackAccountId,
+    target: debt.originTarget
+      ? joinTarget(
+          debt.originTarget.kind === "account" ? debt.originTarget.id : null,
+          debt.originTarget.kind === "card" ? debt.originTarget.id : null,
+        )
+      : fallbackTarget,
+    installments: debt.originInstallments,
     date: toCalendarDate(debt.originDate ?? debt.createdAt),
     dueDate: debt.dueDate ? toCalendarDate(debt.dueDate) : null,
     manualFxRate: undefined,
@@ -71,10 +82,11 @@ export default async function DebtsPage({ searchParams }: DebtsPageProps) {
   // Id inválido na URL é ignorado, não é erro: `?person=lixo` mostra tudo.
   const personId = person && UUID_PATTERN.test(person) ? person : undefined;
 
-  const [debts, people, options] = await Promise.all([
+  const [debts, people, options, cards] = await Promise.all([
     listDebts(user.id, { personId }),
     listPersonOptions(user.id),
     loadFormOptions(user.id),
+    listCreditCardOptions(user.id),
   ]);
 
   const filteredPerson = people.find((entry) => entry.value === personId);
@@ -83,7 +95,7 @@ export default async function DebtsPage({ searchParams }: DebtsPageProps) {
   // abriria um modal impossível de enviar.
   const missing = [
     people.length === 0 ? "uma pessoa" : null,
-    options.accounts.length === 0 ? "uma conta" : null,
+    options.accounts.length === 0 && cards.length === 0 ? "uma conta ou um cartão" : null,
     options.categories.length === 0 ? "uma categoria" : null,
   ].filter((entry) => entry !== null);
 
@@ -92,6 +104,7 @@ export default async function DebtsPage({ searchParams }: DebtsPageProps) {
       people={people}
       categories={options.categories}
       accounts={options.accounts}
+      cards={cards}
       defaultPersonId={personId}
       baseCurrency={user.baseCurrency}
     />
@@ -156,6 +169,7 @@ export default async function DebtsPage({ searchParams }: DebtsPageProps) {
                       people={people}
                       categories={options.categories}
                       accounts={options.accounts}
+                      cards={cards}
                     />
                   </GridCol>
                 ))}
@@ -183,9 +197,10 @@ interface DebtCardProps {
   people: Array<{ value: string; label: string }>;
   categories: Array<{ value: string; label: string }>;
   accounts: Array<{ value: string; label: string; currency: CurrencyCode }>;
+  cards: CardOption[];
 }
 
-function DebtCard({ debt, people, categories, accounts }: DebtCardProps) {
+function DebtCard({ debt, people, categories, accounts, cards }: DebtCardProps) {
   const progress =
     debt.originalAmount > 0 ? (debt.settledAmount / debt.originalAmount) * 100 : 0;
 
@@ -205,6 +220,12 @@ function DebtCard({ debt, people, categories, accounts }: DebtCardProps) {
 
       <Group gap="xs" mb="sm">
         <CategoryBadge name={debt.categoryName} color={debt.categoryColor} />
+        {debt.originCardName && (
+          <Text size="sm" c="dimmed">
+            {debt.originCardName}
+            {debt.originInstallments > 1 && ` · ${debt.originInstallments}x`}
+          </Text>
+        )}
         {debt.dueDate && (
           <Text size="xs" c="dimmed">
             vence {formatDay(debt.dueDate)}
@@ -257,21 +278,35 @@ function DebtCard({ debt, people, categories, accounts }: DebtCardProps) {
         <Group gap={4} wrap="nowrap">
           <EditDebtButton
             id={debt.id}
-            values={toFormValues(debt, accounts[0]?.value ?? "")}
+            values={toFormValues(
+              debt,
+              accounts[0] ? `${TARGET_ACCOUNT_PREFIX}${accounts[0].value}` : "",
+            )}
             people={people}
             categories={categories}
             accounts={accounts}
+            cards={cards}
             type={debt.type}
             currency={debt.currency}
+            originLocked={debt.originLocked}
           />
-          <DeleteEntityButton
-            id={debt.id}
-            title="Remover dívida"
-            successMessage="Dívida removida"
-            question={`Remover "${debt.description}" devolve os saldos das contas ao que eram. Tem certeza?`}
-            action={deleteDebt}
-            impactTarget="debt"
-          />
+          <Tooltip
+            label={debt.originLocked ? "A origem desta dívida está em uma fatura paga" : undefined}
+            disabled={!debt.originLocked}
+          >
+            <span>
+              <DeleteEntityButton
+                id={debt.id}
+                title="Remover dívida"
+                successMessage="Dívida removida"
+                question={`Remover "${debt.description}" devolve os saldos das contas ao que eram. Tem certeza?`}
+                action={deleteDebt}
+                impactTarget="debt"
+                blocked={debt.originLocked}
+                disabled={debt.originLocked}
+              />
+            </span>
+          </Tooltip>
         </Group>
       </Group>
     </Card>

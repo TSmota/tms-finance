@@ -29,27 +29,14 @@ export type DebtFormValues = {
   amount: number;
   currency: string;
   /** Origem codificada: exatamente um destino fica preenchido. */
-  target?: string;
+  target: string;
   /** Só no cartão; 1 em conta. */
-  installments?: number;
-  /** @deprecated Compatibilidade temporária até a Task 14 migrar as páginas. */
-  accountId?: string | null;
+  installments: number;
   date: string;
   /** `null`, não `""`: vazio do `DatePickerInput` é `null`. */
   dueDate: string | null;
   manualFxRate?: number | undefined;
 };
-
-export type DebtSubmitValues = Omit<DebtFormValues, "accountId"> & {
-  accountId: string | null;
-  creditCardId: string | null;
-  installments: number;
-};
-
-/** Resolve o formato anterior das páginas sem mudar o contrato validado pelo serviço. */
-export function resolveDebtTarget(values: DebtFormValues): string {
-  return values.target ?? (values.accountId ? `${TARGET_ACCOUNT_PREFIX}${values.accountId}` : "");
-}
 
 /**
  * Valida o formulário contra o schema do serviço.
@@ -63,8 +50,7 @@ export function resolveDebtTarget(values: DebtFormValues): string {
 export function validateDebt(values: DebtFormValues): FormErrors {
   const errors = zod4Resolver(debtSchema)({
     ...values,
-    installments: values.installments ?? 1,
-    ...splitTarget(resolveDebtTarget(values)),
+    ...splitTarget(values.target),
   });
 
   const targetError = errors.accountId ?? errors.creditCardId;
@@ -79,7 +65,7 @@ export function validateDebt(values: DebtFormValues): FormErrors {
 }
 
 interface DebtFieldsProps {
-  form: UseFormReturnType<DebtFormValues, DebtSubmitValues>;
+  form: UseFormReturnType<DebtFormValues>;
   people: Option[];
   categories: Option[];
   accounts: AccountOption[];
@@ -155,6 +141,17 @@ export function DebtFields(props: DebtFieldsProps) {
           allowDeselect={false}
           key={form.key("type")}
           {...form.getInputProps("type")}
+          onChange={(value) => {
+            form.getInputProps("type").onChange(value);
+
+            if (value === "BORROWED" && target.startsWith(TARGET_CARD_PREFIX)) {
+              form.setFieldValue(
+                "target",
+                accounts[0] ? `${TARGET_ACCOUNT_PREFIX}${accounts[0].value}` : "",
+              );
+              form.setFieldValue("installments", 1);
+            }
+          }}
         />
       )}
       <Select

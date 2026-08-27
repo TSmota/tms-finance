@@ -23,6 +23,8 @@ interface DeleteEntityButtonProps {
   impactTarget?: DeletionTarget;
   /** Recusa que a tela já conhece: desabilita "Remover" antes de medir. */
   blocked?: boolean;
+  /** Desabilita também o botão que abre o modal. */
+  disabled?: boolean;
 }
 
 /**
@@ -34,7 +36,16 @@ interface DeleteEntityButtonProps {
  * bloqueado.
  */
 export function DeleteEntityButton(props: DeleteEntityButtonProps) {
-  const { id, title, successMessage, question, action, impactTarget, blocked = false } = props;
+  const {
+    id,
+    title,
+    successMessage,
+    question,
+    action,
+    impactTarget,
+    blocked = false,
+    disabled = false,
+  } = props;
   const [pending, startTransition] = useTransition();
   const modalId = `remove-${id}`;
 
@@ -70,7 +81,13 @@ export function DeleteEntityButton(props: DeleteEntityButtonProps) {
   };
 
   return (
-    <IconButton label={title} color="red" loading={pending} onClick={handleDelete}>
+    <IconButton
+      label={title}
+      color="red"
+      loading={pending}
+      onClick={handleDelete}
+      disabled={disabled}
+    >
       <Trash2 size={16} />
     </IconButton>
   );
