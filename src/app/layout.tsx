@@ -1,11 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { ColorSchemeScript, MantineProvider, mantineHtmlProps } from "@mantine/core";
-import { DatesProvider } from "@mantine/dates";
-import { Notifications } from "@mantine/notifications";
-import { ModalsProvider } from "@mantine/modals";
-import { SessionProvider } from "next-auth/react";
-import "dayjs/locale/pt-br";
+import { ColorSchemeScript, mantineHtmlProps } from "@mantine/core";
 
 import "@mantine/core/styles.css";
 import "@mantine/dates/styles.css";
@@ -13,7 +8,7 @@ import "@mantine/charts/styles.css";
 import "@mantine/notifications/styles.css";
 import "./globals.css";
 
-import { theme } from "@/theme";
+import { AppProviders } from "@/components/AppProviders";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -45,14 +40,7 @@ export default function RootLayout({
         <ColorSchemeScript />
       </head>
       <body>
-        <SessionProvider>
-          <MantineProvider theme={theme}>
-            <DatesProvider settings={{ locale: "pt-br" }}>
-              <Notifications />
-              <ModalsProvider>{children}</ModalsProvider>
-            </DatesProvider>
-          </MantineProvider>
-        </SessionProvider>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

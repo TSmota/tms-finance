@@ -1,29 +1,40 @@
 "use client";
 
-import { Button, NumberInput, Select, TextInput } from "@mantine/core";
+import { Button } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import { Plus } from "lucide-react";
 
 import { accountSchema } from "@/lib/validations";
-import { ACCOUNT_TYPES } from "@/lib/accountTypes";
+import type { CurrencyCode } from "@/lib/currency";
 import { createAccount } from "@/actions/accounts";
 import { FormModal } from "@/components/ui/FormModal";
 import { useActionModal } from "@/components/ui/useActionModal";
+import { AccountFields, type AccountFormValues } from "./AccountFields";
 
-export function AddAccountButton() {
+interface AddAccountButtonProps {
+  /** Último recurso do campo de moeda: a moeda base do usuário. */
+  baseCurrency: CurrencyCode;
+}
+
+export function AddAccountButton(props: AddAccountButtonProps) {
+  const { baseCurrency } = props;
+
   const { opened, open, close, loading, run } = useActionModal({
     successMessage: "Conta criada",
   });
 
+  const initialValues: AccountFormValues = {
+    name: "",
+    type: "CHECKING",
+    institution: "",
+    currency: baseCurrency,
+    initialBalance: 0,
+  };
+
   const form = useForm({
     mode: "uncontrolled",
-    initialValues: {
-      name: "",
-      type: "CHECKING",
-      currency: "BRL",
-      initialBalance: 0,
-    },
+    initialValues,
     validate: zod4Resolver(accountSchema),
   });
 
@@ -43,29 +54,7 @@ export function AddAccountButton() {
         onSubmit={handleSubmit}
         loading={loading}
       >
-        <TextInput
-          label="Nome"
-          key={form.key("name")}
-          {...form.getInputProps("name")}
-        />
-        <Select
-          label="Tipo"
-          data={ACCOUNT_TYPES}
-          key={form.key("type")}
-          {...form.getInputProps("type")}
-        />
-        <TextInput
-          label="Moeda"
-          placeholder="BRL"
-          key={form.key("currency")}
-          {...form.getInputProps("currency")}
-        />
-        <NumberInput
-          label="Saldo inicial"
-          decimalScale={2}
-          key={form.key("initialBalance")}
-          {...form.getInputProps("initialBalance")}
-        />
+        <AccountFields form={form} />
       </FormModal>
     </>
   );

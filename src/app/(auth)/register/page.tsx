@@ -5,20 +5,20 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import {
-    Anchor,
-    Button,
-    Paper,
-    PasswordInput,
-    Stack,
-    Text,
-    TextInput,
-    Title,
+  Anchor,
+  Button,
+  Paper,
+  PasswordInput,
+  Stack,
+  Text,
+  TextInput,
+  Title,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import { notifications } from "@mantine/notifications";
 
-import { registerSchema } from "@/lib/validations";
+import { registerSchema, PASSWORD_REQUIREMENT } from "@/lib/validations";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -49,7 +49,6 @@ export default function RegisterPage() {
       return;
     }
 
-    // Auto sign-in after successful registration.
     const signInRes = await signIn("credentials", {
       email: values.email,
       password: values.password,
@@ -61,13 +60,14 @@ export default function RegisterPage() {
       router.push("/login");
       return;
     }
+
     router.push("/dashboard");
     router.refresh();
   });
 
   return (
     <Paper withBorder shadow="md" p="xl" radius="md" w={420} maw="100%">
-      <Title order={2} ta="center" mb="lg">
+      <Title order={1} size="h2" ta="center" mb="lg">
         Criar sua conta
       </Title>
 
@@ -87,7 +87,7 @@ export default function RegisterPage() {
           />
           <PasswordInput
             label="Senha"
-            placeholder="Pelo menos 8 caracteres"
+            description={PASSWORD_REQUIREMENT}
             key={form.key("password")}
             {...form.getInputProps("password")}
           />
@@ -99,7 +99,7 @@ export default function RegisterPage() {
 
       <Text c="dimmed" size="sm" ta="center" mt="md">
         Já tem uma conta?{" "}
-        <Anchor component={Link} href="/login" size="sm">
+        <Anchor component={Link} href="/login" size="sm" underline="always">
           Entrar
         </Anchor>
       </Text>

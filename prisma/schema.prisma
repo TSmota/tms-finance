@@ -1,3 +1,13 @@
+// TMS Finance — modelo de domínio.
+//
+// Convenções:
+// - IDs em UUID gerados pelo banco (gen_random_uuid(), nativo no PG 13+).
+// - Dinheiro sempre Decimal(12,2); taxa de câmbio Decimal(10,4).
+// - Colunas em snake_case via @map; campos do Prisma Client em camelCase.
+// - Tudo vive no schema Postgres `finance`; `_prisma_migrations` fica em `public`.
+// - Conta bancária é `FinancialAccount` porque `Account` é reservado ao Auth.js:
+//   @auth/prisma-adapter acessa `prisma.account` por nome fixo e não permite remapear.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,6 +17,11 @@ datasource db {
   schemas  = ["finance"]
 }
 
+// ==========================================
+// ENUMS
+// ==========================================
+
+/// Natureza da conta, para agrupamento e relatórios.
 enum AccountType {
   CHECKING
   SAVINGS
@@ -16,14 +31,41 @@ enum AccountType {
   @@schema("finance")
 }
 
-enum TransactionType {
-  INFLOW
-  OUTFLOW
+enum Currency {
+  BRL
+  USD
+  EUR
+  GBP
 
   @@schema("finance")
 }
 
-enum RecurrenceInterval {
+enum TransactionType {
+  INCOME
+  EXPENSE
+  INVOICE_PAYMENT
+
+  @@schema("finance")
+}
+
+/// PENDING = projetada, ainda não afeta o saldo.
+/// CONFIRMED = efetivada.
+enum TransactionStatus {
+  PENDING
+  CONFIRMED
+
+  @@schema("finance")
+}
+
+enum InvoiceStatus {
+  OPEN
+  CLOSED
+  PAID
+
+  @@schema("finance")
+}
+
+enum RecurrenceFrequency {
   WEEKLY
   MONTHLY
   YEARLY
@@ -31,38 +73,61 @@ enum RecurrenceInterval {
   @@schema("finance")
 }
 
+enum DebtType {
+  /// Usuário emprestou: gera saldo a receber.
+  LENT
+  /// Usuário pegou emprestado: gera saldo a pagar.
+  BORROWED
+
+  @@schema("finance")
+}
+
 enum DebtStatus {
   PENDING
-  PARTIAL
+  PARTIALLY_PAID
   PAID
 
   @@schema("finance")
 }
 
+// ==========================================
+// USUÁRIO & AUTENTICAÇÃO (Auth.js)
+// ==========================================
+
 model User {
-  id                String             @id @default(cuid())
-  name              String?
-  email             String             @unique
-  emailVerified     DateTime?          @map("email_verified")
-  image             String?
-  passwordHash      String?            @map("password_hash")
-  preferredCurrency String             @default("BRL") @map("preferred_currency")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  accounts          Account[]
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String    @unique @db.VarChar(320)
+  name          String?   @db.VarChar(120)
+  image         String?   @db.VarChar(2048)
+  emailVerified DateTime? @map("email_verified")
+  passwordHash  String?   @map("password_hash")
+  /// Corta as sessões emitidas antes desta marca. Ver `auth.ts` — callback `jwt`.
+  passwordChangedAt DateTime? @map("password_changed_at")
+  /// Moeda de referência dos relatórios.
+  baseCurrency  Currency  @default(BRL) @map("base_currency")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  authAccounts      Account[]
   sessions          Session[]
   financialAccounts FinancialAccount[]
   categories        Category[]
+  creditCards       CreditCard[]
+  invoices          Invoice[]
   transactions      Transaction[]
   recurringExpenses RecurringExpense[]
+  people            Person[]
   debts             Debt[]
+  agentTokens       AgentToken[]
 
   @@map("users")
   @@schema("finance")
 }
 
+/// Conta OAuth do Auth.js. O nome do model é exigido por @auth/prisma-adapter.
 model Account {
-  id                String  @id @default(cuid())
-  userId            String  @map("user_id")
+  id                String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String  @map("user_id") @db.Uuid
   type              String
   provider          String
   providerAccountId String  @map("provider_account_id")
@@ -73,7 +138,8 @@ model Account {
   scope             String?
   id_token          String? @db.Text
   session_state     String?
-  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@index([userId])
@@ -82,12 +148,14 @@ model Account {
 }
 
 model Session {
-  id           String   @id @default(cuid())
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   sessionToken String   @unique @map("session_token")
-  userId       String   @map("user_id")
+  userId       String   @map("user_id") @db.Uuid
   expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@map("sessions")
   @@schema("finance")
 }
@@ -102,116 +170,406 @@ model VerificationToken {
   @@schema("finance")
 }
 
+// ==========================================
+// CONTAS BANCÁRIAS E CARTEIRAS
+// ==========================================
+
 model FinancialAccount {
-  id             String            @id @default(cuid())
-  name           String
-  type           AccountType
-  currency       String
-  initialBalance Decimal           @default(0) @db.Decimal(18, 2) @map("initial_balance")
-  userId         String            @map("user_id")
-  createdAt      DateTime          @default(now()) @map("created_at")
-  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions   Transaction[]
-  snapshots      BalanceSnapshot[]
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String      @map("user_id") @db.Uuid
+  name           String      @db.VarChar(120)
+  type           AccountType @default(CHECKING)
+  /// Banco ou instituição, para agrupar conta e cartão da mesma origem.
+  institution    String?     @db.VarChar(120)
+  /// Moeda nativa da conta.
+  currency       Currency    @default(BRL)
+  initialBalance Decimal     @default(0.00) @map("initial_balance") @db.Decimal(12, 2)
+  /// Denormalizado: mantido em $transaction por todo write de transação confirmada.
+  currentBalance Decimal     @default(0.00) @map("current_balance") @db.Decimal(12, 2)
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions    Transaction[]
+  recurring       RecurringExpense[]
+  invoicesPaid    Invoice[]          @relation("InvoicePaymentAccount")
+  /// Cartões que usam esta conta como origem padrão do pagamento da fatura.
+  defaultForCards CreditCard[]       @relation("CardDefaultPaymentAccount")
 
   @@index([userId])
   @@map("financial_accounts")
   @@schema("finance")
 }
 
-model BalanceSnapshot {
-  id        String           @id @default(cuid())
-  amount    Decimal          @db.Decimal(18, 2)
-  createdAt DateTime         @default(now()) @map("created_at")
-  accountId String           @map("account_id")
-  account   FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-
-  @@index([accountId])
-  @@map("balance_snapshots")
-  @@schema("finance")
-}
+// ==========================================
+// CATEGORIAS E SUBCATEGORIAS
+// ==========================================
 
 model Category {
-  id                String             @id @default(cuid())
-  name              String
-  color             String             @default("#868e96")
-  userId            String             @map("user_id")
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions      Transaction[]
-  recurringExpenses RecurringExpense[]
+  id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId   String  @map("user_id") @db.Uuid
+  name     String  @db.VarChar(120)
+  icon     String? @db.VarChar(60)
+  color    String? @db.VarChar(7)
+  /// Nulo = categoria raiz. Preenchido = subcategoria (hierarquia de 2 níveis).
+  parentId String? @map("parent_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent        Category?  @relation("CategoryToSubcategory", fields: [parentId], references: [id], onDelete: Cascade)
+  subcategories Category[] @relation("CategoryToSubcategory")
+
+  transactions Transaction[]
+  recurring    RecurringExpense[]
+  debts        Debt[]
 
   @@index([userId])
+  @@index([parentId])
   @@map("categories")
   @@schema("finance")
 }
 
-model Transaction {
-  id               String           @id @default(cuid())
-  amount           Decimal          @db.Decimal(18, 2)
-  type             TransactionType
-  date             DateTime
-  description      String
-  fxRateAtCreation Decimal          @default(1) @db.Decimal(18, 6) @map("fx_rate_at_creation")
-  accountId        String           @map("account_id")
-  categoryId       String?          @map("category_id")
-  userId           String           @map("user_id")
-  createdAt        DateTime         @default(now()) @map("created_at")
-  account          FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  category         Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+// ==========================================
+// CARTÃO DE CRÉDITO E FATURAS
+// ==========================================
 
-  @@index([userId, date])
-  @@index([accountId])
-  @@index([categoryId])
-  @@map("transactions")
+model CreditCard {
+  id                      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                  String   @map("user_id") @db.Uuid
+  name                    String   @db.VarChar(120)
+  /// Banco ou instituição emissora, para agrupar com a conta da mesma origem.
+  institution             String?  @db.VarChar(120)
+  /// Limite de crédito, quando informado. Habilita mostrar limite disponível.
+  creditLimit             Decimal? @map("credit_limit") @db.Decimal(12, 2)
+  /// Conta sugerida ao pagar a fatura. Editável em cada pagamento.
+  defaultPaymentAccountId String?  @map("default_payment_account_id") @db.Uuid
+  /// Dia do fechamento da fatura (1-31, com clamp no último dia do mês).
+  closingDay              Int      @map("closing_day")
+  /// Dia do vencimento (1-31). Se menor que closingDay, vence no mês seguinte.
+  dueDay                  Int      @map("due_day")
+  currency                Currency @default(BRL)
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  defaultPaymentAccount FinancialAccount?  @relation("CardDefaultPaymentAccount", fields: [defaultPaymentAccountId], references: [id], onDelete: SetNull)
+  invoices              Invoice[]
+  recurring             RecurringExpense[]
+  transactions          Transaction[]
+
+  @@index([userId])
+  @@index([defaultPaymentAccountId])
+  @@map("credit_cards")
   @@schema("finance")
 }
 
+model Invoice {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String        @map("user_id") @db.Uuid
+  creditCardId     String        @map("credit_card_id") @db.Uuid
+  /// Mês/ano de competência da fatura (1-12).
+  month            Int
+  year             Int
+  /// Datas efetivas do ciclo, resolvidas a partir de closingDay/dueDay do cartão.
+  closingDate      DateTime      @map("closing_date")
+  dueDate          DateTime      @map("due_date")
+  status           InvoiceStatus @default(OPEN)
+  currency         Currency      @default(BRL)
+  /// Denormalizado: soma dos lançamentos da fatura.
+  totalAmount      Decimal       @default(0.00) @map("total_amount") @db.Decimal(12, 2)
+  paymentAccountId String?       @map("payment_account_id") @db.Uuid
+  paidAt           DateTime?     @map("paid_at")
+
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creditCard     CreditCard        @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  paymentAccount FinancialAccount? @relation("InvoicePaymentAccount", fields: [paymentAccountId], references: [id], onDelete: SetNull)
+  transactions   Transaction[]
+
+  @@unique([creditCardId, month, year])
+  @@index([userId])
+  @@index([creditCardId])
+  @@index([paymentAccountId])
+  @@map("invoices")
+  @@schema("finance")
+}
+
+// ==========================================
+// GASTOS RECORRENTES
+// ==========================================
+
 model RecurringExpense {
-  id          String             @id @default(cuid())
-  name        String
-  amount      Decimal            @db.Decimal(18, 2)
-  currency    String
-  interval    RecurrenceInterval @default(MONTHLY)
-  active      Boolean            @default(true)
-  categoryId  String?            @map("category_id")
-  userId      String             @map("user_id")
-  category    Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  description String   @db.VarChar(200)
+  amount      Decimal  @db.Decimal(12, 2)
+  currency    Currency @default(BRL)
+
+  frequency       RecurrenceFrequency @default(MONTHLY)
+  /// Dia do vencimento no ciclo (1-31, com clamp no último dia do mês).
+  dueDay          Int                 @map("due_day")
+  active          Boolean             @default(true)
+  /// true = valor é estimativa e deve ser confirmado no vencimento.
+  isEstimated     Boolean             @default(false) @map("is_estimated")
+  startDate       DateTime            @map("start_date")
+  endDate         DateTime?           @map("end_date")
+  /// Marca até quando as ocorrências já foram materializadas (idempotência).
+  lastGeneratedAt DateTime?           @map("last_generated_at")
+
+  categoryId   String  @map("category_id") @db.Uuid
+  /// Exatamente um dos dois: débito em conta ou lançamento no cartão.
+  accountId    String? @map("account_id") @db.Uuid
+  creditCardId String? @map("credit_card_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category     Category          @relation(fields: [categoryId], references: [id])
+  account      FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  creditCard   CreditCard?       @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
 
   @@index([userId])
   @@index([categoryId])
+  @@index([accountId])
+  @@index([creditCardId])
   @@map("recurring_expenses")
   @@schema("finance")
 }
 
-model Debt {
-  id          String        @id @default(cuid())
-  debtorName  String        @map("debtor_name")
-  description String?
-  totalAmount Decimal       @db.Decimal(18, 2) @map("total_amount")
-  currency    String
-  dueDate     DateTime?     @map("due_date")
-  status      DebtStatus    @default(PENDING)
-  userId      String        @map("user_id")
-  createdAt   DateTime      @default(now()) @map("created_at")
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  payments    DebtPayment[]
+// ==========================================
+// EMPRÉSTIMOS E DÍVIDAS PESSOAIS
+// ==========================================
+
+model Person {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String   @db.VarChar(120)
+  notes     String?  @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  debts Debt[]
 
   @@index([userId])
+  @@map("people")
+  @@schema("finance")
+}
+
+model Debt {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String     @map("user_id") @db.Uuid
+  personId    String     @map("person_id") @db.Uuid
+  /// Motivo/origem da dívida, obrigatório.
+  categoryId  String     @map("category_id") @db.Uuid
+  type        DebtType
+  status      DebtStatus @default(PENDING)
+  description String     @db.VarChar(200)
+
+  originalAmount  Decimal   @map("original_amount") @db.Decimal(12, 2)
+  remainingAmount Decimal   @map("remaining_amount") @db.Decimal(12, 2)
+  currency        Currency  @default(BRL)
+  dueDate         DateTime? @map("due_date")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person      Person        @relation(fields: [personId], references: [id], onDelete: Cascade)
+  category    Category      @relation(fields: [categoryId], references: [id])
+  /// Movimentações vinculadas: o empréstimo original e as amortizações.
+  settlements Transaction[]
+
+  @@index([userId])
+  @@index([personId])
+  @@index([categoryId])
   @@map("debts")
   @@schema("finance")
 }
 
-model DebtPayment {
-  id               String   @id @default(cuid())
-  amount           Decimal  @db.Decimal(18, 2)
-  paymentDate      DateTime @map("payment_date")
-  fxRateAtCreation Decimal  @default(1) @db.Decimal(18, 6) @map("fx_rate_at_creation")
-  debtId           String   @map("debt_id")
-  debt             Debt     @relation(fields: [debtId], references: [id], onDelete: Cascade)
+// ==========================================
+// TRANSAÇÕES & FLUXO DE CAIXA
+// ==========================================
 
+model Transaction {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String            @map("user_id") @db.Uuid
+  type        TransactionType
+  status      TransactionStatus @default(CONFIRMED)
+  description String            @db.VarChar(200)
+  date        DateTime
+
+  // Valores e câmbio multi-moeda.
+  /// Valor na moeda em que o lançamento foi feito.
+  amount          Decimal  @db.Decimal(12, 2)
+  currency        Currency @default(BRL)
+  /// Taxa aplicada: amount * exchangeRate = convertedAmount, garantido por CHECK.
+  exchangeRate    Decimal  @default(1.0000) @map("exchange_rate") @db.Decimal(10, 4)
+  /// Valor na moeda da conta/cartão. É este campo que move saldo e fatura.
+  convertedAmount Decimal  @map("converted_amount") @db.Decimal(12, 2)
+
+  // Vínculos opcionais conforme o contexto.
+  accountId          String? @map("account_id") @db.Uuid
+  categoryId         String? @map("category_id") @db.Uuid
+  creditCardId       String? @map("credit_card_id") @db.Uuid
+  invoiceId          String? @map("invoice_id") @db.Uuid
+  recurringExpenseId String? @map("recurring_expense_id") @db.Uuid
+  debtId             String? @map("debt_id") @db.Uuid
+
+  // Controle de parcelamento.
+  installmentNumber   Int?    @map("installment_number")
+  totalInstallments   Int?    @map("total_installments")
+  parentInstallmentId String? @map("parent_installment_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account          FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category         Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  creditCard       CreditCard?       @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  invoice          Invoice?          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  recurringExpense RecurringExpense? @relation(fields: [recurringExpenseId], references: [id], onDelete: SetNull)
+  debt             Debt?             @relation(fields: [debtId], references: [id], onDelete: SetNull)
+
+  parent       Transaction?  @relation("TransactionInstallments", fields: [parentInstallmentId], references: [id], onDelete: SetNull)
+  installments Transaction[] @relation("TransactionInstallments")
+
+  /// Uma recorrência produz no máximo uma ocorrência por data. É o que torna a
+  /// materialização lazy segura sob concorrência: dois renders simultâneos do
+  /// mesmo mês tentam inserir a mesma linha, e o segundo é descartado pelo
+  /// `ON CONFLICT DO NOTHING` do `createMany({ skipDuplicates })`.
+  /// Linhas sem recorrência não colidem: no Postgres, NULLs são distintos.
+  @@unique([recurringExpenseId, date], map: "transactions_recurring_occurrence_key")
+  @@index([userId, date])
+  /// As pendências filtram por `status` e depois por faixa de `date`. Com
+  /// `(user_id, status)` o range ficava fora do index scan.
+  @@index([userId, status, date])
+  @@index([accountId])
+  @@index([categoryId])
+  @@index([creditCardId])
+  @@index([invoiceId])
   @@index([debtId])
-  @@map("debt_payments")
+  @@index([parentInstallmentId])
+  @@map("transactions")
+  @@schema("finance")
+}
+
+// ==========================================
+// SUPERFÍCIE DE AGENTE
+// ==========================================
+
+/// Credencial de máquina para o endpoint MCP (`/api/agent/mcp`).
+///
+/// Token opaco de 256 bits, guardado **só** como HMAC-SHA256 com o pepper de
+/// `AGENT_TOKEN_PEPPER`. Escolhido em vez de JWT porque JWT não é revogável
+/// antes de expirar, e reciclar `AUTH_SECRET` para revogar derrubaria todas as
+/// sessões web — o oposto de contenção.
+model AgentToken {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+
+  /// Rótulo humano: "hermes-prod", "hermes-staging".
+  label String @db.VarChar(120)
+
+  /// HMAC-SHA256(token, AGENT_TOKEN_PEPPER) em hex. O token em claro nunca é
+  /// persistido: existe uma única vez, no stdout de quem o emitiu.
+  tokenHash String @unique @map("token_hash")
+
+  /// Prefixo do token, só para identificar qual é sem revelá-lo.
+  tokenHint String @map("token_hint")
+
+  /// Escopos concedidos. O CHECK da migration recusa valor desconhecido, e
+  /// exige pelo menos um: token sem escopo não deveria existir.
+  scopes String[]
+
+  expiresAt DateTime? @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  /// Escrito fora do caminho crítico — falha de telemetria não derruba chamada.
+  lastUsedAt DateTime? @map("last_used_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  auditLogs AgentAuditLog[]
+
+  @@index([userId])
+  @@map("agent_tokens")
+  @@schema("finance")
+}
+
+/// Trilha append-only de tudo que o agente pediu — inclusive o que foi negado.
+///
+/// Um log que só registra sucesso não serve para investigar incidente: a
+/// recusa por escopo e a chamada com token inválido são justamente o que se
+/// quer ver depois. `affectedIds` é o que torna a reversão possível.
+model AgentAuditLog {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// Nulo quando o token apresentado não existia: não há a que vincular.
+  tokenId String? @map("token_id") @db.Uuid
+  userId  String? @map("user_id") @db.Uuid
+
+  tool String
+
+  /// OK · CONFIRM_REQUIRED · INVALID_INPUT · FORBIDDEN_SCOPE · RATE_LIMITED ·
+  /// DOMAIN_ERROR · FX_UNAVAILABLE · ERROR. Restrito por CHECK.
+  verdict String
+
+  /// Argumentos já sanitizados. O log é dado persistido como qualquer outro:
+  /// não guarda o que o DTO de saída não guardaria.
+  args Json
+
+  /// IDs criados, alterados ou removidos.
+  affectedIds String[] @map("affected_ids")
+
+  errorCode  String? @map("error_code")
+  durationMs Int     @map("duration_ms")
+  ip         String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  token AgentToken? @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+
+  /// Composto e nesta ordem porque a investigação de incidente é sempre "o que
+  /// este token fez nesta janela". Com `tokenId` à esquerda ele também serve a
+  /// busca por token só, cobrindo o índice de FK que a convenção do repo exige.
+  @@index([tokenId, createdAt])
+  @@index([userId, createdAt])
+  /// Varredura por tempo, para retenção.
+  @@index([createdAt])
+  @@map("agent_audit_log")
+  @@schema("finance")
+}
+
+// ==========================================
+// RATE LIMIT
+// ==========================================
+
+/// Uma tentativa contada por janela deslizante — login, cadastro e agente.
+///
+/// Tabela própria, e não a contagem sobre `agent_audit_log` que existia antes:
+/// a auditoria só é escrita **depois** da chamada, então N requisições
+/// simultâneas contavam todas zero e passavam juntas. Aqui a linha é inserida
+/// **antes** da contagem, e cada requisição enxerga pelo menos a própria.
+///
+/// Sem entidade relacionada de propósito: `key` guarda e-mail ou IP de quem
+/// ainda não se autenticou, e uma FK exigiria que o sujeito já existisse.
+model RateLimitHit {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// Balde: "login:email", "login:ip", "register:ip", "agent".
+  scope String @db.VarChar(32)
+  /// Sujeito dentro do balde: e-mail normalizado, IP ou id do token.
+  key   String @db.VarChar(320)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// Serve à contagem da janela e à poda, que filtram os três nesta ordem.
+  @@index([scope, key, createdAt])
+  @@map("rate_limit_hits")
   @@schema("finance")
 }

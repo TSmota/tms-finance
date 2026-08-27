@@ -1,13 +1,13 @@
 interface SuccessActionResult {
-  /** Indicates the action was successful */
   ok: true;
 }
 
 interface FailureActionResult {
-  /** Indicates the action failed */
   ok: false;
-  /** The error message describing why the action failed */
+  /** Mensagem em pt-BR exibida direto ao usuário. */
   error: string;
+  /** O formulário deve reabrir pedindo a taxa. */
+  needsManualFxRate?: boolean;
 }
 
 export type ActionResult = SuccessActionResult | FailureActionResult;

@@ -1,155 +1,88 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
-import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { debtSchema, debtPaymentSchema } from "@/lib/validations";
-import { FxUnavailableError, getExchangeRate } from "@/lib/fxService";
-import { toNumber } from "@/lib/balance";
-import { ActionResult } from "./types";
-
-export type DebtsActionResult = ActionResult & {
-  /** Indicates whether a manual foreign exchange rate is required */
-  needsManualFxRate?: boolean;
-}
+import { debtSchema, debtSettlementSchema } from "@/lib/validations";
+import * as service from "@/lib/debts";
+import { parseId, revalidateDomain, runAction } from "./guard";
+import type { ActionResult } from "./types";
 
 /**
- * Creates a new debt for the authenticated user.
- * 
- * @param input The input data for the new debt.
- * @returns The result of the debt creation action.
+ * Toda dívida move dinheiro numa conta, então a revalidação alcança as telas de
+ * saldo e de fluxo de caixa, não só as de dívida.
  */
-export async function createDebt(input: unknown): Promise<DebtsActionResult> {
+function revalidateAll() {
+  revalidateDomain("debts");
+}
+
+export async function createDebt(input: unknown): Promise<ActionResult> {
   const user = await requireUser();
   const parsed = debtSchema.safeParse(input);
 
   if (!parsed.success) {
-    return {
-      ok: false,
-      error: parsed.error.issues[0]?.message ?? "Entrada inválida",
-    };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Entrada inválida" };
   }
 
-  const data = parsed.data;
-  await prisma.debt.create({
-    data: {
-      debtorName: data.debtorName,
-      description: data.description || null,
-      totalAmount: data.totalAmount.toFixed(2),
-      currency: data.currency,
-      dueDate: data.dueDate || null,
-      status: "PENDING",
-      userId: user.id,
-    },
-  });
+  const result = await runAction(() => service.createDebt(user.id, parsed.data));
 
-  revalidatePath("/dashboard/debts");
+  if (result.ok) {
+    revalidateAll();
+  }
 
-  return { ok: true };
+  return result;
 }
 
-/**
- * Adds a payment to an existing debt for the authenticated user.
- * 
- * @param input The input data for the new debt payment.
- * @returns The result of the debt payment action.
- */
-export async function addDebtPayment(input: unknown): Promise<DebtsActionResult> {
+export async function updateDebt(id: string, input: unknown): Promise<ActionResult> {
   const user = await requireUser();
-  const parsed = debtPaymentSchema.safeParse(input);
+  const parsed = debtSchema.safeParse(input);
 
   if (!parsed.success) {
-    return {
-      ok: false,
-      error: parsed.error.issues[0]?.message ?? "Entrada inválida",
-    };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Entrada inválida" };
   }
 
-  const data = parsed.data;
+  const result = await runAction(() => service.updateDebt(user.id, parseId(id), parsed.data));
 
-  const debt = await prisma.debt.findFirst({
-    where: { id: data.debtId, userId: user.id },
-  });
-
-  if (!debt) {
-    return {
-      ok: false,
-      error: "Dívida não encontrada",
-    };
+  if (result.ok) {
+    revalidateAll();
   }
 
-  let fxRate = 1;
-
-  try {
-    fxRate = await getExchangeRate({
-      from: debt.currency,
-      to: user.preferredCurrency,
-      date: data.paymentDate,
-      manualRate: data.manualFxRate,
-    });
-  } catch (err) {
-    if (err instanceof FxUnavailableError) {
-      return {
-        ok: false,
-        needsManualFxRate: true,
-        error: "Taxa de câmbio indisponível. Informe manualmente.",
-      };
-    }
-
-    throw err;
-  }
-
-  await prisma.$transaction(async (tx) => {
-    const { _sum } = await tx.debtPayment.aggregate({
-      where: { debtId: debt.id },
-      _sum: { amount: true },
-    });
-
-    const paidSoFar = toNumber(_sum.amount ?? 0);
-    const newTotalPaid = paidSoFar + data.amount;
-    const total = toNumber(debt.totalAmount);
-
-    const status =
-      newTotalPaid >= total ? "PAID" : newTotalPaid > 0 ? "PARTIAL" : "PENDING";
-
-    await tx.debtPayment.create({
-      data: {
-        amount: data.amount.toFixed(2),
-        paymentDate: data.paymentDate,
-        fxRateAtCreation: fxRate.toString(),
-        debtId: debt.id,
-      },
-    });
-
-    await tx.debt.update({
-      where: { id: debt.id },
-      data: { status },
-    });
-  });
-
-  revalidatePath("/dashboard/debts");
-
-  return { ok: true };
+  return result;
 }
 
-/**
- * Deletes an existing debt for the authenticated user.
- * 
- * @param id The ID of the debt to delete.
- * @returns The result of the debt deletion action.
- */
-export async function deleteDebt(id: string): Promise<DebtsActionResult> {
+export async function deleteDebt(id: string): Promise<ActionResult> {
   const user = await requireUser();
-  const { count } = await prisma.debt.deleteMany({
-    where: { id, userId: user.id },
-  });
+  const result = await runAction(() => service.deleteDebt(user.id, parseId(id)));
 
-  if (count === 0) {
-    return { ok: false, error: "Dívida não encontrada" };
+  if (result.ok) {
+    revalidateAll();
   }
 
-  revalidatePath("/dashboard/debts");
+  return result;
+}
 
-  return { ok: true };
+export async function settleDebt(debtId: string, input: unknown): Promise<ActionResult> {
+  const user = await requireUser();
+  const parsed = debtSettlementSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Entrada inválida" };
+  }
+
+  const result = await runAction(() => service.settleDebt(user.id, parseId(debtId), parsed.data));
+
+  if (result.ok) {
+    revalidateAll();
+  }
+
+  return result;
+}
+
+export async function deleteSettlement(transactionId: string): Promise<ActionResult> {
+  const user = await requireUser();
+  const result = await runAction(() => service.deleteSettlement(user.id, parseId(transactionId)));
+
+  if (result.ok) {
+    revalidateAll();
+  }
+
+  return result;
 }

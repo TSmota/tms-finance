@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   Badge,
   Group,
   SegmentedControl,
   Select,
+  Stack,
   Table,
   TableTbody,
   TableTd,
@@ -14,48 +15,43 @@ import {
   TableTr,
   Text,
   TextInput,
+  Tooltip,
   UnstyledButton,
 } from "@mantine/core";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 
 import { formatCurrency } from "@/lib/currency";
+import { toCalendarDate } from "@/lib/dates";
 import { EmptyState } from "@/components/EmptyState";
 import { EditTransactionButton } from "@/components/forms/EditTransactionButton";
-import { DeleteTransactionButton } from "@/components/forms/DeleteTransactionButton";
+import { deleteTransaction } from "@/actions/transactions";
+import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
+import { ConfirmPendingButton } from "@/components/forms/ConfirmPendingButton";
+import type { AccountOption, Option } from "@/lib/options";
+import type { TransactionRow } from "@/lib/transactionRow";
+import { CategoryBadge } from "@/components/ui/CategoryBadge";
 
-interface Option {
-  value: string;
-  label: string;
-}
-
-export interface TransactionRow {
-  id: string;
-  date: Date;
-  description: string;
-  type: "INFLOW" | "OUTFLOW";
-  amount: number;
-  accountId: string;
-  accountName: string;
-  accountCurrency: string;
-  categoryId: string | null;
-  categoryName: string | null;
-  categoryColor: string;
-  /** Value shown in the table (and used for sorting/totals). */
-  displayAmount: number;
-  /** Currency the displayed value is expressed in. */
-  displayCurrency: string;
-}
+const MANAGED_BY_LABEL = {
+  debt: { label: "Dívida", hint: "Ajuste pela tela de dívidas" },
+  invoice: { label: "Fatura", hint: "Desfaça o pagamento pela tela do cartão" },
+} as const;
 
 interface TransactionsTableProps {
   transactions: TransactionRow[];
-  accounts: Option[];
+  accounts: AccountOption[];
   categories: Option[];
-  /** Message shown when there are no transactions at all. */
   emptyMessage?: string;
+  /** Botão oferecido quando não há lançamento nenhum. */
+  emptyAction?: ReactNode;
 }
 
 type SortKey = "date" | "amount";
 type SortDir = "asc" | "desc";
+
+/** Tradução de `SortDir` para o vocabulário do `aria-sort`. */
+function ariaSort(dir: SortDir): "ascending" | "descending" {
+  return dir === "asc" ? "ascending" : "descending";
+}
 
 export function TransactionsTable(props: TransactionsTableProps) {
   const {
@@ -63,36 +59,51 @@ export function TransactionsTable(props: TransactionsTableProps) {
     accounts,
     categories,
     emptyMessage = "Nenhuma transação ainda. Adicione a primeira para começar.",
+    emptyAction,
   } = props;
 
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [type, setType] = useState("ALL");
+  const [status, setStatus] = useState("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    const rows = transactions.filter((tx) => {
-      if (query && !tx.description.toLowerCase().includes(query)) return false;
-      if (categoryId && tx.categoryId !== categoryId) return false;
-      if (accountId && tx.accountId !== accountId) return false;
-      if (type !== "ALL" && tx.type !== type) return false;
+    const rows = transactions.filter((transaction) => {
+      if (query && !transaction.description.toLowerCase().includes(query)) {
+        return false;
+      }
+      if (categoryId && transaction.categoryId !== categoryId) {
+        return false;
+      }
+      if (accountId && transaction.accountId !== accountId) {
+        return false;
+      }
+      if (type !== "ALL" && transaction.type !== type) {
+        return false;
+      }
+      if (status !== "ALL" && transaction.status !== status) {
+        return false;
+      }
+
       return true;
     });
 
     rows.sort((a, b) => {
-      const cmp =
+      const comparison =
         sortKey === "date"
           ? a.date.getTime() - b.date.getTime()
-          : a.displayAmount - b.displayAmount;
-      return sortDir === "asc" ? cmp : -cmp;
+          : a.convertedAmount - b.convertedAmount;
+
+      return sortDir === "asc" ? comparison : -comparison;
     });
 
     return rows;
-  }, [transactions, search, categoryId, accountId, type, sortKey, sortDir]);
+  }, [transactions, search, categoryId, accountId, type, status, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -104,15 +115,19 @@ export function TransactionsTable(props: TransactionsTableProps) {
   };
 
   if (transactions.length === 0) {
-    return <EmptyState message={emptyMessage} />;
+    return <EmptyState message={emptyMessage} action={emptyAction} />;
   }
+
+  const hasPending = transactions.some((transaction) => transaction.status === "PENDING");
 
   return (
     <>
-      <Group mb="md" gap="sm" wrap="wrap">
+      {/* `aria-label` em cada controle: a barra não comporta rótulo visível. */}
+      <Group mb="md" gap="sm" wrap="wrap" role="search" aria-label="Filtros de transações">
         <TextInput
           placeholder="Buscar descrição"
-          leftSection={<Search size={16} />}
+          aria-label="Buscar por descrição"
+          leftSection={<Search size={16} aria-hidden />}
           value={search}
           onChange={(event) => setSearch(event.currentTarget.value)}
           flex={1}
@@ -120,14 +135,17 @@ export function TransactionsTable(props: TransactionsTableProps) {
         />
         <Select
           placeholder="Todas as categorias"
+          aria-label="Filtrar por categoria"
           data={categories}
           value={categoryId}
           onChange={setCategoryId}
           clearable
-          w={180}
+          searchable
+          w={200}
         />
         <Select
           placeholder="Todas as contas"
+          aria-label="Filtrar por conta"
           data={accounts}
           value={accountId}
           onChange={setAccountId}
@@ -137,86 +155,183 @@ export function TransactionsTable(props: TransactionsTableProps) {
         <SegmentedControl
           value={type}
           onChange={setType}
+          aria-label="Filtrar por tipo"
           data={[
             { value: "ALL", label: "Todos" },
-            { value: "INFLOW", label: "Receitas" },
-            { value: "OUTFLOW", label: "Despesas" },
+            { value: "INCOME", label: "Receitas" },
+            { value: "EXPENSE", label: "Despesas" },
           ]}
         />
+        {hasPending && (
+          <SegmentedControl
+            value={status}
+            onChange={setStatus}
+            aria-label="Filtrar por situação"
+            data={[
+              { value: "ALL", label: "Tudo" },
+              { value: "CONFIRMED", label: "Confirmados" },
+              { value: "PENDING", label: "Pendentes" },
+            ]}
+          />
+        )}
       </Group>
+
+      {/* A filtragem não recarrega a página; sem região viva, ninguém é avisado. */}
+      <Text className="visually-hidden" role="status" aria-live="polite">
+        {`${filtered.length} ${filtered.length === 1 ? "transação encontrada" : "transações encontradas"}`}
+      </Text>
 
       {filtered.length === 0 ? (
         <EmptyState message="Nenhuma transação corresponde aos filtros." icon={Search} />
       ) : (
-        <Table highlightOnHover>
-          <TableThead>
-            <TableTr>
-              <TableTh>
-                <SortHeader
-                  label="Data"
-                  active={sortKey === "date"}
-                  dir={sortDir}
-                  onClick={() => toggleSort("date")}
-                />
-              </TableTh>
-              <TableTh>Descrição</TableTh>
-              <TableTh>Categoria</TableTh>
-              <TableTh>Conta</TableTh>
-              <TableTh ta="right">
-                <SortHeader
-                  label="Valor"
-                  active={sortKey === "amount"}
-                  dir={sortDir}
-                  onClick={() => toggleSort("amount")}
-                  align="right"
-                />
-              </TableTh>
-              <TableTh w={90} />
-            </TableTr>
-          </TableThead>
-          <TableTbody>
-            {filtered.map((tx) => (
-              <TableTr key={tx.id}>
-                <TableTd>{tx.date.toLocaleDateString("pt-BR")}</TableTd>
-                <TableTd>{tx.description}</TableTd>
-                <TableTd>
-                  {tx.categoryName ? (
-                    <Badge color={tx.categoryColor} variant="light">
-                      {tx.categoryName}
-                    </Badge>
-                  ) : (
-                    <Text c="dimmed" size="sm">
-                      —
-                    </Text>
-                  )}
-                </TableTd>
-                <TableTd>{tx.accountName}</TableTd>
-                <TableTd ta="right">
-                  <Text c={tx.type === "INFLOW" ? "teal" : "red"} fw={500}>
-                    {tx.type === "INFLOW" ? "+" : "-"}
-                    {formatCurrency(tx.displayAmount, tx.displayCurrency)}
-                  </Text>
-                </TableTd>
-                <TableTd>
-                  <Group justify="flex-end" gap={4} wrap="nowrap">
-                    <EditTransactionButton
-                      id={tx.id}
-                      accountId={tx.accountId}
-                      categoryId={tx.categoryId}
-                      type={tx.type}
-                      amount={tx.amount}
-                      date={tx.date}
-                      description={tx.description}
-                      accounts={accounts}
-                      categories={categories}
-                    />
-                    <DeleteTransactionButton id={tx.id} description={tx.description} />
-                  </Group>
-                </TableTd>
+        <Table.ScrollContainer minWidth={720}>
+          <Table highlightOnHover>
+            {/* Oculta: o Card em volta já traz o título na tela. */}
+            <caption className="visually-hidden">
+              {`Transações, ${filtered.length} de ${transactions.length}, ordenadas por ${
+                sortKey === "date" ? "data" : "valor"
+              } em ordem ${sortDir === "asc" ? "crescente" : "decrescente"}`}
+            </caption>
+            <TableThead>
+              <TableTr>
+                <TableTh scope="col" aria-sort={sortKey === "date" ? ariaSort(sortDir) : "none"}>
+                  <SortHeader
+                    label="Data"
+                    active={sortKey === "date"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("date")}
+                  />
+                </TableTh>
+                <TableTh scope="col">Descrição</TableTh>
+                <TableTh scope="col">Categoria</TableTh>
+                <TableTh scope="col">Conta</TableTh>
+                <TableTh
+                  scope="col"
+                  ta="right"
+                  aria-sort={sortKey === "amount" ? ariaSort(sortDir) : "none"}
+                >
+                  <SortHeader
+                    label="Valor"
+                    active={sortKey === "amount"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("amount")}
+                    align="right"
+                  />
+                </TableTh>
+                <TableTh scope="col" w={140}>
+                  <span className="visually-hidden">Ações</span>
+                </TableTh>
               </TableTr>
-            ))}
-          </TableTbody>
-        </Table>
+            </TableThead>
+            <TableTbody>
+              {filtered.map((transaction) => {
+                const isConverted = transaction.currency !== transaction.accountCurrency;
+
+                return (
+                  <TableTr key={transaction.id}>
+                    <TableTd>{transaction.date.toLocaleDateString("pt-BR", { timeZone: "UTC" })}</TableTd>
+                    <TableTd>
+                      <Group gap="xs" wrap="nowrap">
+                        <Text size="sm">{transaction.description}</Text>
+                        {transaction.status === "PENDING" && (
+                          <Badge size="xs" variant="outline" color="orange" tt="none">
+                            pendente
+                          </Badge>
+                        )}
+                      </Group>
+                    </TableTd>
+                    <TableTd>
+                      {transaction.categoryName ? (
+                        <CategoryBadge
+                          name={transaction.categoryName}
+                          color={transaction.categoryColor}
+                        />
+                      ) : (
+                        <Text c="dimmed" size="sm">
+                          —
+                        </Text>
+                      )}
+                    </TableTd>
+                    <TableTd>{transaction.accountName}</TableTd>
+                    <TableTd ta="right">
+                      <Stack gap={0} align="flex-end">
+                        <Text
+                          c={
+                            transaction.status === "PENDING"
+                              ? "dimmed"
+                              : transaction.type === "INCOME"
+                                ? "teal"
+                                : "red"
+                          }
+                          fw={500}
+                        >
+                          {transaction.type === "INCOME" ? "+" : "-"}
+                          {formatCurrency(transaction.convertedAmount, transaction.accountCurrency)}
+                        </Text>
+                        {isConverted && (
+                          <Text size="xs" c="dimmed">
+                            {formatCurrency(transaction.amount, transaction.currency)} ×{" "}
+                            {transaction.exchangeRate.toLocaleString("pt-BR", {
+                              minimumFractionDigits: 4,
+                            })}
+                          </Text>
+                        )}
+                      </Stack>
+                    </TableTd>
+                    <TableTd>
+                      <Group justify="flex-end" gap={4} wrap="nowrap">
+                        {transaction.managedBy ? (
+                          <Tooltip label={MANAGED_BY_LABEL[transaction.managedBy].hint}>
+                            <Badge size="sm" variant="light" color="gray" tt="none">
+                              {MANAGED_BY_LABEL[transaction.managedBy].label}
+                            </Badge>
+                          </Tooltip>
+                        ) : (
+                          <>
+                            {transaction.status === "PENDING" && (
+                              <ConfirmPendingButton
+                                id={transaction.id}
+                                description={transaction.description}
+                                amount={transaction.amount}
+                                currency={transaction.currency}
+                                accountCurrency={transaction.accountCurrency}
+                                date={transaction.date}
+                                isEstimated={transaction.isEstimated}
+                                compact
+                              />
+                            )}
+                            <EditTransactionButton
+                              id={transaction.id}
+                              values={{
+                                accountId: transaction.accountId,
+                                categoryId: transaction.categoryId ?? "",
+                                type: transaction.type,
+                                amount: transaction.amount,
+                                currency: transaction.currency,
+                                date: toCalendarDate(transaction.date),
+                                description: transaction.description,
+                                manualFxRate: undefined,
+                              }}
+                              accounts={accounts}
+                              categories={categories}
+                            />
+                            <DeleteEntityButton
+                              id={transaction.id}
+                              title="Remover transação"
+                              successMessage="Transação removida"
+                              question={`Tem certeza que deseja remover a transação "${transaction.description}"?`}
+                              action={deleteTransaction}
+                            />
+                          </>
+                        )}
+                      </Group>
+                    </TableTd>
+                  </TableTr>
+                );
+              })}
+            </TableTbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
     </>
   );
@@ -232,14 +347,22 @@ interface SortHeaderProps {
 
 function SortHeader(props: SortHeaderProps) {
   const { label, active, dir, onClick, align = "left" } = props;
+
+  // O `aria-sort` no `<th>` informa o estado; o rótulo aqui, a ação.
+  const next = active && dir === "asc" ? "decrescente" : "crescente";
+
   return (
-    <UnstyledButton onClick={onClick} style={{ display: "inline-flex" }}>
+    <UnstyledButton
+      onClick={onClick}
+      style={{ display: "inline-flex" }}
+      aria-label={`Ordenar por ${label.toLowerCase()}, ordem ${next}`}
+    >
       <Group gap={4} wrap="nowrap" justify={align === "right" ? "flex-end" : "flex-start"}>
         <Text size="sm" fw={500} inherit>
           {label}
         </Text>
         {active &&
-          (dir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+          (dir === "asc" ? <ChevronUp size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />)}
       </Group>
     </UnstyledButton>
   );

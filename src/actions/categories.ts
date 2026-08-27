@@ -1,101 +1,56 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
-import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { categorySchema } from "@/lib/validations";
+import * as service from "@/lib/categories";
+import { parseId, revalidateDomain, runAction } from "./guard";
 import type { ActionResult } from "./types";
 
-export type CategoryActionResult = ActionResult;
+function revalidateAll() {
+  revalidateDomain("categories");
+}
 
-/**
- * Creates a new category for the authenticated user.
- * 
- * @param input The input data for the new category.
- * @returns The result of the category creation action.
- */
-export async function createCategory(input: unknown): Promise<CategoryActionResult> {
+export async function createCategory(input: unknown): Promise<ActionResult> {
   const user = await requireUser();
   const parsed = categorySchema.safeParse(input);
 
   if (!parsed.success) {
-    return {
-      ok: false,
-      error: parsed.error.issues[0]?.message ?? "Entrada inválida",
-    };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Entrada inválida" };
   }
 
-  await prisma.category.create({
-    data: { ...parsed.data, userId: user.id },
-  });
+  const result = await runAction(() => service.createCategory(user.id, parsed.data));
 
-  revalidatePath("/dashboard/monthly-costs");
-  revalidatePath("/dashboard/recurring");
-  revalidatePath("/dashboard/categories");
+  if (result.ok) {
+    revalidateAll();
+  }
 
-  return { ok: true };
+  return result;
 }
 
-/**
- * Updates an existing category for the authenticated user.
- *
- * @param id The ID of the category to update.
- * @param input The updated category data.
- * @returns The result of the category update action.
- */
-export async function updateCategory(id: string, input: unknown): Promise<CategoryActionResult> {
+export async function updateCategory(id: string, input: unknown): Promise<ActionResult> {
   const user = await requireUser();
   const parsed = categorySchema.safeParse(input);
 
   if (!parsed.success) {
-    return {
-      ok: false,
-      error: parsed.error.issues[0]?.message ?? "Entrada inválida",
-    };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Entrada inválida" };
   }
 
-  const { count } = await prisma.category.updateMany({
-    where: { id, userId: user.id },
-    data: parsed.data,
-  });
+  const result = await runAction(() => service.updateCategory(user.id, parseId(id), parsed.data));
 
-  if (count === 0) {
-    return {
-      ok: false,
-      error: "Categoria não encontrada",
-    };
+  if (result.ok) {
+    revalidateAll();
   }
 
-  revalidatePath("/dashboard/monthly-costs");
-  revalidatePath("/dashboard/recurring");
-  revalidatePath("/dashboard/categories");
-
-  return { ok: true };
+  return result;
 }
 
-/**
- * Deletes an existing category for the authenticated user.
- * 
- * @param id The ID of the category to delete.
- * @returns The result of the category deletion action.
- */
-export async function deleteCategory(id: string): Promise<CategoryActionResult> {
+export async function deleteCategory(id: string): Promise<ActionResult> {
   const user = await requireUser();
-  const { count } = await prisma.category.deleteMany({
-    where: { id, userId: user.id },
-  });
+  const result = await runAction(() => service.deleteCategory(user.id, parseId(id)));
 
-  if (count === 0) {
-    return {
-      ok: false,
-      error: "Categoria não encontrada",
-    };
+  if (result.ok) {
+    revalidateAll();
   }
 
-  revalidatePath("/dashboard/monthly-costs");
-  revalidatePath("/dashboard/recurring");
-  revalidatePath("/dashboard/categories");
-  
-  return { ok: true };
+  return result;
 }

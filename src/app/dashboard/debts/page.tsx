@@ -1,4 +1,6 @@
 import {
+  Alert,
+  Badge,
   Card,
   Grid,
   GridCol,
@@ -6,79 +8,272 @@ import {
   Progress,
   Stack,
   Text,
-  Badge,
+  Title,
 } from "@mantine/core";
+import { ArrowDownLeft, ArrowUpRight, ChevronRight, TriangleAlert } from "lucide-react";
 
 import { requireUser } from "@/lib/session";
-import { getDebts } from "@/lib/queries";
-import { formatCurrency } from "@/lib/balance";
+import { listDebts, type DebtListItem } from "@/lib/debts";
+import { listPersonOptions } from "@/lib/people";
+import { loadFormOptions } from "@/lib/formOptions";
+import { formatCurrency, type CurrencyCode } from "@/lib/currency";
+import {
+  DEBT_STATUS_COLORS,
+  DEBT_STATUS_LABELS,
+  DEBT_TYPE_CODES,
+  DEBT_TYPE_POSITION,
+  type DebtTypeCode,
+} from "@/lib/debtTypes";
+import { toCalendarDate, formatDay } from "@/lib/dates";
+import { AddDebtButton } from "@/components/forms/AddDebtButton";
+import { EditDebtButton } from "@/components/forms/EditDebtButton";
+import { deleteDebt } from "@/actions/debts";
+import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
+import { SettleDebtButton } from "@/components/forms/SettleDebtButton";
+import { LinkButton } from "@/components/ui/AppLink";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { AddDebtButton } from "@/components/forms/AddDebtButton";
-import { AddPaymentButton } from "@/components/forms/AddPaymentButton";
-import { DEBT_STATUS_COLORS, DEBT_STATUS_LABELS } from "@/lib/statusColors";
+import type { DebtFormValues } from "@/components/forms/DebtFields";
+import { CategoryBadge } from "@/components/ui/CategoryBadge";
 
-export default async function DebtsPage() {
+interface DebtsPageProps {
+  /** `?person=<uuid>` filtra por pessoa, vindo da tela de pessoas. */
+  searchParams: Promise<{ person?: string }>;
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Valores iniciais do formulário de edição, a partir da dívida gravada.
+ *
+ * Conta e data vêm da **movimentação de origem**, não de um palpite: salvar sem
+ * mexer nesses campos precisa deixar o lançamento exatamente onde ele está.
+ */
+function toFormValues(debt: DebtListItem, fallbackAccountId: string): DebtFormValues {
+  return {
+    personId: debt.personId,
+    categoryId: debt.categoryId,
+    type: debt.type,
+    description: debt.description,
+    amount: debt.originalAmount,
+    currency: debt.currency,
+    accountId: debt.originAccountId ?? fallbackAccountId,
+    date: toCalendarDate(debt.originDate ?? debt.createdAt),
+    dueDate: debt.dueDate ? toCalendarDate(debt.dueDate) : "",
+    manualFxRate: undefined,
+  };
+}
+
+export default async function DebtsPage({ searchParams }: DebtsPageProps) {
   const user = await requireUser();
-  const debts = await getDebts(user.id);
+  const { person } = await searchParams;
+
+  // Id inválido na URL é ignorado, não é erro: `?person=lixo` mostra tudo.
+  const personId = person && UUID_PATTERN.test(person) ? person : undefined;
+
+  const [debts, people, options] = await Promise.all([
+    listDebts(user.id, { personId }),
+    listPersonOptions(user.id),
+    loadFormOptions(user.id),
+  ]);
+
+  const filteredPerson = people.find((entry) => entry.value === personId);
+
+  // Os três são obrigatórios no formulário: sem qualquer um deles o botão só
+  // abriria um modal impossível de enviar.
+  const missing = [
+    people.length === 0 ? "uma pessoa" : null,
+    options.accounts.length === 0 ? "uma conta" : null,
+    options.categories.length === 0 ? "uma categoria" : null,
+  ].filter((entry) => entry !== null);
+
+  const addButton = (
+    <AddDebtButton
+      people={people}
+      categories={options.categories}
+      accounts={options.accounts}
+      defaultPersonId={personId}
+      baseCurrency={user.baseCurrency}
+    />
+  );
+
   return (
     <Stack gap="lg">
       <PageHeader
         title="Dívidas"
-        subtitle="Valores a receber e seu progresso"
-        action={<AddDebtButton />}
+        subtitle={
+          filteredPerson
+            ? `Empréstimos e pendências de ${filteredPerson.label}`
+            : "Empréstimos feitos e recebidos, com o motivo de cada um"
+        }
+        action={missing.length === 0 && addButton}
       />
+
+      {missing.length > 0 && (
+        <Alert color="blue" variant="light" icon={<TriangleAlert size={16} />}>
+          Para registrar uma dívida você precisa de {missing.join(", ")}.
+        </Alert>
+      )}
+
+      {filteredPerson && (
+        <Group>
+          <LinkButton href="/dashboard/debts">Ver todas as pessoas</LinkButton>
+        </Group>
+      )}
 
       {debts.length === 0 ? (
         <Card withBorder radius="md" padding="lg">
-          <EmptyState message="Nenhuma dívida acompanhada." />
+          <EmptyState
+            message="Nenhuma dívida registrada."
+            action={missing.length === 0 ? addButton : undefined}
+          />
         </Card>
       ) : (
-        <Grid>
-          {debts.map((debt) => {
-            const paidPercentage = debt.totalAmount > 0 ? (debt.paid / debt.totalAmount) * 100 : 0;
+        DEBT_TYPE_CODES.map((type) => {
+          const items = debts.filter((debt) => debt.type === type);
 
-            return (
-              <GridCol key={debt.id} span={{ base: 12, sm: 6, md: 4 }}>
-                <Card withBorder radius="md" padding="lg" h="100%">
-                  <Group justify="space-between" mb="xs">
-                    <Text fw={600}>{debt.debtorName}</Text>
-                    <Badge color={DEBT_STATUS_COLORS[debt.status]}>
-                      {DEBT_STATUS_LABELS[debt.status]}
-                    </Badge>
-                  </Group>
-                  {debt.description && (
-                    <Text size="sm" c="dimmed" mb="xs">
-                      {debt.description}
-                    </Text>
-                  )}
-                  <Text size="sm">
-                    Pago {formatCurrency(debt.paid, debt.currency)} de{" "}
-                    {formatCurrency(debt.totalAmount, debt.currency)}
-                  </Text>
-                  <Progress
-                    value={paidPercentage}
-                    color={DEBT_STATUS_COLORS[debt.status]}
-                    mt="xs"
-                    mb="xs"
-                  />
-                  <Text size="sm" fw={500}>
-                    Restante: {formatCurrency(debt.remaining, debt.currency)}
-                  </Text>
-                  {debt.dueDate && (
-                    <Text size="xs" c="dimmed" mt="xs">
-                      Vence em {debt.dueDate.toLocaleDateString("pt-BR")}
-                    </Text>
-                  )}
-                  {debt.status !== "PAID" && (
-                    <AddPaymentButton debtId={debt.id} />
-                  )}
-                </Card>
-              </GridCol>
-            );
-          })}
-        </Grid>
+          if (items.length === 0) {
+            return null;
+          }
+
+          return (
+            <Stack key={type} gap="xs">
+              <Group gap="xs">
+                <TypeIcon type={type} />
+                <Title order={2} size="h5" c="dimmed">
+                  {DEBT_TYPE_POSITION[type]}
+                </Title>
+                <Badge variant="light" color="gray" size="sm">
+                  {items.length}
+                </Badge>
+              </Group>
+
+              <Grid>
+                {items.map((debt) => (
+                  <GridCol key={debt.id} span={{ base: 12, md: 6 }}>
+                    <DebtCard
+                      debt={debt}
+                      people={people}
+                      categories={options.categories}
+                      accounts={options.accounts}
+                    />
+                  </GridCol>
+                ))}
+              </Grid>
+            </Stack>
+          );
+        })
       )}
     </Stack>
+  );
+}
+
+function TypeIcon({ type }: { type: DebtTypeCode }) {
+  const color = "var(--mantine-color-dimmed)";
+
+  return type === "LENT" ? (
+    <ArrowUpRight size={16} color={color} />
+  ) : (
+    <ArrowDownLeft size={16} color={color} />
+  );
+}
+
+interface DebtCardProps {
+  debt: DebtListItem;
+  people: Array<{ value: string; label: string }>;
+  categories: Array<{ value: string; label: string }>;
+  accounts: Array<{ value: string; label: string; currency: CurrencyCode }>;
+}
+
+function DebtCard({ debt, people, categories, accounts }: DebtCardProps) {
+  const progress =
+    debt.originalAmount > 0 ? (debt.settledAmount / debt.originalAmount) * 100 : 0;
+
+  return (
+    <Card withBorder radius="md" padding="lg" h="100%">
+      <Group justify="space-between" mb="xs" wrap="nowrap">
+        <Stack gap={0}>
+          <Text fw={600}>{debt.personName}</Text>
+          <Text size="sm" c="dimmed">
+            {debt.description}
+          </Text>
+        </Stack>
+        <Badge color={DEBT_STATUS_COLORS[debt.status]} variant="light" size="sm">
+          {DEBT_STATUS_LABELS[debt.status]}
+        </Badge>
+      </Group>
+
+      <Group gap="xs" mb="sm">
+        <CategoryBadge name={debt.categoryName} color={debt.categoryColor} />
+        {debt.dueDate && (
+          <Text size="xs" c="dimmed">
+            vence {formatDay(debt.dueDate)}
+          </Text>
+        )}
+      </Group>
+
+      <Text size="sm" c="dimmed">
+        Restante
+      </Text>
+      <Text fw={700} size="lg">
+        {formatCurrency(debt.remainingAmount, debt.currency)}
+      </Text>
+
+      <Progress
+        value={progress}
+        color={debt.status === "PAID" ? "teal" : "blue"}
+        mt="sm"
+        mb={4}
+        aria-label={`Quitação de ${debt.personName}`}
+      />
+      <Text size="xs" c="dimmed">
+        {formatCurrency(debt.settledAmount, debt.currency)} de{" "}
+        {formatCurrency(debt.originalAmount, debt.currency)}
+        {debt.settlementCount > 0 &&
+          ` · ${debt.settlementCount} ${debt.settlementCount === 1 ? "movimentação" : "movimentações"}`}
+      </Text>
+
+      <Group justify="space-between" mt="md" wrap="nowrap">
+        <Group gap="xs" wrap="nowrap">
+          <LinkButton
+            href={`/dashboard/debts/${debt.id}`}
+            rightSection={<ChevronRight size={14} />}
+          >
+            Histórico
+          </LinkButton>
+          {debt.status !== "PAID" && (
+            <SettleDebtButton
+              debtId={debt.id}
+              type={debt.type}
+              remainingAmount={debt.remainingAmount}
+              currency={debt.currency}
+              accounts={accounts}
+              categories={categories}
+              defaultCategoryId={debt.categoryId}
+              defaultAccountId={debt.originAccountId}
+            />
+          )}
+        </Group>
+        <Group gap={4} wrap="nowrap">
+          <EditDebtButton
+            id={debt.id}
+            values={toFormValues(debt, accounts[0]?.value ?? "")}
+            people={people}
+            categories={categories}
+            accounts={accounts}
+            type={debt.type}
+            currency={debt.currency}
+          />
+          <DeleteEntityButton
+            id={debt.id}
+            title="Remover dívida"
+            successMessage="Dívida removida"
+            question={`Remover "${debt.description}" devolve os saldos das contas ao que eram. Tem certeza?`}
+            action={deleteDebt}
+            impactTarget="debt"
+          />
+        </Group>
+      </Group>
+    </Card>
   );
 }

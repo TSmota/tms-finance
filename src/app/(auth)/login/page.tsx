@@ -41,10 +41,17 @@ export default function LoginPage() {
     setLoading(false);
 
     if (res?.error) {
+      // Só `CredentialsSignin` significa "não confere". Qualquer outro tipo é
+      // falha nossa — banco fora, configuração quebrada — e culpar a senha
+      // manda o usuário trocar uma senha que está certa.
+      const wrongCredentials = res.error === "CredentialsSignin";
+
       notifications.show({
         color: "red",
-        title: "Falha ao entrar",
-        message: "Email ou senha inválidos.",
+        title: wrongCredentials ? "Falha ao entrar" : "Serviço indisponível",
+        message: wrongCredentials
+          ? "Email ou senha inválidos."
+          : "Não foi possível entrar agora. Tente de novo em alguns instantes.",
       });
       return;
     }
@@ -54,7 +61,7 @@ export default function LoginPage() {
 
   return (
     <Paper withBorder shadow="md" p="xl" radius="md" w={420} maw="100%">
-      <Title order={2} ta="center" mb="lg">
+      <Title order={1} size="h2" ta="center" mb="lg">
         TMS Finance
       </Title>
 
@@ -91,7 +98,7 @@ export default function LoginPage() {
 
       <Text c="dimmed" size="sm" ta="center" mt="md">
         Ainda não tem uma conta?{" "}
-        <Anchor component={Link} href="/register" size="sm">
+        <Anchor component={Link} href="/register" size="sm" underline="always">
           Criar conta
         </Anchor>
       </Text>

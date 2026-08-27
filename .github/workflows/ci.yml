@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # O mesmo par usado por .env.example e .env.test.example.
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tms_finance?schema=public
+  AUTH_SECRET: ci-secret-not-used-outside-the-runner
+  AGENT_TOKEN_PEPPER: ci-pepper-with-at-least-32-characters
+
+jobs:
+  gate:
+    name: typecheck · lint · test · build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tms_finance
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # `migrate deploy` não cria o banco, e a suíte usa um segundo, dedicado.
+      - name: Criar o banco de testes
+        run: PGPASSWORD=postgres createdb -h localhost -U postgres tms_finance_test
+
+      - name: Preparar .env.test
+        run: cp .env.test.example .env.test
+
+      - run: npx prisma generate
+
+      - run: npx prisma migrate deploy
+
+      - run: npm run typecheck
+
+      - run: npm run lint
+
+      - run: npm test
+
+      - run: npm run build
+
+  # Separado: Chrome e seed são frágeis e não devem segurar os quatro comandos.
+  a11y:
+    name: axe-core · WCAG 2.2 AA
+    needs: gate
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tms_finance
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx prisma generate
+
+      - run: npx prisma migrate deploy
+
+      # A auditoria recusa rodar quando as telas de detalhe não são alcançáveis.
+      - run: npm run db:seed
+
+      # `next start` roda em produção, e aí o Auth.js exige que o Host seja
+      # declarado confiável: sem isto toda rota /api/auth responde UntrustedHost
+      # e o login da auditoria morre. Na Vercel a própria plataforma declara.
+      - name: Subir o app
+        env:
+          AUTH_TRUST_HOST: "true"
+        run: |
+          npm run build
+          npm run start &
+          npx --yes wait-on http://localhost:3000/login --timeout 120000
+
+      - name: Auditar
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: npm run test:a11y

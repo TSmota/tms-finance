@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@henkey/postgres-mcp-server@latest"
+      ],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "${DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/tms_finance}"
+      }
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ]
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--isolated",
+        "--headless",
+        "--chromeArg=--no-sandbox",
+        "--chromeArg=--disable-dev-shm-usage"
+      ]
+    }
+  }
+}

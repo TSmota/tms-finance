@@ -4,9 +4,8 @@ import type { ReactNode } from "react";
 
 interface EmptyStateProps {
   message: string;
-  /** Optional icon (defaults to Inbox). */
   icon?: LucideIcon;
-  /** Optional call-to-action rendered below the message (e.g. a button). */
+  /** Renderizada abaixo da mensagem, tipicamente o botão que resolve o vazio. */
   action?: ReactNode;
 }
 
@@ -16,7 +15,7 @@ export function EmptyState(props: EmptyStateProps) {
   return (
     <Center py="xl">
       <Stack align="center" gap="xs">
-        <Icon size={40} strokeWidth={1.5} color="var(--mantine-color-dimmed)" />
+        <Icon size={40} strokeWidth={1.5} color="var(--mantine-color-dimmed)" aria-hidden />
         <Text c="dimmed" ta="center" maw={360}>
           {message}
         </Text>
