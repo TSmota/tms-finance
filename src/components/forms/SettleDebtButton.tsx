@@ -39,22 +39,12 @@ interface SettleDebtButtonProps {
   categories: Option[];
   /** Categoria de origem, herdada quando o usuário não escolhe outra. */
   defaultCategoryId: string;
-  /**
-   * Conta da movimentação de origem.
-   *
-   * É o padrão certo: o dinheiro tende a voltar para a mesma conta de onde saiu,
-   * e cair na primeira conta da lista convidaria a creditar a conta errada.
-   */
+  /** Conta da movimentação de origem, para onde o dinheiro tende a voltar. */
   defaultAccountId: string | null;
   compact?: boolean;
 }
 
-/**
- * Registra um abate da dívida.
- *
- * O valor sugerido é o restante inteiro: quitar de uma vez é o caso mais comum,
- * e o parcial fica a um ajuste de distância.
- */
+/** Registra um abate da dívida. Sugere o restante inteiro. */
 export function SettleDebtButton(props: SettleDebtButtonProps) {
   const {
     debtId,

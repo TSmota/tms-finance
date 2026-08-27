@@ -6,10 +6,7 @@ interface FailureActionResult {
   ok: false;
   /** Mensagem em pt-BR exibida direto ao usuário. */
   error: string;
-  /**
-   * Verdadeiro quando o câmbio está indisponível e o formulário deve pedir a
-   * taxa manualmente.
-   */
+  /** O formulário deve reabrir pedindo a taxa. */
   needsManualFxRate?: boolean;
 }
 
