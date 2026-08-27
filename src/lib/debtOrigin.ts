@@ -1,9 +1,17 @@
-import type { Transaction, TransactionStatus, TransactionType } from "@prisma/client";
+import type {
+  CreditCard,
+  Transaction,
+  TransactionStatus,
+  TransactionType,
+} from "@prisma/client";
 
 import { prisma } from "@/lib/db";
 import { InvalidOperationError } from "@/lib/errors";
 import { FX_RATE_SCALE } from "@/lib/fxService";
 import { convertMoney, toStorage, type Money } from "@/lib/money";
+import { splitInstallments } from "@/lib/installments";
+import { consecutiveCompetencies, invoiceCompetencyFor } from "@/lib/invoiceCycle";
+import { recalcInvoiceTotals, resolveInvoice } from "@/lib/invoices";
 import {
   affectsBalance,
   applyToBalance,
@@ -140,6 +148,8 @@ export interface CreateOriginParams {
   date: Date;
   rate: Money;
   status?: TransactionStatus;
+  /** Cartão de destino, já com a posse conferida. Nulo = origem em conta. */
+  card?: CreditCard | null;
 }
 
 /**
@@ -149,6 +159,17 @@ export interface CreateOriginParams {
  * `$transaction` aberta prenderia o lock da dívida e das faturas.
  */
 export async function createOrigin(
+  tx: Tx,
+  params: CreateOriginParams,
+): Promise<Transaction[]> {
+  if (params.card) {
+    return createCardOrigin(tx, params);
+  }
+
+  return createAccountOrigin(tx, params);
+}
+
+async function createAccountOrigin(
   tx: Tx,
   params: CreateOriginParams,
 ): Promise<Transaction[]> {
@@ -188,6 +209,76 @@ export async function createOrigin(
   return [created];
 }
 
+/**
+ * Distribui a origem em faturas consecutivas, como qualquer compra parcelada.
+ *
+ * A divisão é sobre o valor na moeda do lançamento e cada parcela usa a mesma
+ * taxa, o que mantém `amount × exchangeRate = convertedAmount` verdadeiro linha
+ * a linha. Todas ficam com a data da compra: é o `invoiceId` que diz a que mês
+ * cada uma pertence.
+ */
+async function createCardOrigin(
+  tx: Tx,
+  params: CreateOriginParams,
+): Promise<Transaction[]> {
+  const { userId, debtId, type, input, date, rate, card } = params;
+
+  if (!card) {
+    throw new InvalidOperationError("Cartão de origem não informado");
+  }
+
+  const exchangeRate = rate.toFixed(FX_RATE_SCALE);
+  const parts = splitInstallments(input.amount, input.installments);
+  const competencies = consecutiveCompetencies(
+    invoiceCompetencyFor(card, date),
+    input.installments,
+  );
+
+  const created: Transaction[] = [];
+  const touched = new Set<string>();
+  let parentInstallmentId: string | null = null;
+
+  for (const [index, part] of parts.entries()) {
+    const invoice = await resolveInvoice(tx, {
+      userId,
+      card,
+      competency: competencies[index]!,
+    });
+
+    const installment: Transaction = await tx.transaction.create({
+      data: {
+        userId,
+        type,
+        status: "CONFIRMED",
+        description: input.description,
+        date,
+        amount: toStorage(part),
+        currency: input.currency,
+        exchangeRate,
+        convertedAmount: toStorage(convertMoney(part, rate)),
+        creditCardId: card.id,
+        invoiceId: invoice.id,
+        categoryId: input.categoryId,
+        debtId,
+        installmentNumber: index + 1,
+        totalInstallments: input.installments,
+        // A 1ª parcela é a âncora; as seguintes apontam para ela.
+        parentInstallmentId,
+      },
+    });
+
+    parentInstallmentId ??= installment.id;
+    created.push(installment);
+    touched.add(invoice.id);
+  }
+
+  // Um recalculo por fatura no fim, não um por parcela: `recalcInvoiceTotals`
+  // mantém a ordem crescente que evita deadlock.
+  await recalcInvoiceTotals(tx, touched);
+
+  return created;
+}
+
 /** Apaga o grupo de origem, desfazendo o efeito de cada linha. */
 export async function deleteOrigin(tx: Tx, origin: LoadedOrigin): Promise<void> {
   for (const row of origin.transactions) {
@@ -209,4 +300,8 @@ export async function deleteOrigin(tx: Tx, origin: LoadedOrigin): Promise<void> 
   await tx.transaction.deleteMany({
     where: { id: { in: origin.transactions.map((row) => row.id) } },
   });
+
+  // Fatura que ficou sem lançamento é apagada por `recalcInvoiceTotal`, o que
+  // fecha o ciclo que `resolveInvoice` abriu.
+  await recalcInvoiceTotals(tx, origin.invoiceIds);
 }

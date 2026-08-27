@@ -9,8 +9,16 @@ import { applyToBalance, balanceDelta, lockTransaction, type Tx } from "@/lib/ac
 import { assertCategoryOwned, assertPersonOwned, requireAccount } from "@/lib/ownership";
 import { deriveDebtStatus } from "@/lib/debtStatus";
 import { createOrigin, loadOrigin } from "@/lib/debtOrigin";
+import { requireCreditCard } from "@/lib/creditCards";
 import type { DebtTypeCode } from "@/lib/debtTypes";
 import type { DebtInput, DebtSettlementInput } from "@/lib/validations";
+
+/**
+ * Folga para a origem parcelada. O default do Prisma é 5 s, e uma origem no teto
+ * de `MAX_INSTALLMENTS` faz centenas de idas ao banco: estourar daria `P2028`
+ * com todas as faturas travadas até lá.
+ */
+const INSTALLMENT_TX_OPTIONS = { maxWait: 10_000, timeout: 30_000 };
 
 /**
  * Empréstimos e dívidas pessoais.
@@ -81,49 +89,61 @@ export async function createDebt(userId: string, input: DebtInput): Promise<Debt
   await assertPersonOwned(userId, input.personId);
   await assertCategoryOwned(userId, input.categoryId);
 
-  // Temporário: a origem em cartão chega na tarefa seguinte.
-  if (!input.accountId) {
-    throw new InvalidOperationError("Escolha a origem: conta bancária ou cartão de crédito");
+  // O destino define a moeda para a qual a taxa converte, e a posse é conferida
+  // aqui, fora da transação.
+  const card = input.creditCardId
+    ? await requireCreditCard(userId, input.creditCardId)
+    : null;
+  const account = input.accountId ? await requireAccount(userId, input.accountId) : null;
+  const targetCurrency = card?.currency ?? account?.currency;
+
+  if (!targetCurrency) {
+    throw new InvalidOperationError(
+      "Escolha a origem: conta bancária ou cartão de crédito",
+    );
   }
 
-  const account = await requireAccount(userId, input.accountId);
   const date = parseCalendarDate(input.date);
 
   const rate = await getExchangeRate({
     from: input.currency,
-    to: account.currency,
+    to: targetCurrency,
     date,
     manualRate: input.manualFxRate,
   });
 
-  return prisma.$transaction(async (tx) => {
-    const debt = await tx.debt.create({
-      data: {
+  return prisma.$transaction(
+    async (tx) => {
+      const debt = await tx.debt.create({
+        data: {
+          userId,
+          personId: input.personId,
+          categoryId: input.categoryId,
+          type: input.type,
+          status: "PENDING",
+          description: input.description,
+          originalAmount: toStorage(input.amount),
+          // Nada foi abatido ainda: o restante nasce igual ao total.
+          remainingAmount: toStorage(input.amount),
+          currency: input.currency,
+          dueDate: input.dueDate ? parseCalendarDate(input.dueDate) : null,
+        },
+      });
+
+      await createOrigin(tx, {
         userId,
-        personId: input.personId,
-        categoryId: input.categoryId,
-        type: input.type,
-        status: "PENDING",
-        description: input.description,
-        originalAmount: toStorage(input.amount),
-        // Nada foi abatido ainda: o restante nasce igual ao total.
-        remainingAmount: toStorage(input.amount),
-        currency: input.currency,
-        dueDate: input.dueDate ? parseCalendarDate(input.dueDate) : null,
-      },
-    });
+        debtId: debt.id,
+        type: originType(input.type),
+        input,
+        date,
+        rate,
+        card,
+      });
 
-    await createOrigin(tx, {
-      userId,
-      debtId: debt.id,
-      type: originType(input.type),
-      input,
-      date,
-      rate,
-    });
-
-    return debt;
-  });
+      return debt;
+    },
+    card ? INSTALLMENT_TX_OPTIONS : undefined,
+  );
 }
 
 /**
