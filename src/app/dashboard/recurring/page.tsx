@@ -27,7 +27,7 @@ import {
 import { getBalanceProjection } from "@/lib/projection";
 import { listCreditCards } from "@/lib/creditCards";
 import { loadFormOptions } from "@/lib/formOptions";
-import { toCalendarDate, competencyOf } from "@/lib/dates";
+import { toCalendarDate, competencyOf, formatDay } from "@/lib/dates";
 import { formatCurrency } from "@/lib/currency";
 import { FREQUENCY_LABELS } from "@/lib/recurrence";
 import { MonthSelector } from "@/components/MonthSelector";
@@ -49,10 +49,6 @@ interface RecurringPageProps {
 }
 
 /** Data curta em UTC — as datas do domínio são todas meia-noite UTC. */
-function formatDay(date: Date): string {
-  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
-}
-
 /** Valores iniciais do formulário de edição, a partir do que está gravado. */
 function toFormValues(item: RecurringListItem): RecurringFormValues {
   return {

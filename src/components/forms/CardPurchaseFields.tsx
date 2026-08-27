@@ -6,7 +6,7 @@ import type { UseFormReturnType } from "@mantine/form";
 import { TriangleAlert } from "lucide-react";
 
 import { CURRENCY_OPTIONS, formatCurrency } from "@/lib/currency";
-import { parseCalendarDate } from "@/lib/dates";
+import { monthName, parseCalendarDate } from "@/lib/dates";
 import { describeSplit } from "@/lib/installmentSplit";
 import { consecutiveCompetencies, invoiceCompetencyFor } from "@/lib/invoiceCycle";
 import { MAX_INSTALLMENTS } from "@/lib/limits";
@@ -151,21 +151,6 @@ export function CardPurchaseFields(props: CardPurchaseFieldsProps) {
   );
 }
 
-const MONTH_NAMES = [
-  "janeiro",
-  "fevereiro",
-  "março",
-  "abril",
-  "maio",
-  "junho",
-  "julho",
-  "agosto",
-  "setembro",
-  "outubro",
-  "novembro",
-  "dezembro",
-];
-
 /**
  * Em que fatura a compra vai cair, pela mesma função que o servidor usa.
  *
@@ -198,7 +183,7 @@ function describeTargetInvoices(
   const label = (index: number) => {
     const competency = competencies[index]!;
 
-    return `${MONTH_NAMES[competency.month - 1]}/${competency.year}`;
+    return `${monthName(competency.month)}/${competency.year}`;
   };
 
   return competencies.length === 1

@@ -39,25 +39,10 @@ import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { BackLink } from "@/components/ui/AppLink";
-import { toCalendarDate } from "@/lib/dates";
+import { toCalendarDate, formatDay, monthName } from "@/lib/dates";
 import type { CardPurchaseFormValues } from "@/components/forms/CardPurchaseFields";
 import type { AccountOption, CardOption, Option } from "@/lib/options";
 import { CategoryBadge } from "@/components/ui/CategoryBadge";
-
-const MONTH_NAMES = [
-  "janeiro",
-  "fevereiro",
-  "março",
-  "abril",
-  "maio",
-  "junho",
-  "julho",
-  "agosto",
-  "setembro",
-  "outubro",
-  "novembro",
-  "dezembro",
-];
 
 const STATUS_LABELS: Record<InvoiceSummary["status"], string> = {
   OPEN: "Aberta",
@@ -78,20 +63,9 @@ const STATUS_COLORS: Record<InvoiceSummary["status"], string> = {
  * *cada* palavra e produziria "Agosto De 2026".
  */
 function competencyLabel(invoice: InvoiceSummary): string {
-  const month = MONTH_NAMES[invoice.month - 1]!;
+  const month = monthName(invoice.month);
 
   return `${month[0]!.toUpperCase()}${month.slice(1)} de ${invoice.year}`;
-}
-
-/**
- * Usa o export nomeado `TableScrollContainer`, e não `Table.ScrollContainer`.
- *
- * Num Server Component, importar um componente client devolve uma *referência*:
- * propriedades estáticas viram `undefined` e o React quebra com "Element type
- * is invalid". Não aparece no typecheck nem no build, só ao abrir a página.
- */
-function formatDay(date: Date): string {
-  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
 /**

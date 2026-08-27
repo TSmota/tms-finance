@@ -19,7 +19,7 @@ import { getDebtsByCategory, getMonthSummary, getOpenInvoices } from "@/lib/repo
 import { getBalanceProjection } from "@/lib/projection";
 import { listPendingOccurrences } from "@/lib/recurring";
 import { loadFormOptions } from "@/lib/formOptions";
-import { currentCompetency } from "@/lib/dates";
+import { currentCompetency, formatDay, monthName } from "@/lib/dates";
 import { formatCurrency } from "@/lib/currency";
 import { toTransactionRow, type TransactionRow } from "@/lib/transactionRow";
 import { MonthlyCharts } from "@/components/MonthlyCharts";
@@ -30,25 +30,6 @@ import { LinkButton } from "@/components/ui/AppLink";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { TransactionsTable } from "@/components/TransactionsTable";
-
-const MONTH_NAMES = [
-  "janeiro",
-  "fevereiro",
-  "março",
-  "abril",
-  "maio",
-  "junho",
-  "julho",
-  "agosto",
-  "setembro",
-  "outubro",
-  "novembro",
-  "dezembro",
-];
-
-function formatDay(date: Date): string {
-  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
-}
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -71,7 +52,7 @@ export default async function DashboardPage() {
   );
 
   const netPosition = debts.receivableTotal - debts.payableTotal;
-  const monthLabel = `${MONTH_NAMES[month - 1]} de ${year}`;
+  const monthLabel = `${monthName(month)} de ${year}`;
   const partial = `Parcial: falta cotação para ${user.baseCurrency}.`;
 
   return (

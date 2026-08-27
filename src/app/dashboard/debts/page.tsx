@@ -24,7 +24,7 @@ import {
   DEBT_TYPE_POSITION,
   type DebtTypeCode,
 } from "@/lib/debtTypes";
-import { toCalendarDate } from "@/lib/dates";
+import { toCalendarDate, formatDay } from "@/lib/dates";
 import { AddDebtButton } from "@/components/forms/AddDebtButton";
 import { EditDebtButton } from "@/components/forms/EditDebtButton";
 import { deleteDebt } from "@/actions/debts";
@@ -42,10 +42,6 @@ interface DebtsPageProps {
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function formatDay(date: Date): string {
-  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
-}
 
 /**
  * Valores iniciais do formulário de edição, a partir da dívida gravada.

@@ -30,7 +30,7 @@ import {
   DEBT_TYPE_LABELS,
   DEBT_TYPE_POSITION,
 } from "@/lib/debtTypes";
-import { toCalendarDate } from "@/lib/dates";
+import { toCalendarDate, formatDay } from "@/lib/dates";
 import { SettleDebtButton } from "@/components/forms/SettleDebtButton";
 import { EditDebtButton } from "@/components/forms/EditDebtButton";
 import { deleteSettlement } from "@/actions/debts";
@@ -38,10 +38,6 @@ import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { BackLink } from "@/components/ui/AppLink";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CategoryBadge } from "@/components/ui/CategoryBadge";
-
-function formatDay(date: Date): string {
-  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
-}
 
 export default async function DebtDetailPage({
   params,

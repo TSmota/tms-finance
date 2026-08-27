@@ -117,3 +117,32 @@ export function todayCalendarDate(now: Date = new Date()): CalendarDate {
 export function currentCompetency(now: Date = new Date()): { year: number; month: number } {
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
+
+const MONTH_NAMES = [
+  "janeiro",
+  "fevereiro",
+  "março",
+  "abril",
+  "maio",
+  "junho",
+  "julho",
+  "agosto",
+  "setembro",
+  "outubro",
+  "novembro",
+  "dezembro",
+];
+
+/** Nome do mês em pt-BR, minúsculo. `month` é 1-12. */
+export function monthName(month: number): string {
+  return MONTH_NAMES[month - 1]!;
+}
+
+/**
+ * Dia em pt-BR. `timeZone: "UTC"` pelo mesmo motivo do resto do módulo: a
+ * coluna é data-calendário, e sem isso quem está a oeste de Greenwich vê o dia
+ * anterior.
+ */
+export function formatDay(date: Date): string {
+  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+}
