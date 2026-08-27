@@ -65,6 +65,7 @@ describe("baseline do schema", () => {
       "recurring_expenses_due_day_check",
       "recurring_expenses_payment_target_check",
       "recurring_expenses_period_check",
+      "transactions_debt_card_expense_check",
       "transactions_exchange_rate_check",
       "transactions_installments_check",
       "transactions_payment_target_check",
@@ -160,6 +161,44 @@ describe("invariantes protegidos pelo banco", () => {
         },
       }),
     ).rejects.toThrow(/transactions_payment_target_check/);
+  });
+
+  it("recusa entrada de dívida lançada no cartão", async () => {
+    const user = await makeUser();
+    const card = await makeCreditCard(user.id);
+    const person = await makePerson(user.id);
+    const category = await makeCategory(user.id);
+
+    const debt = await prisma.debt.create({
+      data: {
+        userId: user.id,
+        personId: person.id,
+        categoryId: category.id,
+        type: "BORROWED",
+        description: "Empréstimo recebido",
+        originalAmount: "100.00",
+        remainingAmount: "100.00",
+        currency: "BRL",
+      },
+    });
+
+    // O total da fatura é somado sem sinal: um INCOME aqui inflaria a fatura.
+    await expect(
+      prisma.transaction.create({
+        data: {
+          userId: user.id,
+          type: "INCOME",
+          description: "Origem de BORROWED no cartão",
+          date: new Date("2026-08-10T00:00:00Z"),
+          amount: "100.00",
+          currency: "BRL",
+          exchangeRate: "1.0000",
+          convertedAmount: "100.00",
+          creditCardId: card.id,
+          debtId: debt.id,
+        },
+      }),
+    ).rejects.toThrow(/transactions_debt_card_expense_check/);
   });
 
   it("recusa valor convertido que não é o lançado vezes a taxa", async () => {
