@@ -66,7 +66,8 @@ em `src/mcp/`.
 Emitir e revogar credenciais:
 
 ```bash
-# Concessão recomendada: leitura ampla + escrita, SEM destructive:write nem setup:write
+# Concessão recomendada: leitura ampla + escrita, SEM destructive:write nem setup:write.
+# Acrescente setup:write se o agente precisar criar categoria ou pessoa por conta própria.
 npm run agent:token -- mint --user demo@tms.finance --label hermes \
   --scopes finance:read,transactions:write,cards:write,invoices:pay,debts:write,recurring:write \
   --expires 90d

@@ -24,9 +24,9 @@ export const AGENT_SCOPES = [
   /** Recorrentes, materialização e confirmação de pendência. */
   "recurring:write",
   /**
-   * Criar e editar conta, cartão, categoria e pessoa.
+   * Criar e editar categoria e pessoa — os cadastros de base sem moeda.
    *
-   * Não conceder por padrão: criar conta ou cartão fixa a moeda, que é imutável
+   * Conta e cartão continuam fora: criá-los fixa a moeda, que é imutável
    * depois. É decisão de configuração, não de operação.
    */
   "setup:write",
