@@ -7,7 +7,7 @@ import { assertAccountOwned } from "@/lib/ownership";
 import { byName } from "@/lib/sorting";
 import { assertValidCycle } from "@/lib/invoiceCycle";
 import type { CreditCardInput } from "@/lib/validations";
-import type { AccountOption } from "@/lib/options";
+import type { CardOption } from "@/lib/options";
 
 /**
  * Cartões de crédito.
@@ -172,16 +172,20 @@ export async function listCreditCards(userId: string): Promise<CreditCardSummary
     .sort(byName);
 }
 
-/** Cartões para popular `Select`s. */
-export async function listCreditCardOptions(userId: string): Promise<AccountOption[]> {
+/** Cartões para popular `Select`s, com o ciclo para a prévia da fatura. */
+export async function listCreditCardOptions(userId: string): Promise<CardOption[]> {
   const cards = await prisma.creditCard.findMany({
     where: { userId },
-    select: { id: true, name: true, currency: true },
+    select: { id: true, name: true, currency: true, closingDay: true, dueDay: true },
   });
 
-  return cards
-    .sort(byName)
-    .map((card) => ({ value: card.id, label: card.name, currency: card.currency }));
+  return cards.sort(byName).map((card) => ({
+    value: card.id,
+    label: card.name,
+    currency: card.currency,
+    closingDay: card.closingDay,
+    dueDay: card.dueDay,
+  }));
 }
 
 export async function requireCreditCard(userId: string, id: string): Promise<CreditCard> {

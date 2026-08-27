@@ -2,13 +2,23 @@
 
 import { Alert, Group, NumberInput, Select, Text, TextInput } from "@mantine/core";
 import { DatePickerInput } from "@mantine/dates";
-import type { UseFormReturnType } from "@mantine/form";
+import type { FormErrors, UseFormReturnType } from "@mantine/form";
+import { zod4Resolver } from "mantine-form-zod-resolver";
 import { TriangleAlert } from "lucide-react";
 
-import { CURRENCY_LABELS, CURRENCY_OPTIONS, type CurrencyCode } from "@/lib/currency";
+import { debtSchema } from "@/lib/validations";
+import { CURRENCY_LABELS, CURRENCY_OPTIONS, formatCurrency, type CurrencyCode } from "@/lib/currency";
 import { DEBT_TYPE_LABELS, DEBT_TYPE_OPTIONS, type DebtTypeCode } from "@/lib/debtTypes";
+import { describeSplit } from "@/lib/installmentSplit";
+import { MAX_INSTALLMENTS } from "@/lib/limits";
+import {
+  splitTarget,
+  TARGET_ACCOUNT_PREFIX,
+  TARGET_CARD_PREFIX,
+} from "@/lib/paymentTarget";
 import { useFormValue } from "@/components/ui/useFormValue";
-import type { AccountOption, Option } from "@/lib/options";
+import type { AccountOption, CardOption, Option } from "@/lib/options";
+import { describeTargetInvoices } from "./invoiceHint";
 
 /** `type`, não `interface`: index signature implícita exigida pelo zod4Resolver. */
 export type DebtFormValues = {
@@ -18,18 +28,62 @@ export type DebtFormValues = {
   description: string;
   amount: number;
   currency: string;
-  accountId: string;
+  /** Origem codificada: exatamente um destino fica preenchido. */
+  target?: string;
+  /** Só no cartão; 1 em conta. */
+  installments?: number;
+  /** @deprecated Compatibilidade temporária até a Task 14 migrar as páginas. */
+  accountId?: string | null;
   date: string;
   /** `null`, não `""`: vazio do `DatePickerInput` é `null`. */
   dueDate: string | null;
   manualFxRate?: number | undefined;
 };
 
+export type DebtSubmitValues = Omit<DebtFormValues, "accountId"> & {
+  accountId: string | null;
+  creditCardId: string | null;
+  installments: number;
+};
+
+/** Resolve o formato anterior das páginas sem mudar o contrato validado pelo serviço. */
+export function resolveDebtTarget(values: DebtFormValues): string {
+  return values.target ?? (values.accountId ? `${TARGET_ACCOUNT_PREFIX}${values.accountId}` : "");
+}
+
+/**
+ * Valida o formulário contra o schema do serviço.
+ *
+ * Não dá para passar `zod4Resolver` direto em `validate`: o `transformValues` do
+ * Mantine só é aplicado no `onSubmit`, então a validação veria `target` — que o
+ * schema não conhece — e nunca `accountId`/`creditCardId`, fazendo o XOR falhar
+ * em toda submissão. Aqui a conversão acontece antes, e o erro de destino é
+ * remapeado para o campo que existe na tela.
+ */
+export function validateDebt(values: DebtFormValues): FormErrors {
+  const errors = zod4Resolver(debtSchema)({
+    ...values,
+    installments: values.installments ?? 1,
+    ...splitTarget(resolveDebtTarget(values)),
+  });
+
+  const targetError = errors.accountId ?? errors.creditCardId;
+
+  if (targetError) {
+    errors.target = targetError;
+    delete errors.accountId;
+    delete errors.creditCardId;
+  }
+
+  return errors;
+}
+
 interface DebtFieldsProps {
-  form: UseFormReturnType<DebtFormValues>;
+  form: UseFormReturnType<DebtFormValues, DebtSubmitValues>;
   people: Option[];
   categories: Option[];
   accounts: AccountOption[];
+  cards: CardOption[];
   /**
    * Definidos ao editar: tipo e moeda passam a ser exibidos como imutáveis.
    * Trocar o tipo inverteria o sinal de todas as movimentações já lançadas, e
@@ -40,15 +94,49 @@ interface DebtFieldsProps {
 }
 
 export function DebtFields(props: DebtFieldsProps) {
-  const { form, people, categories, accounts, locked, showManualFx } = props;
+  const { form, people, categories, accounts, cards, locked, showManualFx } = props;
 
-  const accountId = useFormValue(form, "accountId");
+  const target = useFormValue(form, "target") ?? "";
   const currency = useFormValue(form, "currency");
   const type = useFormValue(form, "type");
+  const amount = useFormValue(form, "amount");
+  const installments = useFormValue(form, "installments") ?? 1;
+  const date = useFormValue(form, "date");
 
-  const accountCurrency = accounts.find((account) => account.value === accountId)?.currency;
-  const needsConversion = accountCurrency !== undefined && currency !== accountCurrency;
   const isLent = type === "LENT";
+  const { accountId, creditCardId } = splitTarget(target);
+  const card = cards.find((entry) => entry.value === creditCardId);
+  const destination = card ?? accounts.find((entry) => entry.value === accountId);
+  const destinationCurrency = destination?.currency;
+  const needsConversion = destinationCurrency !== undefined && currency !== destinationCurrency;
+
+  // Prévia da divisão pela mesma regra que o servidor aplica.
+  const installmentPreview = card
+    ? describeSplit(Math.round((amount || 0) * 100), installments, (cents) =>
+        formatCurrency(cents / 100, currency),
+      )
+    : null;
+
+  const targetData = [
+    {
+      group: isLent ? "Contas — o dinheiro sai do saldo" : "Contas — o dinheiro entra no saldo",
+      items: accounts.map((account) => ({
+        value: `${TARGET_ACCOUNT_PREFIX}${account.value}`,
+        label: account.label,
+      })),
+    },
+    ...(isLent
+      ? [
+          {
+            group: "Cartões — entra na fatura, sai quando ela for paga",
+            items: cards.map((entry) => ({
+              value: `${TARGET_CARD_PREFIX}${entry.value}`,
+              label: entry.label,
+            })),
+          },
+        ]
+      : []),
+  ];
 
   return (
     <>
@@ -94,7 +182,8 @@ export function DebtFields(props: DebtFieldsProps) {
       />
       <Group grow align="flex-start">
         <NumberInput
-          label="Valor"
+          label={card ? "Valor total" : "Valor"}
+          description={card ? "O valor cheio, não o da parcela" : undefined}
           decimalScale={2}
           min={0}
           thousandSeparator="."
@@ -120,17 +209,44 @@ export function DebtFields(props: DebtFieldsProps) {
         )}
       </Group>
       <Select
-        label={isLent ? "Conta de onde o dinheiro saiu" : "Conta em que o dinheiro entrou"}
+        label={isLent ? "De onde o dinheiro saiu" : "Onde o dinheiro entrou"}
         description={
           needsConversion
-            ? `A dívida está em ${currency} e o saldo se move em ${accountCurrency}`
-            : undefined
+            ? `A dívida está em ${currency} e o destino se move em ${destinationCurrency}`
+            : "Conta move o saldo na hora; cartão entra na fatura"
         }
-        data={accounts}
+        data={targetData}
         allowDeselect={false}
-        key={form.key("accountId")}
-        {...form.getInputProps("accountId")}
+        searchable
+        key={form.key("target")}
+        {...form.getInputProps("target")}
+        onChange={(value) => {
+          form.getInputProps("target").onChange(value);
+
+          if (value && !value.startsWith(TARGET_CARD_PREFIX)) {
+            form.setFieldValue("installments", 1);
+          }
+        }}
       />
+      {card && (
+        <NumberInput
+          label="Parcelas"
+          description={
+            installmentPreview ??
+            `Divide a origem em faturas consecutivas (até ${MAX_INSTALLMENTS})`
+          }
+          min={1}
+          max={MAX_INSTALLMENTS}
+          allowDecimal={false}
+          key={form.key("installments")}
+          {...form.getInputProps("installments")}
+        />
+      )}
+      {card && date && (
+        <Text size="sm" c="dimmed">
+          {describeTargetInvoices(card, date, installments)}
+        </Text>
+      )}
       <Group grow align="flex-start">
         <DatePickerInput
           label="Data"
@@ -153,7 +269,7 @@ export function DebtFields(props: DebtFieldsProps) {
           <Alert color="yellow" icon={<TriangleAlert size={16} />} title="Taxa de câmbio manual">
             <Text size="sm">
               O serviço de câmbio está indisponível. Informe a taxa de {currency} para{" "}
-              {accountCurrency}.
+              {destinationCurrency}.
             </Text>
           </Alert>
           <NumberInput

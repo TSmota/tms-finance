@@ -3,22 +3,29 @@
 import { useState } from "react";
 import { Button } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { zod4Resolver } from "mantine-form-zod-resolver";
 import { Plus } from "lucide-react";
 
-import { debtSchema } from "@/lib/validations";
 import type { CurrencyCode } from "@/lib/currency";
 import { todayCalendarDate } from "@/lib/dates";
+import { splitTarget, TARGET_ACCOUNT_PREFIX } from "@/lib/paymentTarget";
 import { createDebt } from "@/actions/debts";
 import { FormModal } from "@/components/ui/FormModal";
 import { useActionModal } from "@/components/ui/useActionModal";
-import { DebtFields, type DebtFormValues } from "./DebtFields";
-import type { AccountOption, Option } from "@/lib/options";
+import {
+  DebtFields,
+  resolveDebtTarget,
+  type DebtFormValues,
+  type DebtSubmitValues,
+  validateDebt,
+} from "./DebtFields";
+import type { AccountOption, CardOption, Option } from "@/lib/options";
 
 interface AddDebtButtonProps {
   people: Option[];
   categories: Option[];
   accounts: AccountOption[];
+  /** Opcional só até as páginas passarem os cartões na Task 14. */
+  cards?: CardOption[];
   /** Pré-seleciona a pessoa quando o botão vive na linha de alguém. */
   defaultPersonId?: string;
   label?: string;
@@ -31,6 +38,7 @@ export function AddDebtButton(props: AddDebtButtonProps) {
     people,
     categories,
     accounts,
+    cards = [],
     defaultPersonId,
     label = "Nova dívida",
     baseCurrency,
@@ -48,16 +56,22 @@ export function AddDebtButton(props: AddDebtButtonProps) {
     description: "",
     amount: 0,
     currency: accounts[0]?.currency ?? baseCurrency,
-    accountId: accounts[0]?.value ?? "",
+    target: accounts[0] ? `${TARGET_ACCOUNT_PREFIX}${accounts[0].value}` : "",
+    installments: 1,
     date: todayCalendarDate(),
     dueDate: null,
     manualFxRate: undefined,
   };
 
-  const form = useForm<DebtFormValues>({
+  const form = useForm<DebtFormValues, DebtSubmitValues>({
     mode: "uncontrolled",
     initialValues,
-    validate: zod4Resolver(debtSchema),
+    validate: validateDebt,
+    transformValues: (values) => ({
+      ...values,
+      installments: values.installments ?? 1,
+      ...splitTarget(resolveDebtTarget(values)),
+    }),
   });
 
   const handleOpen = () => {
@@ -85,7 +99,11 @@ export function AddDebtButton(props: AddDebtButtonProps) {
       <Button
         leftSection={<Plus size={16} />}
         onClick={handleOpen}
-        disabled={people.length === 0 || accounts.length === 0 || categories.length === 0}
+        disabled={
+          people.length === 0 ||
+          (accounts.length === 0 && cards.length === 0) ||
+          categories.length === 0
+        }
       >
         {label}
       </Button>
@@ -101,6 +119,7 @@ export function AddDebtButton(props: AddDebtButtonProps) {
           people={people}
           categories={categories}
           accounts={accounts}
+          cards={cards}
           showManualFx={showManualFx}
         />
       </FormModal>
