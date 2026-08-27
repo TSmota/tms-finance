@@ -12,6 +12,7 @@ import {
   settleDebt,
   updateDebt,
 } from "@/lib/debts";
+import { payInvoice } from "@/lib/invoicePayments";
 import { getPeopleOverview, deletePerson } from "@/lib/people";
 import {
   makeAccount,
@@ -615,6 +616,195 @@ describe("remoção", () => {
 });
 
 describe("edição da dívida", () => {
+  it("conta → cartão: estorna o saldo e abre a fatura", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
+    );
+
+    expect(await state(user.id, debt.id, account.id)).toMatchObject({ saldo: "800.00" });
+
+    await updateDebt(
+      user.id,
+      debt.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 200,
+        date: "2026-08-06",
+      }),
+    );
+
+    // O saldo volta ao que era: o dinheiro agora sai quando a fatura for paga.
+    expect(await state(user.id, debt.id, account.id)).toMatchObject({
+      total: "200.00",
+      restante: "200.00",
+      saldo: "1000.00",
+    });
+    expect(await invoices(card.id)).toEqual([
+      { competencia: "2026-08", total: "200.00", status: "OPEN" },
+    ]);
+    expect(await recomputeBalance(account.id)).toEqual(
+      (await prisma.financialAccount.findUniqueOrThrow({ where: { id: account.id } }))
+        .currentBalance,
+    );
+  });
+
+  it("cartão → conta: recalcula a fatura, apaga a que ficou vazia e debita", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 200,
+        date: "2026-08-06",
+      }),
+    );
+
+    await updateDebt(
+      user.id,
+      debt.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        accountId: account.id,
+        amount: 200,
+        date: "2026-08-06",
+      }),
+    );
+
+    // A fatura ficou sem lançamento nenhum e foi apagada.
+    expect(await invoices(card.id)).toEqual([]);
+    expect(await state(user.id, debt.id, account.id)).toMatchObject({
+      total: "200.00",
+      saldo: "800.00",
+    });
+  });
+
+  it("cartão → cartão: 3x vira 6x e redistribui as faturas", async () => {
+    const { user, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 90,
+        installments: 3,
+        date: "2026-08-06",
+      }),
+    );
+
+    expect(await invoices(card.id)).toHaveLength(3);
+
+    await updateDebt(
+      user.id,
+      debt.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 120,
+        installments: 6,
+        date: "2026-08-06",
+      }),
+    );
+
+    expect(await invoices(card.id)).toEqual([
+      { competencia: "2026-08", total: "20.00", status: "OPEN" },
+      { competencia: "2026-09", total: "20.00", status: "OPEN" },
+      { competencia: "2026-10", total: "20.00", status: "OPEN" },
+      { competencia: "2026-11", total: "20.00", status: "OPEN" },
+      { competencia: "2026-12", total: "20.00", status: "OPEN" },
+      { competencia: "2027-01", total: "20.00", status: "OPEN" },
+    ]);
+  });
+
+  it("preserva o valor já amortizado ao trocar de destino", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
+    );
+
+    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 80 }));
+
+    await updateDebt(
+      user.id,
+      debt.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 200,
+        date: "2026-08-06",
+      }),
+    );
+
+    expect(await state(user.id, debt.id, account.id)).toMatchObject({
+      total: "200.00",
+      restante: "120.00",
+      status: "PARTIALLY_PAID",
+      // 1000 − 200 (origem estornada) + 80 (amortização, intacta) = 1080.
+      saldo: "1080.00",
+    });
+  });
+
+  it("recusa editar dívida cuja origem está em fatura paga", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 200,
+        date: "2026-08-06",
+      }),
+    );
+
+    const invoice = await prisma.invoice.findFirstOrThrow({
+      where: { creditCardId: card.id },
+    });
+
+    await payInvoice(user.id, invoice.id, {
+      accountId: account.id,
+      date: "2026-09-05",
+      manualFxRate: null,
+    });
+
+    await expect(
+      updateDebt(
+        user.id,
+        debt.id,
+        debtInput({
+          personId: person.id,
+          categoryId: category.id,
+          creditCardId: card.id,
+          amount: 500,
+          date: "2026-08-06",
+        }),
+      ),
+    ).rejects.toThrow(InvalidOperationError);
+
+    // Nada mudou: nem a dívida, nem a fatura.
+    const gravada = await prisma.debt.findUniqueOrThrow({ where: { id: debt.id } });
+
+    expect(gravada.originalAmount.toFixed(2)).toBe("200.00");
+    expect(await invoices(card.id)).toEqual([
+      { competencia: "2026-08", total: "200.00", status: "PAID" },
+    ]);
+  });
+
   it("aumentar o total ajusta a origem, o restante e o saldo", async () => {
     const { user, account, category, person } = await scenario();
 

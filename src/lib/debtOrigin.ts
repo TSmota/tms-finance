@@ -16,6 +16,7 @@ import {
   affectsBalance,
   applyToBalance,
   balanceDelta,
+  lockTransaction,
   type Tx,
 } from "@/lib/accountBalance";
 import { originType } from "@/lib/debts";
@@ -282,17 +283,22 @@ async function createCardOrigin(
 /** Apaga o grupo de origem, desfazendo o efeito de cada linha. */
 export async function deleteOrigin(tx: Tx, origin: LoadedOrigin): Promise<void> {
   for (const row of origin.transactions) {
-    if (row.accountId && row.status === "CONFIRMED") {
-      // A Task 7 troca por lockTransaction, junto com a ordem de lock de updateDebt.
-      const locked = await tx.transaction.findUniqueOrThrow({
-        where: { id: row.id },
-        select: { type: true, convertedAmount: true },
-      });
+    // O retrato lido antes da transação pode estar velho: uma edição
+    // concorrente já teria trocado conta, tipo ou valor, e o estorno devolveria
+    // o número errado à conta errada.
+    const previous = await lockTransaction(tx, row.id);
 
+    if (!previous) {
+      throw new InvalidOperationError(
+        "A origem da dívida foi alterada por outra operação. Tente novamente.",
+      );
+    }
+
+    if (previous.accountId && previous.status === "CONFIRMED") {
       await applyToBalance(
         tx,
-        row.accountId,
-        balanceDelta(locked.type, locked.convertedAmount).negated(),
+        previous.accountId,
+        balanceDelta(previous.type, previous.convertedAmount).negated(),
       );
     }
   }

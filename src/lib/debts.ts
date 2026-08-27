@@ -8,7 +8,7 @@ import { parseCalendarDate } from "@/lib/dates";
 import { applyToBalance, balanceDelta, lockTransaction, type Tx } from "@/lib/accountBalance";
 import { assertCategoryOwned, assertPersonOwned, requireAccount } from "@/lib/ownership";
 import { deriveDebtStatus } from "@/lib/debtStatus";
-import { createOrigin, loadOrigin } from "@/lib/debtOrigin";
+import { assertOriginEditable, createOrigin, deleteOrigin, loadOrigin } from "@/lib/debtOrigin";
 import { requireCreditCard } from "@/lib/creditCards";
 import type { DebtTypeCode } from "@/lib/debtTypes";
 import type { DebtInput, DebtSettlementInput } from "@/lib/validations";
@@ -315,6 +315,12 @@ export async function deleteSettlement(userId: string, transactionId: string): P
  * e de todas as amortizações já lançadas; trocar a moeda reinterpretaria
  * `originalAmount` e `remainingAmount` sem converter nada. Nos dois casos o
  * certo é remover e recriar.
+ *
+ * A origem é **apagada e recriada**, e não editada no lugar: o destino, a data e
+ * o número de parcelas podem mudar, e cada uma dessas mudanças redistribui as
+ * parcelas por outras faturas. É o mesmo caminho de `updateCardPurchase`, e é
+ * o que faz uma única passagem cobrir conta→conta, conta→cartão, cartão→conta e
+ * cartão→cartão.
  */
 export async function updateDebt(userId: string, debtId: string, input: DebtInput): Promise<Debt> {
   const debt = await requireDebt(userId, debtId);
@@ -334,95 +340,83 @@ export async function updateDebt(userId: string, debtId: string, input: DebtInpu
   await assertPersonOwned(userId, input.personId);
   await assertCategoryOwned(userId, input.categoryId);
 
-  // Temporário: a origem em cartão chega na tarefa seguinte.
-  if (!input.accountId) {
-    throw new InvalidOperationError("Escolha a origem: conta bancária ou cartão de crédito");
-  }
-
-  const account = await requireAccount(userId, input.accountId);
-  const date = parseCalendarDate(input.date);
-
   const origin = await loadOrigin(userId, debt);
 
   if (origin.transactions.length === 0) {
     throw new NotFoundError("Movimentação de origem não encontrada");
   }
 
+  // Antes de abrir a transação, para dar mensagem em vez de erro de constraint.
+  assertOriginEditable(origin, "editar");
+
+  const card = input.creditCardId ? await requireCreditCard(userId, input.creditCardId) : null;
+  const account = input.accountId ? await requireAccount(userId, input.accountId) : null;
+  const targetCurrency = card?.currency ?? account?.currency;
+
+  if (!targetCurrency) {
+    throw new InvalidOperationError(
+      "Escolha a origem: conta bancária ou cartão de crédito",
+    );
+  }
+
+  const date = parseCalendarDate(input.date);
+
   const rate = await getExchangeRate({
     from: input.currency,
-    to: account.currency,
+    to: targetCurrency,
     date,
     manualRate: input.manualFxRate,
   });
 
-  return prisma.$transaction(async (tx) => {
-    const locked = await lockDebt(tx, debtId);
-    // Mesma ordem de `deleteSettlement`: dívida, depois movimentação.
-    const previousOrigin = await lockTransaction(tx, origin.transactions[0]!.id);
+  return prisma.$transaction(
+    async (tx) => {
+      const locked = await lockDebt(tx, debtId);
 
-    if (!previousOrigin) {
-      throw new NotFoundError("Movimentação de origem não encontrada");
-    }
+      // O já abatido é o que o novo total precisa acomodar.
+      const settled = money(locked.originalAmount).minus(locked.remainingAmount);
+      const nextOriginal = money(input.amount);
 
-    // O já abatido é o que o novo total precisa acomodar.
-    const settled = money(locked.originalAmount).minus(locked.remainingAmount);
-    const nextOriginal = money(input.amount);
+      if (nextOriginal.lessThan(settled)) {
+        throw new InvalidOperationError(
+          `O novo valor é menor do que os ${settled.toFixed(2)} ${debt.currency} já abatidos`,
+        );
+      }
 
-    if (nextOriginal.lessThan(settled)) {
-      throw new InvalidOperationError(
-        `O novo valor é menor do que os ${settled.toFixed(2)} ${debt.currency} já abatidos`,
-      );
-    }
+      // Mesma ordem do resto do módulo: dívida, depois movimentação.
+      await deleteOrigin(tx, origin);
 
-    // Idem: a origem pendente não somou ao saldo, então não há o que estornar.
-    if (previousOrigin.accountId && previousOrigin.status === "CONFIRMED") {
-      await applyToBalance(
-        tx,
-        previousOrigin.accountId,
-        balanceDelta(previousOrigin.type, previousOrigin.convertedAmount).negated(),
-      );
-    }
-
-    const updatedOrigin = await tx.transaction.update({
-      where: { id: origin.transactions[0]!.id },
-      data: {
-        description: input.description,
+      await createOrigin(tx, {
+        userId,
+        debtId,
+        type: originType(debt.type),
+        input,
         date,
-        amount: toStorage(nextOriginal),
-        exchangeRate: rate.toFixed(FX_RATE_SCALE),
-        convertedAmount: toStorage(convertMoney(nextOriginal, rate)),
-        accountId: account.id,
-        categoryId: input.categoryId,
-      },
-    });
+        rate,
+        card,
+        // Preserva a origem pendente: `update` nunca mexia no status, e recriar
+        // sem carregá-lo deixaria uma origem projetada virar confirmada.
+        status: card ? undefined : origin.transactions[0]?.status,
+      });
 
-    // Simétrico ao estorno acima: `update` não mexe no status, então uma origem
-    // pendente continua pendente e segue fora do saldo.
-    if (updatedOrigin.status === "CONFIRMED") {
-      await applyToBalance(
-        tx,
-        account.id,
-        balanceDelta(updatedOrigin.type, updatedOrigin.convertedAmount),
-      );
-    }
+      const remaining = nextOriginal.minus(settled);
 
-    const remaining = nextOriginal.minus(settled);
+      await tx.debt.update({
+        where: { id: debtId },
+        data: {
+          personId: input.personId,
+          categoryId: input.categoryId,
+          description: input.description,
+          originalAmount: toStorage(nextOriginal),
+          remainingAmount: toStorage(remaining),
+          status: deriveDebtStatus(nextOriginal, remaining),
+          dueDate: input.dueDate ? parseCalendarDate(input.dueDate) : null,
+        },
+      });
 
-    await tx.debt.update({
-      where: { id: debtId },
-      data: {
-        personId: input.personId,
-        categoryId: input.categoryId,
-        description: input.description,
-        originalAmount: toStorage(nextOriginal),
-        remainingAmount: toStorage(remaining),
-        status: deriveDebtStatus(nextOriginal, remaining),
-        dueDate: input.dueDate ? parseCalendarDate(input.dueDate) : null,
-      },
-    });
-
-    return tx.debt.findUniqueOrThrow({ where: { id: debtId } });
-  });
+      return tx.debt.findUniqueOrThrow({ where: { id: debtId } });
+    },
+    card || origin.target?.kind === "card" ? INSTALLMENT_TX_OPTIONS : undefined,
+  );
 }
 
 /**
