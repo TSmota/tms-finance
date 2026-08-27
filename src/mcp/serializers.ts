@@ -244,6 +244,19 @@ function debtDto(debt: DebtListItem) {
     person: { id: debt.personId, name: debt.personName },
     /** Motivo/origem, obrigatório. */
     category: { id: debt.categoryId, name: debt.categoryName },
+    /**
+     * Onde a movimentação de origem vive. Necessário para `update_debt`
+     * preservar a origem: sem isso, todo salvar a moveria de lugar.
+     */
+    origin: debt.originTarget
+      ? {
+          kind: debt.originTarget.kind,
+          id: debt.originTarget.id,
+          installments: debt.originInstallments,
+        }
+      : null,
+    /** Origem em fatura paga: `update_debt` e `delete_debt` vão recusar. */
+    origin_locked: debt.originLocked,
   };
 }
 
@@ -266,6 +279,11 @@ export function debtDetailDto(result: { debt: DebtListItem; movements: DebtMovem
       account: movement.accountId
         ? { id: movement.accountId, name: movement.accountName, currency: movement.accountCurrency }
         : null,
+      card: movement.creditCardId
+        ? { id: movement.creditCardId, name: movement.cardName }
+        : null,
+      installment_number: movement.installmentNumber,
+      total_installments: movement.totalInstallments,
     })),
   };
 }
