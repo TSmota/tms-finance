@@ -10,6 +10,7 @@ import { assertCategoryOwned, assertPersonOwned, requireAccount } from "@/lib/ow
 import { deriveDebtStatus } from "@/lib/debtStatus";
 import { assertOriginEditable, createOrigin, deleteOrigin, loadOrigin } from "@/lib/debtOrigin";
 import { requireCreditCard } from "@/lib/creditCards";
+import { recalcInvoiceTotals } from "@/lib/invoices";
 import type { DebtTypeCode } from "@/lib/debtTypes";
 import type { DebtInput, DebtSettlementInput } from "@/lib/validations";
 
@@ -424,33 +425,60 @@ export async function updateDebt(userId: string, debtId: string, input: DebtInpu
  *
  * As transações vinculadas têm `onDelete: SetNull`, então apagar só a dívida
  * deixaria os lançamentos sem vínculo — dinheiro movimentado sem explicação.
+ *
+ * Fatura paga é intocável: o dinheiro já saiu pelo total antigo, e apagar a
+ * parcela deixaria `total_amount` menor que o valor pago com a fatura ainda
+ * `PAID`.
  */
 export async function deleteDebt(userId: string, debtId: string): Promise<void> {
   const debt = await requireDebt(userId, debtId);
 
-  await prisma.$transaction(async (tx) => {
-    const movements = await tx.transaction.findMany({
-      where: { userId, debtId: debt.id },
-      select: { id: true, type: true, convertedAmount: true, accountId: true, status: true },
-      // Ordem estável, para que contas tocadas por mais de uma movimentação
-      // sejam atualizadas sempre na mesma sequência.
-      orderBy: { id: "asc" },
-    });
+  const origin = await loadOrigin(userId, debt);
 
-    await tx.transaction.deleteMany({ where: { id: { in: movements.map((row) => row.id) } } });
+  assertOriginEditable(origin, "remover");
 
-    for (const movement of movements) {
-      if (movement.accountId && movement.status === "CONFIRMED") {
-        await applyToBalance(
-          tx,
-          movement.accountId,
-          balanceDelta(movement.type, movement.convertedAmount).negated(),
-        );
+  await prisma.$transaction(
+    async (tx) => {
+      const movements = await tx.transaction.findMany({
+        where: { userId, debtId: debt.id },
+        select: {
+          id: true,
+          type: true,
+          convertedAmount: true,
+          accountId: true,
+          status: true,
+          invoiceId: true,
+        },
+        // Ordem estável, para que contas tocadas por mais de uma movimentação
+        // sejam atualizadas sempre na mesma sequência.
+        orderBy: { id: "asc" },
+      });
+
+      await tx.transaction.deleteMany({
+        where: { id: { in: movements.map((row) => row.id) } },
+      });
+
+      for (const movement of movements) {
+        if (movement.accountId && movement.status === "CONFIRMED") {
+          await applyToBalance(
+            tx,
+            movement.accountId,
+            balanceDelta(movement.type, movement.convertedAmount).negated(),
+          );
+        }
       }
-    }
 
-    await tx.debt.delete({ where: { id: debt.id } });
-  });
+      await recalcInvoiceTotals(
+        tx,
+        movements
+          .map((row) => row.invoiceId)
+          .filter((id): id is string => id !== null),
+      );
+
+      await tx.debt.delete({ where: { id: debt.id } });
+    },
+    origin.target?.kind === "card" ? INSTALLMENT_TX_OPTIONS : undefined,
+  );
 }
 
 /** Dívida do usuário, ou {@link NotFoundError}. */

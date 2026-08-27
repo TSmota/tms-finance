@@ -613,6 +613,69 @@ describe("remoção", () => {
 
     expect(stored.currentBalance.toFixed(2)).toBe("1000.00");
   });
+
+  it("remover dívida com origem no cartão recalcula as faturas", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 90,
+        installments: 3,
+        date: "2026-08-06",
+      }),
+    );
+
+    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 30 }));
+
+    await deleteDebt(user.id, debt.id);
+
+    // As três faturas ficaram vazias e foram apagadas.
+    expect(await invoices(card.id)).toEqual([]);
+    expect(await prisma.transaction.count({ where: { userId: user.id } })).toBe(0);
+
+    // O saldo volta ao inicial: a amortização foi estornada, a origem nunca o tocou.
+    const saldo = await prisma.financialAccount.findUniqueOrThrow({
+      where: { id: account.id },
+    });
+
+    expect(saldo.currentBalance.toFixed(2)).toBe("1000.00");
+  });
+
+  it("recusa remover dívida cuja origem está em fatura paga", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 200,
+        date: "2026-08-06",
+      }),
+    );
+
+    const invoice = await prisma.invoice.findFirstOrThrow({
+      where: { creditCardId: card.id },
+    });
+
+    await payInvoice(user.id, invoice.id, {
+      accountId: account.id,
+      date: "2026-09-05",
+      manualFxRate: null,
+    });
+
+    await expect(deleteDebt(user.id, debt.id)).rejects.toThrow(InvalidOperationError);
+
+    expect(await prisma.debt.count({ where: { id: debt.id } })).toBe(1);
+    expect(await invoices(card.id)).toEqual([
+      { competencia: "2026-08", total: "200.00", status: "PAID" },
+    ]);
+  });
 });
 
 describe("edição da dívida", () => {
