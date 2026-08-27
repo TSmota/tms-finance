@@ -59,7 +59,7 @@ function toFormValues(debt: DebtListItem, fallbackAccountId: string): DebtFormVa
     currency: debt.currency,
     accountId: debt.originAccountId ?? fallbackAccountId,
     date: toCalendarDate(debt.originDate ?? debt.createdAt),
-    dueDate: debt.dueDate ? toCalendarDate(debt.dueDate) : "",
+    dueDate: debt.dueDate ? toCalendarDate(debt.dueDate) : null,
     manualFxRate: undefined,
   };
 }

@@ -265,7 +265,7 @@ export const recurringExpenseSchema = z
     /** Valor variável, a conferir no vencimento. */
     isEstimated: z.coerce.boolean().default(false),
     startDate: calendarDateSchema,
-    /** Vazio = recorrência sem fim. */
+    /** Ausente = recorrência sem fim. */
     endDate: z
       .union([calendarDateSchema, z.literal(""), z.null()])
       .optional()
@@ -312,7 +312,7 @@ export const personSchema = z.object({
   notes: optionalText(TEXT_LIMITS.notes),
 });
 
-/** Data opcional; `""` do `DatePickerInput` limpo conta como ausente. */
+/** Data opcional; `null` do `DatePickerInput` limpo conta como ausente. */
 const optionalCalendarDateSchema = z
   .union([calendarDateSchema, z.literal(""), z.null()])
   .optional()
