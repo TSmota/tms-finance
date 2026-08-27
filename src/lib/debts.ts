@@ -1,4 +1,11 @@
-import type { Currency, Debt, Transaction, TransactionType } from "@prisma/client";
+import type {
+  Currency,
+  Debt,
+  InvoiceStatus,
+  Prisma,
+  Transaction,
+  TransactionType,
+} from "@prisma/client";
 
 import { prisma } from "@/lib/db";
 import { InvalidOperationError, NotFoundError } from "@/lib/errors";
@@ -8,7 +15,14 @@ import { parseCalendarDate } from "@/lib/dates";
 import { applyToBalance, balanceDelta, lockTransaction, type Tx } from "@/lib/accountBalance";
 import { assertCategoryOwned, assertPersonOwned, requireAccount } from "@/lib/ownership";
 import { deriveDebtStatus } from "@/lib/debtStatus";
-import { assertOriginEditable, createOrigin, deleteOrigin, loadOrigin } from "@/lib/debtOrigin";
+import {
+  assertOriginEditable,
+  createOrigin,
+  deleteOrigin,
+  loadOrigin,
+  originTargetOf,
+  type OriginTarget,
+} from "@/lib/debtOrigin";
 import { requireCreditCard } from "@/lib/creditCards";
 import { recalcInvoiceTotals } from "@/lib/invoices";
 import type { DebtTypeCode } from "@/lib/debtTypes";
@@ -544,37 +558,60 @@ export interface DebtListItem {
   /** Quantidade de amortizações lançadas. */
   settlementCount: number;
   /**
-   * Conta e data da movimentação de origem.
+   * Destino e dados do grupo de origem.
    *
    * O formulário de edição precisa delas: sem isso, um "salvar" sem tocar
    * nesses campos moveria o lançamento de origem para outra conta e para a
    * data de criação do registro, corrompendo dois saldos.
    */
+  originTarget: OriginTarget | null;
+  /** Nulo quando a origem foi no cartão. É o destino sugerido da amortização. */
   originAccountId: string | null;
   originDate: Date | null;
+  originInstallments: number;
+  originLocked: boolean;
+  originCardName: string | null;
   createdAt: Date;
 }
 
 const debtInclude = {
   person: { select: { name: true } },
   category: { select: { name: true, color: true } },
-  _count: { select: { settlements: true } },
   settlements: {
-    select: { type: true, accountId: true, date: true },
-    orderBy: { createdAt: "asc" },
+    select: {
+      type: true,
+      accountId: true,
+      creditCardId: true,
+      date: true,
+      installmentNumber: true,
+      creditCard: { select: { name: true } },
+      invoice: { select: { status: true } },
+    },
+    orderBy: [{ date: "asc" }, { installmentNumber: "asc" }, { createdAt: "asc" }],
   },
-} as const;
+} satisfies Prisma.DebtInclude;
 
 function toListItem(debt: Debt & {
   person: { name: string };
   category: { name: string; color: string | null };
-  _count: { settlements: number };
-  settlements: Array<{ type: TransactionType; accountId: string | null; date: Date }>;
+  settlements: Array<{
+    type: TransactionType;
+    accountId: string | null;
+    creditCardId: string | null;
+    date: Date;
+    installmentNumber: number | null;
+    creditCard: { name: string } | null;
+    invoice: { status: InvoiceStatus } | null;
+  }>;
 }): DebtListItem {
   const original = money(debt.originalAmount);
   const remaining = money(debt.remainingAmount);
-  // A primeira movimentação do sinal da origem é a que criou a dívida.
-  const origin = debt.settlements.find((row) => row.type === originType(debt.type));
+
+  // Origem e amortização têm sempre tipos opostos, então o tipo particiona as
+  // duas — e a origem no cartão é um grupo de parcelas, não uma linha.
+  const originKind = originType(debt.type);
+  const originMovements = debt.settlements.filter((row) => row.type === originKind);
+  const first = originMovements[0];
 
   return {
     id: debt.id,
@@ -591,10 +628,13 @@ function toListItem(debt: Debt & {
     categoryId: debt.categoryId,
     categoryName: debt.category.name,
     categoryColor: debt.category.color,
-    // Inclui a movimentação de origem, que também aponta para a dívida.
-    settlementCount: Math.max(debt._count.settlements - 1, 0),
-    originAccountId: origin?.accountId ?? null,
-    originDate: origin?.date ?? null,
+    settlementCount: debt.settlements.length - originMovements.length,
+    originTarget: originTargetOf(first),
+    originAccountId: first?.accountId ?? null,
+    originDate: first?.date ?? null,
+    originInstallments: Math.max(originMovements.length, 1),
+    originLocked: originMovements.some((row) => row.invoice?.status === "PAID"),
+    originCardName: first?.creditCard?.name ?? null,
     createdAt: debt.createdAt,
   };
 }
@@ -625,6 +665,10 @@ export interface DebtMovement {
   accountId: string | null;
   accountName: string | null;
   accountCurrency: Currency | null;
+  creditCardId: string | null;
+  cardName: string | null;
+  installmentNumber: number | null;
+  totalInstallments: number | null;
   categoryName: string | null;
   categoryColor: string | null;
 }
@@ -645,31 +689,35 @@ export async function getDebtDetail(
 
   const movements = await prisma.transaction.findMany({
     where: { userId, debtId },
-    orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+    orderBy: [{ date: "asc" }, { installmentNumber: "asc" }, { createdAt: "asc" }],
     include: {
       account: { select: { name: true, currency: true } },
+      creditCard: { select: { name: true } },
       category: { select: { name: true, color: true } },
     },
   });
 
-  const origin = originType(debt.type);
+  const originKind = originType(debt.type);
 
   return {
     debt: toListItem(debt),
-    movements: movements.map((movement, index) => ({
+    movements: movements.map((movement) => ({
       id: movement.id,
       description: movement.description,
       date: movement.date,
-      // A primeira movimentação do tipo da origem é a que criou a dívida.
-      isOrigin:
-        movement.type === origin &&
-        movements.findIndex((candidate) => candidate.type === origin) === index,
+      // O tipo particiona origem e amortização; no cartão a origem é o grupo
+      // inteiro de parcelas.
+      isOrigin: movement.type === originKind,
       amount: movement.amount.toNumber(),
       currency: movement.currency,
       convertedAmount: movement.convertedAmount.toNumber(),
       accountId: movement.accountId,
       accountName: movement.account?.name ?? null,
       accountCurrency: movement.account?.currency ?? null,
+      creditCardId: movement.creditCardId,
+      cardName: movement.creditCard?.name ?? null,
+      installmentNumber: movement.installmentNumber,
+      totalInstallments: movement.totalInstallments,
       categoryName: movement.category?.name ?? null,
       categoryColor: movement.category?.color ?? null,
     })),

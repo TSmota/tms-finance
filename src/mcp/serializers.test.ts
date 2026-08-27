@@ -115,8 +115,12 @@ const debt = {
   categoryName: "Mercado",
   categoryColor: "#fff",
   settlementCount: 2,
+  originTarget: { kind: "account" as const, id: "a1" },
   originAccountId: "a1",
   originDate: new Date("2026-07-01T00:00:00Z"),
+  originInstallments: 1,
+  originLocked: false,
+  originCardName: null,
   createdAt: new Date("2026-07-01T00:00:00Z"),
 };
 

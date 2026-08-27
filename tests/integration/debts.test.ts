@@ -1317,6 +1317,8 @@ describe("histórico e isolamento", () => {
       remainingAmount: 120,
       settledAmount: 80,
       settlementCount: 1,
+      originInstallments: 1,
+      originTarget: { kind: "account", id: account.id },
     });
 
     expect(
@@ -1329,6 +1331,101 @@ describe("histórico e isolamento", () => {
       { data: "2026-08-06", origem: true, valor: 200 },
       { data: "2026-08-16", origem: false, valor: 80 },
     ]);
+  });
+
+  it("expõe a origem em cartão para o formulário de edição", async () => {
+    const { user, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 90,
+        installments: 3,
+        date: "2026-08-06",
+      }),
+    );
+
+    const [item] = await listDebts(user.id);
+
+    expect(item).toMatchObject({
+      originTarget: { kind: "card", id: card.id },
+      originAccountId: null,
+      originInstallments: 3,
+      originLocked: false,
+      originCardName: "Nubank",
+      // As três parcelas são origem, não amortização.
+      settlementCount: 0,
+    });
+    expect(item?.originDate?.toISOString().slice(0, 10)).toBe("2026-08-06");
+    expect(debt.id).toBe(item?.id);
+  });
+
+  it("marca todas as parcelas da origem no histórico", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 90,
+        installments: 3,
+        date: "2026-08-06",
+      }),
+    );
+
+    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 30 }));
+
+    const { debt: summary, movements } = await getDebtDetail(user.id, debt.id);
+
+    expect(summary.settlementCount).toBe(1);
+    expect(
+      movements.map((movement) => ({
+        origem: movement.isOrigin,
+        parcela: movement.installmentNumber,
+        de: movement.totalInstallments,
+        cartao: movement.cardName,
+        conta: movement.accountName,
+      })),
+    ).toEqual([
+      { origem: true, parcela: 1, de: 3, cartao: "Nubank", conta: null },
+      { origem: true, parcela: 2, de: 3, cartao: "Nubank", conta: null },
+      { origem: true, parcela: 3, de: 3, cartao: "Nubank", conta: null },
+      { origem: false, parcela: null, de: null, cartao: null, conta: expect.any(String) },
+    ]);
+  });
+
+  it("marca a origem como travada quando a fatura foi paga", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 200,
+        date: "2026-08-06",
+      }),
+    );
+
+    const invoice = await prisma.invoice.findFirstOrThrow({
+      where: { creditCardId: card.id },
+    });
+
+    await payInvoice(user.id, invoice.id, {
+      accountId: account.id,
+      date: "2026-09-05",
+      manualFxRate: null,
+    });
+
+    const [item] = await listDebts(user.id);
+
+    expect(item?.originLocked).toBe(true);
   });
 
   it("ordena dívidas em aberto antes das quitadas", async () => {
