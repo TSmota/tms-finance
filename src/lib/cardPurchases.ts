@@ -146,11 +146,14 @@ export async function updateCardPurchase(
     where: { userId, OR: [{ id: anchorId }, { parentInstallmentId: anchorId }] },
     select: {
       id: true,
+      debtId: true,
       recurringExpenseId: true,
       invoiceId: true,
       invoice: { select: { status: true } },
     },
   });
+
+  assertNotDebtOrigin(group);
 
   if (group.some((row) => row.invoice?.status === "PAID")) {
     throw new InvalidOperationError(
@@ -281,6 +284,16 @@ export async function deleteCardPurchase(userId: string, transactionId: string):
 
   const anchorId = target.parentInstallmentId ?? target.id;
 
+  const guardedGroup = await prisma.transaction.findMany({
+    where: {
+      userId,
+      OR: [{ id: anchorId }, { parentInstallmentId: anchorId }],
+    },
+    select: { debtId: true },
+  });
+
+  assertNotDebtOrigin(guardedGroup);
+
   // O dinheiro já saiu pelo total antigo: apagar as parcelas deixaria
   // `total_amount` menor que o valor pago, com a fatura ainda `PAID`.
   const paidInstallments = await prisma.transaction.count({
@@ -313,4 +326,20 @@ export async function deleteCardPurchase(userId: string, transactionId: string):
       group.map((item) => item.invoiceId).filter((id): id is string => id !== null),
     );
   }, INSTALLMENT_TX_OPTIONS);
+}
+
+/**
+ * Recusa mexer no que pertence a uma dívida.
+ *
+ * Estas operações recriam ou apagam o grupo sem manter o valor restante da
+ * dívida. A guarda recebe o grupo inteiro para também proteger uma parcela
+ * irmã quando a operação começa por uma linha sem vínculo.
+ */
+function assertNotDebtOrigin(group: Array<{ debtId: string | null }>): void {
+  if (group.some((row) => row.debtId !== null)) {
+    throw new InvalidOperationError(
+      "Este lançamento é a origem de uma dívida. Ajuste-o pela tela de dívidas, " +
+        "para que o valor restante acompanhe.",
+    );
+  }
 }
