@@ -20,6 +20,7 @@ import {
   createOrigin,
   deleteOrigin,
   loadOrigin,
+  originType,
   originTargetOf,
   type OriginTarget,
 } from "@/lib/debtOrigin";
@@ -63,11 +64,6 @@ const INSTALLMENT_TX_OPTIONS = { maxWait: 10_000, timeout: 30_000 };
  * `remainingAmount`, e para a da conta, que move o saldo. No caso comum as três
  * coincidem e nenhuma chamada de câmbio acontece.
  */
-
-/** Sinal da transação que **origina** a dívida. */
-export function originType(type: DebtTypeCode): TransactionType {
-  return type === "LENT" ? "EXPENSE" : "INCOME";
-}
 
 /** Sinal da transação que **abate** a dívida — sempre o oposto da origem. */
 export function settlementType(type: DebtTypeCode): TransactionType {

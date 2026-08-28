@@ -19,7 +19,6 @@ import {
   lockTransaction,
   type Tx,
 } from "@/lib/accountBalance";
-import { originType } from "@/lib/debts";
 import type { DebtTypeCode } from "@/lib/debtTypes";
 import type { DebtInput } from "@/lib/validations";
 
@@ -39,6 +38,11 @@ import type { DebtInput } from "@/lib/validations";
  */
 
 export type OriginTarget = { kind: "account"; id: string } | { kind: "card"; id: string };
+
+/** Sinal da transação que origina a dívida. */
+export function originType(type: DebtTypeCode): TransactionType {
+  return type === "LENT" ? "EXPENSE" : "INCOME";
+}
 
 export interface LoadedOrigin {
   transactions: Array<{
