@@ -1,4 +1,6 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
+
+import { itAcrossTimeZones } from "@tests/support/timeZones";
 
 import { parseCalendarDate, toCalendarDate } from "./dates";
 import { InvalidOperationError } from "./errors";
@@ -256,26 +258,15 @@ describe("janela de materialização", () => {
 });
 
 describe("estabilidade entre fusos", () => {
-  const originalTz = process.env.TZ;
-
-  afterAll(() => {
-    process.env.TZ = originalTz;
+  itAcrossTimeZones("produz as mesmas ocorrências", () => {
+    expect(dates({ dueDay: 31 }, 2026, 2)).toEqual(["2026-02-28"]);
+    expect(dates({ frequency: "WEEKLY", startDate: parseCalendarDate("2026-08-01") }, 2026, 8))
+      .toEqual([
+        "2026-08-01",
+        "2026-08-08",
+        "2026-08-15",
+        "2026-08-22",
+        "2026-08-29",
+      ]);
   });
-
-  it.each(["UTC", "America/Sao_Paulo", "Asia/Tokyo", "Pacific/Kiritimati"])(
-    "produz as mesmas ocorrências com TZ=%s",
-    (tz) => {
-      process.env.TZ = tz;
-
-      expect(dates({ dueDay: 31 }, 2026, 2)).toEqual(["2026-02-28"]);
-      expect(dates({ frequency: "WEEKLY", startDate: parseCalendarDate("2026-08-01") }, 2026, 8))
-        .toEqual([
-          "2026-08-01",
-          "2026-08-08",
-          "2026-08-15",
-          "2026-08-22",
-          "2026-08-29",
-        ]);
-    },
-  );
 });

@@ -4,9 +4,9 @@ import { prisma } from "@/lib/db";
 import { createTransaction } from "@/lib/transactions";
 import { transactionSchema } from "@/lib/validations";
 import { runTool } from "@/mcp/guard";
-import { makeAccount, makeCategory, makeUser } from "../factories";
-import { setFxAvailable, setRates } from "../setup-fx";
-import { auditFor, ctxFor, makeAgent, readResult } from "../mcpHarness";
+import { makeAccount, makeCategory, makeUser } from "@tests/support/factories";
+import { setFxAvailable, setRates } from "@tests/setup-fx";
+import { auditFor, ctxFor, makeAgent, readResult } from "@tests/support/mcpHarness";
 
 /**
  * Câmbio indisponível não é falha do agente — é um pedido de mais informação.

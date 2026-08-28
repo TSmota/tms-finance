@@ -9,8 +9,8 @@ import { createDebt, settleDebt } from "@/lib/debts";
 import { createRecurringExpense, materializeRecurring } from "@/lib/recurring";
 import { getDebtsByCategory, getMonthSummary, getOpenInvoices } from "@/lib/reports";
 import { money } from "@/lib/money";
-import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "../factories";
-import { setRates } from "../setup-fx";
+import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "@tests/support/factories";
+import { setRates } from "@tests/setup-fx";
 
 /**
  * Agregações do painel.

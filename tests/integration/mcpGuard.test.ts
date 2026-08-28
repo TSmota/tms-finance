@@ -7,9 +7,9 @@ import { createTransaction, deleteTransaction } from "@/lib/transactions";
 import { transactionSchema } from "@/lib/validations";
 import { REVALIDATION_TARGETS } from "@/lib/revalidation";
 import { runTool } from "@/mcp/guard";
-import { makeAccount, makeCategory, makeUser } from "../factories";
-import { setRates } from "../setup-fx";
-import { auditFor, ctxFor, ctxWithoutIdentity, makeAgent, readResult } from "../mcpHarness";
+import { makeAccount, makeCategory, makeUser } from "@tests/support/factories";
+import { setRates } from "@tests/setup-fx";
+import { auditFor, ctxFor, ctxWithoutIdentity, makeAgent, readResult } from "@tests/support/mcpHarness";
 
 /**
  * O guard da casca MCP.

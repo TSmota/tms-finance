@@ -6,8 +6,8 @@ import { createDebt } from "@/lib/debts";
 import { registerTools } from "@/mcp/registry";
 import { resetConfirmCodec } from "@/mcp/confirm";
 import { DESTRUCTIVE_TOOLS, READ_TOOLS, TOOL_SCOPES, WRITE_TOOLS } from "@/mcp/scopes";
-import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "../factories";
-import { ctxFor, makeAgent } from "../mcpHarness";
+import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "@tests/support/factories";
+import { ctxFor, makeAgent } from "@tests/support/mcpHarness";
 
 /**
  * O registro de ferramentas conferido contra `scopes.ts`.

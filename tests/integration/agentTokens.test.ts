@@ -9,7 +9,7 @@ import {
   revokeAgentToken,
   verifyAgentToken,
 } from "@/lib/agentTokens";
-import { makeUser } from "../factories";
+import { makeUser } from "@tests/support/factories";
 
 /**
  * Credenciais de máquina do endpoint MCP.

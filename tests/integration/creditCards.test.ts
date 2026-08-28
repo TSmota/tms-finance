@@ -12,8 +12,8 @@ import { createCardPurchase, deleteCardPurchase } from "@/lib/cardPurchases";
 import { listCardInvoices } from "@/lib/invoices";
 import { payInvoice } from "@/lib/invoicePayments";
 import type { CreditCardInput } from "@/lib/validations";
-import { makeAccount, makeCreditCard, makeUser } from "../factories";
-import { setRates } from "../setup-fx";
+import { makeAccount, makeCreditCard, makeUser } from "@tests/support/factories";
+import { setRates } from "@tests/setup-fx";
 
 function cardInput(overrides: Partial<CreditCardInput> = {}): CreditCardInput {
   return {

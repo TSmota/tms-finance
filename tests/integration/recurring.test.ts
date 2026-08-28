@@ -18,8 +18,8 @@ import {
 } from "@/lib/recurring";
 import { getBalanceProjection } from "@/lib/projection";
 import type { RecurringExpenseInput } from "@/lib/validations";
-import { makeAccount, makeCategory, makeCreditCard, makeUser } from "../factories";
-import { setFxAvailable, setRates } from "../setup-fx";
+import { makeAccount, makeCategory, makeCreditCard, makeUser } from "@tests/support/factories";
+import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 /**
  * Gastos recorrentes, materialização lazy e projeção.

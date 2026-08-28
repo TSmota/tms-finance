@@ -6,8 +6,8 @@ import { recomputeBalance } from "@/lib/accountBalance";
 import { createCardPurchase } from "@/lib/cardPurchases";
 import { listCardInvoices, recalcInvoiceTotal } from "@/lib/invoices";
 import { payInvoice, undoInvoicePayment } from "@/lib/invoicePayments";
-import { makeAccount, makeCreditCard, makeUser } from "../factories";
-import { setFxAvailable, setRates } from "../setup-fx";
+import { makeAccount, makeCreditCard, makeUser } from "@tests/support/factories";
+import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 /**
  * Pagamento de fatura.

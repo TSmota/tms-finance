@@ -14,8 +14,8 @@ import {
 } from "@/lib/debts";
 import { getPeopleOverview, deletePerson } from "@/lib/people";
 import type { DebtInput, DebtSettlementInput } from "@/lib/validations";
-import { makeAccount, makeCategory, makePerson, makeUser } from "../factories";
-import { setFxAvailable, setRates } from "../setup-fx";
+import { makeAccount, makeCategory, makePerson, makeUser } from "@tests/support/factories";
+import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 /**
  * Empréstimos e dívidas pessoais.

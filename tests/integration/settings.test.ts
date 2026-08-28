@@ -8,8 +8,8 @@ import { createTransaction } from "@/lib/transactions";
 import { createCardPurchase } from "@/lib/cardPurchases";
 import { createDebt } from "@/lib/debts";
 import { getMonthSummary } from "@/lib/reports";
-import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "../factories";
-import { setRates } from "../setup-fx";
+import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "@tests/support/factories";
+import { setRates } from "@tests/setup-fx";
 
 /**
  * Moeda base configurável.

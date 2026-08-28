@@ -8,8 +8,8 @@ import { createTransaction } from "@/lib/transactions";
 import { runDestructiveTool } from "@/mcp/guard";
 import { confirmCodec, resetConfirmCodec, type ConfirmPayload } from "@/mcp/confirm";
 import { idArgs } from "@/mcp/args";
-import { makeAccount, makeCategory, makePerson, makeUser } from "../factories";
-import { auditFor, ctxFor, makeAgent, readResult, type Agent } from "../mcpHarness";
+import { makeAccount, makeCategory, makePerson, makeUser } from "@tests/support/factories";
+import { auditFor, ctxFor, makeAgent, readResult, type Agent } from "@tests/support/mcpHarness";
 
 /**
  * Confirmação em duas fases das remoções em cascata.

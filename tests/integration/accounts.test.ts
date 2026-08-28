@@ -16,8 +16,8 @@ import { createCardPurchase } from "@/lib/cardPurchases";
 import { listCardInvoices } from "@/lib/invoices";
 import { payInvoice } from "@/lib/invoicePayments";
 import { accountSchema } from "@/lib/validations";
-import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "../factories";
-import { setFxAvailable, setRates } from "../setup-fx";
+import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "@tests/support/factories";
+import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 beforeEach(() => {
   setRates({ "USD->BRL": 5.4, "EUR->BRL": 6.25, "BRL->USD": 0.1852 });

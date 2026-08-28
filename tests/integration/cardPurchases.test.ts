@@ -11,8 +11,8 @@ import {
 import { listCardInvoices, listInvoiceItems } from "@/lib/invoices";
 import { payInvoice, undoInvoicePayment } from "@/lib/invoicePayments";
 import type { CardPurchaseInput } from "@/lib/validations";
-import { makeAccount, makeCategory, makeCreditCard, makeUser } from "../factories";
-import { setFxAvailable, setRates } from "../setup-fx";
+import { makeAccount, makeCategory, makeCreditCard, makeUser } from "@tests/support/factories";
+import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 /**
  * Compras no cartão e parcelamento.

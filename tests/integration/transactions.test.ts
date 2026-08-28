@@ -16,8 +16,8 @@ import {
   updateTransaction,
 } from "@/lib/transactions";
 import type { TransactionInput } from "@/lib/validations";
-import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "../factories";
-import { setFxAvailable, setRates } from "../setup-fx";
+import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "@tests/support/factories";
+import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 /**
  * Fluxo de caixa em conta bancária.

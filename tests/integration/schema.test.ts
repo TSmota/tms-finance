@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/db";
-import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "../factories";
+import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "@tests/support/factories";
 
 /**
  * Prova que a migration baseline produz um banco utilizável, que o isolamento

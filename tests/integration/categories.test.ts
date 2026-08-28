@@ -12,7 +12,7 @@ import {
 import { createTransaction } from "@/lib/transactions";
 import { createRecurringExpense } from "@/lib/recurring";
 import { createDebt } from "@/lib/debts";
-import { makeAccount, makeCategory, makePerson, makeUser } from "../factories";
+import { makeAccount, makeCategory, makePerson, makeUser } from "@tests/support/factories";
 
 function categoryInput(overrides: Partial<Parameters<typeof createCategory>[1]> = {}) {
   return {
