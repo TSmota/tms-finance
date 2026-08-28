@@ -25,7 +25,7 @@ function slices(entries: Array<{ categoryId: string | null; value: string }>) {
   }));
 }
 
-describe("rollup de subcategoria", () => {
+describe("rollupByCategory — rollup de subcategoria", () => {
   it("soma a subcategoria dentro da categoria pai", () => {
     expect(
       slices([
@@ -55,7 +55,7 @@ describe("rollup de subcategoria", () => {
   });
 });
 
-describe("itens sem categoria", () => {
+describe("rollupByCategory — itens sem categoria", () => {
   it("caem em um grupo próprio, com id nulo", () => {
     const result = rollupByCategory(CATEGORIES, [
       { categoryId: null, value: "50.00" },
@@ -92,7 +92,7 @@ describe("itens sem categoria", () => {
   });
 });
 
-describe("ordenação", () => {
+describe("rollupByCategory — ordenação", () => {
   it("é decrescente por valor", () => {
     expect(
       slices([
@@ -129,7 +129,7 @@ describe("ordenação", () => {
   });
 });
 
-describe("valores", () => {
+describe("rollupByCategory — valores", () => {
   it("soma em decimal exato", () => {
     // 0,1 + 0,2 em float daria 0,30000000000000004.
     const result = rollupByCategory(CATEGORIES, [
@@ -172,7 +172,7 @@ describe("rootIndex", () => {
   });
 });
 
-describe("limite de fatias", () => {
+describe("capSlices — limite de fatias", () => {
   /** Fatias sintéticas em ordem decrescente, como o rollup produz. */
   function make(count: number) {
     return Array.from({ length: count }, (_, index) => ({

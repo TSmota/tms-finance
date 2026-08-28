@@ -3,6 +3,14 @@ import { describe, expect, it } from "vitest";
 import { describeSplit, splitCents } from "./installmentSplit";
 import { MAX_INSTALLMENTS, splitInstallments } from "./installments";
 
+/**
+ * Uma regra de divisão, dois pontos de entrada (RN-03.3).
+ *
+ * O que estes testes protegem: a soma das parcelas ser **exatamente** o total,
+ * com o resto na primeira. O acordo entre a prévia do cliente e o servidor tem
+ * seu próprio `describe` abaixo.
+ */
+
 describe("splitCents", () => {
   it("coloca o resto na primeira parcela", () => {
     expect(splitCents(10000, 3)).toEqual([3334, 3333, 3333]);

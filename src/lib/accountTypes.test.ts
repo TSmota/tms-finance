@@ -3,6 +3,14 @@ import { AccountType } from "@prisma/client";
 
 import { ACCOUNT_TYPE_CODES, ACCOUNT_TYPE_LABELS, ACCOUNT_TYPES } from "./accountTypes";
 
+/**
+ * A lista da UI conferida contra o enum do Prisma.
+ *
+ * O que estes testes protegem: um `AccountType` novo na migration não passar
+ * despercebido. Sem rótulo correspondente, ele chega à tela como código cru —
+ * uma falha que nem typecheck nem build acusam.
+ */
+
 describe("tipos de conta", () => {
   it("cobre exatamente o enum AccountType do Prisma", () => {
     expect([...ACCOUNT_TYPE_CODES].sort()).toEqual(Object.values(AccountType).sort());

@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { byLabel, byName, compareNames } from "./sorting";
 
+/**
+ * Ordenação de nomes em pt-BR.
+ *
+ * O que estes testes protegem: acento não jogar a palavra para o fim da lista,
+ * como faz a comparação por byte. É a diferença entre "Água" ao lado de "Ar" e
+ * "Água" depois de "Zoológico".
+ */
+
 describe("compareNames", () => {
   it("coloca acentuadas na posição correta, ao contrário da ordem por byte", () => {
     const nomes = ["Zebra", "Água", "Luz", "Óleo", "Alimentação"];
@@ -38,7 +46,7 @@ describe("compareNames", () => {
   });
 });
 
-describe("comparadores de objeto", () => {
+describe("byName e byLabel", () => {
   it("byName ordena por nome", () => {
     const items = [{ name: "Zebra" }, { name: "Água" }];
 

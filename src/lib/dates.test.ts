@@ -15,6 +15,14 @@ import {
   utcDateClamped,
 } from "./dates";
 
+/**
+ * Toda data do domínio é uma data de calendário ancorada em meia-noite UTC.
+ *
+ * O que estes testes protegem: o dia certo sobreviver a mês curto, virada de
+ * ano e dia que não existe no mês. A independência de fuso, que é o motivo de o
+ * módulo existir, tem seu próprio `describe` no fim do arquivo.
+ */
+
 describe("utcDate", () => {
   it("ancora o dia em meia-noite UTC", () => {
     expect(utcDate(2026, 8, 20).toISOString()).toBe("2026-08-20T00:00:00.000Z");

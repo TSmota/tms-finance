@@ -41,7 +41,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("atalhos que evitam a rede", () => {
+describe("getExchangeRate — atalhos que evitam a rede", () => {
   it("devolve 1 quando origem e destino são a mesma moeda", async () => {
     const spy = mockFetch(() => jsonResponse({}));
 
@@ -82,7 +82,7 @@ describe("atalhos que evitam a rede", () => {
   });
 });
 
-describe("consulta à API", () => {
+describe("getExchangeRate — consulta à API", () => {
   it("pede a cotação mais recente quando não há data", async () => {
     const spy = mockFetch(() => jsonResponse({ rates: { BRL: 5.4321 } }));
 
@@ -103,7 +103,7 @@ describe("consulta à API", () => {
   });
 });
 
-describe("precisão da taxa", () => {
+describe("getExchangeRate — precisão da taxa", () => {
   it("arredonda a taxa manual às 4 casas da coluna antes de devolvê-la", async () => {
     // Devolver a taxa cheia gravaria `exchange_rate` arredondado e
     // `converted_amount` calculado com outro número: o invariante
@@ -127,7 +127,7 @@ describe("precisão da taxa", () => {
   });
 });
 
-describe("falhas viram FxUnavailableError", () => {
+describe("getExchangeRate — falhas viram FxUnavailableError", () => {
   it("resposta HTTP de erro", async () => {
     mockFetch(() => jsonResponse({}, 500));
 

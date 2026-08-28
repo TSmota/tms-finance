@@ -3,6 +3,14 @@ import { describe, expect, it } from "vitest";
 import { deriveDebtStatus } from "./debtStatus";
 import { money } from "./money";
 
+/**
+ * O status da dívida é **derivado**, nunca gravado à mão (RN-05.4).
+ *
+ * O que estes testes protegem: a situação sair sempre da comparação entre
+ * restante e total. Um status gravado como campo independente pode contradizer
+ * o `remainingAmount` que a mesma transação acabou de atualizar.
+ */
+
 describe("situação derivada da dívida", () => {
   it("restante igual ao total é dívida em aberto", () => {
     expect(deriveDebtStatus("200.00", "200.00")).toBe("PENDING");

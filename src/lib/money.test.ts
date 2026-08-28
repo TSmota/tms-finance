@@ -12,7 +12,17 @@ import {
   ZERO,
 } from "./money";
 
-describe("exatidão decimal", () => {
+/**
+ * A aritmética que sustenta todo valor do sistema.
+ *
+ * O que estes testes protegem: que nenhuma conta de dinheiro passe por `number`
+ * do JS. Somar centavos mil vezes em float acumula erro, e o arredondamento
+ * padrão da linguagem não é o half-up da convenção de moeda. `toStorage`
+ * devolver string, e não number, é o que impede a perda acontecer no caminho
+ * até a coluna `Decimal`.
+ */
+
+describe("Prisma.Decimal — a premissa dos demais", () => {
   it("soma sem a deriva do binário flutuante", () => {
     // Em `number`: 0.1 + 0.2 === 0.30000000000000004
     expect(money("0.1").plus("0.2").toFixed(2)).toBe("0.30");
@@ -102,7 +112,7 @@ describe("convertMoney", () => {
   });
 });
 
-describe("predicados", () => {
+describe("isPositive, isZero e moneyEquals", () => {
   it("isPositive exige estritamente maior que zero", () => {
     expect(isPositive("0.01")).toBe(true);
     expect(isPositive(0)).toBe(false);
