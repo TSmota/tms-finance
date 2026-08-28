@@ -11,34 +11,15 @@ import {
 import { createCardPurchase, deleteCardPurchase } from "@/lib/cardPurchases";
 import { listCardInvoices } from "@/lib/invoices";
 import { payInvoice } from "@/lib/invoicePayments";
-import type { CreditCardInput } from "@/lib/validations";
-import { makeAccount, makeCreditCard, makeUser } from "../factories";
-import { setRates } from "../setup-fx";
-
-function cardInput(overrides: Partial<CreditCardInput> = {}): CreditCardInput {
-  return {
-    name: "Cartão",
-    institution: null,
-    closingDay: 20,
-    dueDay: 5,
-    currency: "BRL",
-    creditLimit: null,
-    defaultPaymentAccountId: null,
-    ...overrides,
-  };
-}
+import { makeAccount, makeCreditCard, makeUser } from "@tests/support/factories";
+import { cardPurchaseInput, creditCardInput } from "@tests/support/inputs";
+import { setRates } from "@tests/setup-fx";
 
 async function buy(userId: string, creditCardId: string, amount: number, date = "2026-08-15") {
-  return createCardPurchase(userId, {
-    creditCardId,
-    categoryId: null,
-    description: "Compra",
-    amount,
-    currency: "BRL",
-    date,
-    installments: 1,
-    manualFxRate: null,
-  });
+  return createCardPurchase(
+    userId,
+    cardPurchaseInput({ creditCardId, amount, date, description: "Compra" }),
+  );
 }
 
 beforeEach(() => {
@@ -51,7 +32,7 @@ describe("criação", () => {
 
     const card = await createCreditCard(
       user.id,
-      cardInput({ name: "Cartão Inter", institution: "Inter", creditLimit: 5000, closingDay: 28, dueDay: 10 }),
+      creditCardInput({ name: "Cartão Inter", institution: "Inter", creditLimit: 5000, closingDay: 28, dueDay: 10 }),
     );
 
     expect(card.name).toBe("Cartão Inter");
@@ -64,7 +45,7 @@ describe("criação", () => {
   it("aceita cartão sem limite informado", async () => {
     const user = await makeUser();
 
-    const card = await createCreditCard(user.id, cardInput());
+    const card = await createCreditCard(user.id, creditCardInput());
 
     expect(card.creditLimit).toBeNull();
   });
@@ -75,7 +56,7 @@ describe("criação", () => {
 
     const card = await createCreditCard(
       user.id,
-      cardInput({ defaultPaymentAccountId: account.id }),
+      creditCardInput({ defaultPaymentAccountId: account.id }),
     );
 
     expect(card.defaultPaymentAccountId).toBe(account.id);
@@ -87,7 +68,7 @@ describe("criação", () => {
     const foreign = await makeAccount(other.id);
 
     await expect(
-      createCreditCard(user.id, cardInput({ defaultPaymentAccountId: foreign.id })),
+      createCreditCard(user.id, creditCardInput({ defaultPaymentAccountId: foreign.id })),
     ).rejects.toThrow(NotFoundError);
     await expect(prisma.creditCard.count()).resolves.toBe(0);
   });
@@ -95,10 +76,10 @@ describe("criação", () => {
   it("recusa dias de ciclo fora de 1-31", async () => {
     const user = await makeUser();
 
-    await expect(createCreditCard(user.id, cardInput({ closingDay: 0 }))).rejects.toThrow(
+    await expect(createCreditCard(user.id, creditCardInput({ closingDay: 0 }))).rejects.toThrow(
       InvalidOperationError,
     );
-    await expect(createCreditCard(user.id, cardInput({ dueDay: 32 }))).rejects.toThrow(
+    await expect(createCreditCard(user.id, creditCardInput({ dueDay: 32 }))).rejects.toThrow(
       InvalidOperationError,
     );
   });
@@ -112,7 +93,7 @@ describe("edição", () => {
 
     const [antes] = await listCardInvoices(user.id, card.id);
 
-    await updateCreditCard(user.id, card.id, cardInput({ closingDay: 28, dueDay: 10 }));
+    await updateCreditCard(user.id, card.id, creditCardInput({ closingDay: 28, dueDay: 10 }));
 
     const [depois] = await listCardInvoices(user.id, card.id);
 
@@ -125,7 +106,7 @@ describe("edição", () => {
     const user = await makeUser();
     const card = await makeCreditCard(user.id, { currency: "BRL" });
 
-    const updated = await updateCreditCard(user.id, card.id, cardInput({ currency: "USD" }));
+    const updated = await updateCreditCard(user.id, card.id, creditCardInput({ currency: "USD" }));
 
     // Trocar a moeda reinterpretaria os valores de todas as faturas emitidas.
     expect(updated.currency).toBe("BRL");
@@ -136,7 +117,7 @@ describe("edição", () => {
     const intruder = await makeUser();
     const card = await makeCreditCard(owner.id);
 
-    await expect(updateCreditCard(intruder.id, card.id, cardInput())).rejects.toThrow(
+    await expect(updateCreditCard(intruder.id, card.id, creditCardInput())).rejects.toThrow(
       NotFoundError,
     );
   });

@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { groupByInstitution, NO_INSTITUTION } from "./grouping";
 
+/**
+ * Agrupamento de contas e cartões por instituição, para a visão multi-banco.
+ *
+ * O que estes testes protegem: o item **sem** instituição cair num balde
+ * nomeado em vez de sumir da listagem — o modo de falhar que esconde dinheiro
+ * do usuário sem erro nenhum.
+ */
+
 const account = (name: string, institution: string | null) => ({ name, institution });
 
 describe("groupByInstitution", () => {

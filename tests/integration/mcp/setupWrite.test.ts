@@ -4,9 +4,8 @@ import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import { prisma } from "@/lib/db";
 import { createDebt } from "@/lib/debts";
 import { registerTools } from "@/mcp/registry";
-import { makeAccount, makeCategory, makePerson, makeUser } from "../factories";
-import { setRates } from "../setup-fx";
-import { auditFor, ctxFor, makeAgent, readResult } from "../mcpHarness";
+import { makeAccount, makeCategory, makePerson, makeUser } from "@tests/support/factories";
+import { auditFor, ctxFor, makeAgent, readResult } from "@tests/support/mcpHarness";
 
 /**
  * Os cadastros de base sob `setup:write`, e o preview de remoção sob
@@ -23,7 +22,6 @@ vi.mock("next/cache", () => ({
 const { revalidatePath } = await import("next/cache");
 
 beforeEach(() => {
-  setRates({});
   vi.mocked(revalidatePath).mockClear();
 });
 

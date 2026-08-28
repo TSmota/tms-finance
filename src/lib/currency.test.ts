@@ -3,7 +3,15 @@ import { Currency } from "@prisma/client";
 
 import { CURRENCIES, CURRENCY_LABELS, CURRENCY_OPTIONS, formatCurrency } from "./currency";
 
-describe("lista de moedas", () => {
+/**
+ * A lista de moedas conferida contra o enum do Prisma, e a formatação em pt-BR.
+ *
+ * O que estes testes protegem: moeda nova no schema sem rótulo aqui apareceria
+ * como código cru na tela, e a formatação é o que o usuário lê como valor —
+ * separador e símbolo errados são erro visível mesmo com o número certo.
+ */
+
+describe("CURRENCIES e CURRENCY_LABELS", () => {
   /**
    * Guarda contra divergência silenciosa: se alguém acrescentar uma moeda ao
    * enum do Prisma e esquecer da lista (ou vice-versa), os `Select`s e os

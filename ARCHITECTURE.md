@@ -72,7 +72,7 @@ privado do módulo.
 | --- | --- |
 | Campo novo num formulário | [src/lib/validations.ts](src/lib/validations.ts) → `<domínio>Fields.tsx` → `data` de **cada** escrita do serviço → [src/mcp/serializers.ts](src/mcp/serializers.ts) |
 | Regra de negócio nova | `src/lib/<domínio>.ts`, e a `CHECK` na migration se ela for invariante |
-| Ferramenta MCP nova | [src/mcp/scopes.ts](src/mcp/scopes.ts) → `src/mcp/tools/<tipo>.ts` com `defineTool` → `tests/integration/mcpRegistry.test.ts` acusa o esquecimento |
+| Ferramenta MCP nova | [src/mcp/scopes.ts](src/mcp/scopes.ts) → `src/mcp/tools/<tipo>.ts` com `defineTool` → `tests/integration/mcp/registry.test.ts` acusa o esquecimento |
 | Tela nova | `page.tsx` só lê; o botão que escreve é um client component em `src/components/forms/` |
 | Remoção com cascata | [src/lib/deletionImpact.ts](src/lib/deletionImpact.ts) + o `*DeletionBlocker` do serviço; a UI usa `DeleteEntityButton` |
 | Invalidação de cache | [src/lib/revalidation.ts](src/lib/revalidation.ts), fonte única de action e MCP |
@@ -313,7 +313,7 @@ O invariante por linha `amount × exchangeRate = convertedAmount` só vale porqu
 qualquer multiplicação ([src/lib/fxService.ts](src/lib/fxService.ts)). Converter
 com a taxa cheia e só depois persistir `rate.toFixed(4)` viola a constraint. O
 teste da recusa vive em
-[tests/integration/schema.test.ts](tests/integration/schema.test.ts).
+[tests/integration/constraints.test.ts](tests/integration/constraints.test.ts).
 
 ---
 
@@ -336,7 +336,7 @@ teste da recusa vive em
 migration escrita à mão: XOR de `account_id`/`credit_card_id`, valores
 positivos, coerência de parcelas, faixa de dias do mês, `remaining <= original`,
 categoria que não é pai de si mesma, e outras. Estão **enumeradas por nome** em
-[tests/integration/schema.test.ts](tests/integration/schema.test.ts), que
+[tests/integration/constraints.test.ts](tests/integration/constraints.test.ts), que
 reprova constraint nova sem entrada na lista ou constraint removida. O Zod
 valida para dar mensagem boa; o `CHECK` impede que outro caminho escape. Enums
 em `CHECK` precisam de cast explícito: `"status" <>
@@ -527,6 +527,30 @@ Há três níveis:
 - `npm run test:a11y` em [scripts/a11y-audit.ts](scripts/a11y-audit.ts):
   axe-core em Chrome real, com dev server e banco populado.
 
+O unitário fica **ao lado do módulo**, e isso é informação, não só convenção:
+`dates.ts` com `dates.test.ts` irmão é um módulo puro; `accounts.ts` sem irmão
+fala com o banco, e seu teste é `tests/integration/accounts.test.ts` — o nome do
+arquivo de integração é o do serviço que ele exercita. As exceções, porque não
+exercitam um serviço: `constraints.test.ts` (as `CHECK` das migrations) e
+`tests/integration/mcp/**` (a casca do agente).
+
+O apoio dos testes mora em `tests/support/`, alcançável pelos dois projects pelo
+alias `@tests/*`:
+
+| Arquivo | Papel |
+| --- | --- |
+| `factories.ts` | **escreve** a linha mínima válida no banco |
+| `inputs.ts` | **monta** o payload, tipado por `@/lib/validations` |
+| `money.ts` | `expectBalance`, que afirma as duas pontas do saldo |
+| `mcpHarness.ts` | contexto e token reais para exercitar o guard |
+| `timeZones.ts` | `itAcrossTimeZones`, a aritmética de calendário em vários fusos |
+| `db-forbidden.ts` | o `@/lib/db` do project unitário, que recusa |
+
+`npm run test:coverage` mede `src/lib`, `src/mcp` e `src/actions`. É
+visibilidade, não portão — o gate segue sendo os quatro comandos. Componentes
+ficam de fora porque não há teste de UI funcional; incluí-los afundaria o número
+sem dizer nada.
+
 O a11y audita cada rota e depois abre seu formulário para auditar o conteúdo do
 modal, que antes do clique não existe no DOM.
 
@@ -564,21 +588,55 @@ script encontra combinações problemáticas nas telas.
 
 Regras:
 
+- **Todo arquivo de teste abre com um docblock** dizendo qual invariante cairia
+  se ele sumisse. É o que separa "testa `createAccount`" de "prova que o saldo
+  inicial vira saldo atual".
 - **Módulo puro → teste unitário.** Módulo que fala com o banco → teste de
-  integração. Não há mock de Prisma em nenhum lugar.
-- **Todo teste que mexe em dinheiro afirma sobre as duas pontas** e usa
-  `recomputeBalance` para provar que o denormalizado bate com a soma dos
-  lançamentos.
+  integração. Isso não depende mais de disciplina: no project `unit`,
+  `@/lib/db` aponta para [tests/support/db-forbidden.ts](tests/support/db-forbidden.ts),
+  que lança dizendo para onde mover o teste. Antes a separação vivia só no glob
+  do `include` e na ausência de `DATABASE_URL` — e essa ausência não é garantida,
+  porque `src/lib/db.ts` lê a variável no import e um shell que a tenha exportada
+  faria o teste conectar no banco de desenvolvimento, em silêncio.
+- **Sem mock de Prisma**, com uma exceção: quando a asserção é sobre **não**
+  alcançar o banco. [src/lib/session.test.ts](src/lib/session.test.ts) prova que
+  um `sub` forjado é recusado *antes* da consulta e que `passwordHash` nunca
+  entra no `select` — nenhum teste de integração prova isso, porque ambos são
+  afirmações sobre a chamada que não aconteceu.
+- **Todo teste que mexe em dinheiro afirma sobre as duas pontas**, via
+  `expectBalance` de [tests/support/money.ts](tests/support/money.ts), que
+  compara o denormalizado com o recálculo. A regra existia antes como texto e
+  era cumprida em 5 dos 20 arquivos: afirmar só o `currentBalance` passa mesmo
+  quando a escrita tocou um lado só, que é a falha que a regra existe para pegar.
 - **Todo teste que checa recusa afirma também que nada mudou.** "Rejeitou" sem
   "e não deixou lixo" não prova atomicidade.
 - **Câmbio nunca vai à rede.** [tests/setup-fx.ts](tests/setup-fx.ts) mocka
   `@/lib/fxService` globalmente. Mocka **as duas** funções (`getExchangeRate` e
   `resolveRatesToBase`), porque em ESM uma chamada interna do módulo não passa
-  pelo mock.
+  pelo mock. O reset do estado é do próprio setup, não de cada arquivo: um mock
+  global que o setup não restaura vaza entre testes, e com `fileParallelism:
+  false` a ordem é determinística — o vazamento passaria escondido até alguém
+  renomear um arquivo. O estado limpo é **sem cotação nenhuma**, e não um
+  conjunto padrão, para que cada arquivo declare as taxas de que depende e a
+  recusa por cotação ausente siga sendo sinal, não acidente.
 - **Relógio explícito.** Funções que dependem de "hoje" recebem `now` como
   parâmetro com default, e o teste passa uma data fixa. Um teste que dependa do
   relógio real quebra sozinho com o passar dos meses.
-- **Aritmética de calendário roda em vários fusos** (ver seção 3).
+- **Aritmética de calendário roda em vários fusos** (ver seção 3), via
+  `itAcrossTimeZones`. Ele restaura o fuso **por teste**, e o **remove** quando
+  `TZ` não veio do ambiente — o caso do runner do CI. Atribuir `undefined` a uma
+  variável de ambiente grava a string `"undefined"`, e o Node cai em UTC sem
+  avisar.
+
+  O corpo é **aguardado**, e o parâmetro aceita `Promise<void>` de propósito.
+  Tipá-lo como síncrono não protegeria nada: em TypeScript um `async () => {}`
+  é atribuível a `() => void`, então o corpo assíncrono passa no typecheck e a
+  Promise é descartada. O efeito medido antes da correção: quatro casos
+  reportados como **aprovados** com `expect(1).toBe(2)` dentro, a falha
+  aparecendo como unhandled rejection apontando para `processTicksAndRejections`.
+  E o `afterEach` restauraria o fuso no meio do corpo, deixando as asserções
+  pós-`await` rodarem no fuso errado — justamente o que o helper existe para
+  controlar.
 - `resetDb` faz `TRUNCATE ... RESTART IDENTITY CASCADE` em `beforeEach`, com a
   lista de tabelas lida do catálogo — tabela nova entra no reset sem editar
   nada. Transação com rollback não serviria: o código sob teste já usa
@@ -718,7 +776,7 @@ sabido que existia — então `color` e `icon` saem por lá.
 
 Ferramenta nova entra por `defineTool` ou `defineDestructiveTool`
 ([src/mcp/define.ts](src/mcp/define.ts)), nunca por `server.registerTool` direto.
-Isso mantém nome e schema únicos. [tests/integration/mcpRegistry.test.ts](tests/integration/mcpRegistry.test.ts)
+Isso mantém nome e schema únicos. [tests/integration/mcp/registry.test.ts](tests/integration/mcp/registry.test.ts)
 compara o registro real com `TOOL_SCOPES` e verifica a primeira rodada das
 ferramentas destrutivas.
 

@@ -23,9 +23,18 @@ const eslintConfig = defineConfig([
   {
     // Sem tipo explícito, trocar um `select` muda em silêncio o contrato que páginas e MCP consomem.
     files: ["src/lib/**/*.ts"],
-    ignores: ["src/lib/**/*.test.ts"],
     rules: {
       "@typescript-eslint/explicit-module-boundary-types": "error",
+    },
+  },
+  {
+    // Último bloco, e por isso vence os anteriores: os testes unitários moram
+    // dentro de `src`, então toda regra dirigida a uma pasta de `src` os pega
+    // junto. Desligar aqui, de uma vez, evita repetir um `ignores` a cada regra
+    // nova — que é o custo real de colocalizar o teste ao lado do módulo.
+    files: ["**/*.test.ts", "tests/**/*.ts"],
+    rules: {
+      "@typescript-eslint/explicit-module-boundary-types": "off",
     },
   },
 ]);

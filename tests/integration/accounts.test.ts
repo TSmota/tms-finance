@@ -16,26 +16,13 @@ import { createCardPurchase } from "@/lib/cardPurchases";
 import { listCardInvoices } from "@/lib/invoices";
 import { payInvoice } from "@/lib/invoicePayments";
 import { accountSchema } from "@/lib/validations";
-import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "../factories";
-import { setFxAvailable, setRates } from "../setup-fx";
+import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "@tests/support/factories";
+import { accountInput } from "@tests/support/inputs";
+import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 beforeEach(() => {
-  setFxAvailable(true);
   setRates({ "USD->BRL": 5.4, "EUR->BRL": 6.25, "BRL->USD": 0.1852 });
 });
-
-type AccountInput = Parameters<typeof createAccount>[1];
-
-function accountInput(overrides: Partial<AccountInput> = {}): AccountInput {
-  return {
-    name: "Conta",
-    type: "CHECKING",
-    institution: null,
-    currency: "BRL",
-    initialBalance: 0,
-    ...overrides,
-  };
-}
 
 describe("criação", () => {
   it("faz o saldo atual partir do saldo inicial", async () => {

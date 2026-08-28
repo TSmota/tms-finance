@@ -1,4 +1,6 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
+
+import { itAcrossTimeZones, setTimeZone } from "@tests/support/timeZones";
 
 import {
   addMonths,
@@ -12,6 +14,14 @@ import {
   utcDate,
   utcDateClamped,
 } from "./dates";
+
+/**
+ * Toda data do domínio é uma data de calendário ancorada em meia-noite UTC.
+ *
+ * O que estes testes protegem: o dia certo sobreviver a mês curto, virada de
+ * ano e dia que não existe no mês. A independência de fuso, que é o motivo de o
+ * módulo existir, tem seu próprio `describe` no fim do arquivo.
+ */
 
 describe("utcDate", () => {
   it("ancora o dia em meia-noite UTC", () => {
@@ -146,25 +156,19 @@ describe("competencyOf", () => {
 });
 
 describe("todayCalendarDate", () => {
-  const originalTz = process.env.TZ;
-
-  afterAll(() => {
-    process.env.TZ = originalTz;
-  });
-
   it("usa o relógio local, não UTC", () => {
     // 21/08 01:00 UTC = 20/08 22:00 em São Paulo. Para quem está lá, hoje é 20.
     const instant = new Date("2026-08-21T01:00:00.000Z");
 
-    process.env.TZ = "America/Sao_Paulo";
+    setTimeZone("America/Sao_Paulo");
     expect(todayCalendarDate(instant)).toBe("2026-08-20");
 
-    process.env.TZ = "UTC";
+    setTimeZone("UTC");
     expect(todayCalendarDate(instant)).toBe("2026-08-21");
   });
 
   it("preenche zeros à esquerda", () => {
-    process.env.TZ = "UTC";
+    setTimeZone("UTC");
 
     expect(todayCalendarDate(new Date("2026-01-05T12:00:00.000Z"))).toBe("2026-01-05");
   });
@@ -175,20 +179,14 @@ describe("todayCalendarDate", () => {
 });
 
 describe("currentCompetency", () => {
-  const originalTz = process.env.TZ;
-
-  afterAll(() => {
-    process.env.TZ = originalTz;
-  });
-
   it("usa o mês local, que pode diferir do mês UTC na virada", () => {
     // 01/09 01:00 UTC = 31/08 22:00 em São Paulo: ainda é agosto para o usuário.
     const instant = new Date("2026-09-01T01:00:00.000Z");
 
-    process.env.TZ = "America/Sao_Paulo";
+    setTimeZone("America/Sao_Paulo");
     expect(currentCompetency(instant)).toEqual({ year: 2026, month: 8 });
 
-    process.env.TZ = "UTC";
+    setTimeZone("UTC");
     expect(currentCompetency(instant)).toEqual({ year: 2026, month: 9 });
   });
 });
@@ -199,17 +197,7 @@ describe("currentCompetency", () => {
  * componentes locais falharia aqui.
  */
 describe("estabilidade entre fusos", () => {
-  const originalTz = process.env.TZ;
-
-  afterAll(() => {
-    process.env.TZ = originalTz;
-  });
-
-  const fusos = ["UTC", "America/Sao_Paulo", "Asia/Tokyo", "Pacific/Kiritimati"];
-
-  it.each(fusos)("produz o mesmo instante com TZ=%s", (tz) => {
-    process.env.TZ = tz;
-
+  itAcrossTimeZones("produz o mesmo instante", () => {
     expect(utcDate(2026, 8, 20).toISOString()).toBe("2026-08-20T00:00:00.000Z");
     expect(utcDateClamped(2026, 2, 31).toISOString()).toBe("2026-02-28T00:00:00.000Z");
     expect(parseCalendarDate("2026-08-20").toISOString()).toBe("2026-08-20T00:00:00.000Z");
@@ -220,10 +208,10 @@ describe("estabilidade entre fusos", () => {
   });
 
   it("comprova que a construção local NÃO é estável (o bug que isto evita)", () => {
-    process.env.TZ = "UTC";
+    setTimeZone("UTC");
     const emUtc = new Date(2026, 7, 20).toISOString();
 
-    process.env.TZ = "Asia/Tokyo";
+    setTimeZone("Asia/Tokyo");
     const emTokyo = new Date(2026, 7, 20).toISOString();
 
     expect(emUtc).not.toBe(emTokyo);

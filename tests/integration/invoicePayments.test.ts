@@ -6,8 +6,9 @@ import { recomputeBalance } from "@/lib/accountBalance";
 import { createCardPurchase } from "@/lib/cardPurchases";
 import { listCardInvoices, recalcInvoiceTotal } from "@/lib/invoices";
 import { payInvoice, undoInvoicePayment } from "@/lib/invoicePayments";
-import { makeAccount, makeCreditCard, makeUser } from "../factories";
-import { setFxAvailable, setRates } from "../setup-fx";
+import { makeAccount, makeCreditCard, makeUser } from "@tests/support/factories";
+import { balanceOf, expectBalance } from "@tests/support/money";
+import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 /**
  * Pagamento de fatura.
@@ -16,15 +17,6 @@ import { setFxAvailable, setRates } from "../setup-fx";
  * bancária. O que estes testes protegem: debitar o valor exato, uma única vez,
  * e não permitir pagamento duplicado.
  */
-
-async function balanceOf(accountId: string): Promise<string> {
-  const account = await prisma.financialAccount.findUniqueOrThrow({
-    where: { id: accountId },
-    select: { currentBalance: true },
-  });
-
-  return account.currentBalance.toFixed(2);
-}
 
 /** Cria cartão com uma fatura aberta de `amount` e devolve tudo o que importa. */
 async function scenario(options: { amount?: number; cardCurrency?: "BRL" | "USD" } = {}) {
@@ -55,7 +47,6 @@ async function scenario(options: { amount?: number; cardCurrency?: "BRL" | "USD"
 const payment = { date: "2026-09-05", manualFxRate: null };
 
 beforeEach(() => {
-  setFxAvailable(true);
   setRates({ "USD->BRL": 5.4, "BRL->USD": 0.1852 });
 });
 
@@ -70,7 +61,7 @@ describe("pagamento", () => {
 
     expect(created.type).toBe("INVOICE_PAYMENT");
     expect(created.convertedAmount.toFixed(2)).toBe("250.00");
-    expect(await balanceOf(account.id)).toBe("750.00");
+    await expectBalance(account.id, "750.00");
 
     const after = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
     expect(after.status).toBe("PAID");
@@ -121,7 +112,7 @@ describe("pagamento", () => {
 
     await payInvoice(user.id, invoice.id, { accountId: outra.id, ...payment });
 
-    expect(await balanceOf(outra.id)).toBe("400.00");
+    await expectBalance(outra.id, "400.00");
   });
 
   it("converte quando a fatura e a conta estão em moedas diferentes", async () => {
@@ -156,7 +147,7 @@ describe("pagamento", () => {
     expect(created.currency).toBe("USD");
     expect(created.exchangeRate.toFixed(4)).toBe("5.4000");
     expect(created.convertedAmount.toFixed(2)).toBe("540.00");
-    expect(await balanceOf(account.id)).toBe("460.00");
+    await expectBalance(account.id, "460.00");
   });
 
   it("paga fatura com múltiplas parcelas de compras diferentes", async () => {
@@ -175,7 +166,7 @@ describe("pagamento", () => {
 
     await payInvoice(user.id, invoice.id, { accountId: account.id, ...payment });
 
-    expect(await balanceOf(account.id)).toBe("849.50");
+    await expectBalance(account.id, "849.50");
   });
 });
 
@@ -205,7 +196,7 @@ describe("proteções", () => {
       payInvoice(user.id, invoice.id, { accountId: account.id, ...payment }),
     ).rejects.toThrow(InvalidOperationError);
 
-    expect(await balanceOf(account.id)).toBe("750.00");
+    await expectBalance(account.id, "750.00");
     await expect(
       prisma.transaction.count({ where: { type: "INVOICE_PAYMENT" } }),
     ).resolves.toBe(1);
@@ -222,11 +213,11 @@ describe("proteções", () => {
     ]);
 
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-    expect(await balanceOf(account.id)).toBe("750.00");
+    await expectBalance(account.id, "750.00");
     await expect(
       prisma.transaction.count({ where: { type: "INVOICE_PAYMENT" } }),
     ).resolves.toBe(1);
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("750.00");
+    await expectBalance(account.id, "750.00");
   });
 
   it("recusa fatura sem valor a pagar", async () => {
@@ -249,7 +240,7 @@ describe("proteções", () => {
     await expect(
       payInvoice(user.id, invoice.id, { accountId: account.id, ...payment }),
     ).rejects.toThrow(/Não há valor a pagar/);
-    expect(await balanceOf(account.id)).toBe("1000.00");
+    await expectBalance(account.id, "1000.00");
   });
 
   it("recusa conta de outro usuário", async () => {
@@ -260,7 +251,7 @@ describe("proteções", () => {
     await expect(
       payInvoice(user.id, invoice.id, { accountId: foreign.id, ...payment }),
     ).rejects.toThrow(NotFoundError);
-    expect(await balanceOf(foreign.id)).toBe("1000.00");
+    await expectBalance(foreign.id, "1000.00");
   });
 
   it("recusa fatura de outro usuário", async () => {
@@ -295,7 +286,7 @@ describe("proteções", () => {
       payInvoice(user.id, invoice!.id, { accountId: account.id, ...payment }),
     ).rejects.toThrow();
 
-    expect(await balanceOf(account.id)).toBe("1000.00");
+    await expectBalance(account.id, "1000.00");
     const after = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice!.id } });
     expect(after.status).toBe("OPEN");
   });
@@ -306,11 +297,11 @@ describe("desfazer pagamento", () => {
     const { user, account, invoice } = await scenario({ amount: 250 });
 
     await payInvoice(user.id, invoice.id, { accountId: account.id, ...payment });
-    expect(await balanceOf(account.id)).toBe("750.00");
+    await expectBalance(account.id, "750.00");
 
     await undoInvoicePayment(user.id, invoice.id);
 
-    expect(await balanceOf(account.id)).toBe("1000.00");
+    await expectBalance(account.id, "1000.00");
     const after = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
     expect(after.status).toBe("OPEN");
     expect(after.paidAt).toBeNull();
@@ -332,8 +323,7 @@ describe("desfazer pagamento", () => {
     ]);
 
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-    expect(await balanceOf(account.id)).toBe("1000.00");
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("1000.00");
+    await expectBalance(account.id, "1000.00");
   });
 
   it("permite pagar de novo, por outra conta", async () => {
@@ -344,8 +334,8 @@ describe("desfazer pagamento", () => {
     await undoInvoicePayment(user.id, invoice.id);
     await payInvoice(user.id, invoice.id, { accountId: outra.id, ...payment });
 
-    expect(await balanceOf(account.id)).toBe("1000.00");
-    expect(await balanceOf(outra.id)).toBe("550.00");
+    await expectBalance(account.id, "1000.00");
+    await expectBalance(outra.id, "550.00");
   });
 
   it("recusa desfazer fatura que não está paga", async () => {
@@ -363,6 +353,6 @@ describe("desfazer pagamento", () => {
     await payInvoice(user.id, invoice.id, { accountId: account.id, ...payment });
 
     await expect(undoInvoicePayment(intruder.id, invoice.id)).rejects.toThrow(NotFoundError);
-    expect(await balanceOf(account.id)).toBe("750.00");
+    await expectBalance(account.id, "750.00");
   });
 });

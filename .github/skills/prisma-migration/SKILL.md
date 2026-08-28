@@ -10,7 +10,7 @@ disable-model-invocation: false
 
 ## Preparação
 
-Leia `prisma/schema.prisma`, `ARCHITECTURE.md` — Modelo de dados e migrations, as migrations relacionadas e `tests/integration/schema.test.ts`. As convenções de coluna, tipo, índice e `CHECK` estão naquela seção e não são repetidas aqui.
+Leia `prisma/schema.prisma`, `ARCHITECTURE.md` — Modelo de dados e migrations, as migrations relacionadas e `tests/integration/constraints.test.ts`. As convenções de coluna, tipo, índice e `CHECK` estão naquela seção e não são repetidas aqui.
 
 ## Procedimento
 
@@ -25,7 +25,7 @@ Leia `prisma/schema.prisma`, `ARCHITECTURE.md` — Modelo de dados e migrations,
 6. Aplique com `npx prisma migrate deploy`.
 7. Sempre execute `npx prisma generate` após mudar o schema.
 8. Atualize ou crie testes de schema e testes do serviço afetado.
-9. Execute primeiro `npm run test:integration -- tests/integration/schema.test.ts` e depois os testes de integração do domínio.
+9. Execute primeiro `npm run test:integration -- tests/integration/constraints.test.ts` e depois os testes de integração do domínio.
 
 ## Segurança
 

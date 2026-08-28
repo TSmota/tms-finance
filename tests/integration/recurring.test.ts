@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/db";
 import { InvalidOperationError, NotFoundError } from "@/lib/errors";
-import { recomputeBalance } from "@/lib/accountBalance";
 import { listCardInvoices, listInvoiceItems } from "@/lib/invoices";
 import { createCardPurchase, updateCardPurchase } from "@/lib/cardPurchases";
 import { payInvoice, undoInvoicePayment } from "@/lib/invoicePayments";
@@ -17,9 +16,10 @@ import {
   updateRecurringExpense,
 } from "@/lib/recurring";
 import { getBalanceProjection } from "@/lib/projection";
-import type { RecurringExpenseInput } from "@/lib/validations";
-import { makeAccount, makeCategory, makeCreditCard, makeUser } from "../factories";
-import { setFxAvailable, setRates } from "../setup-fx";
+import { makeAccount, makeCategory, makeCreditCard, makeUser } from "@tests/support/factories";
+import { recurringExpenseInput } from "@tests/support/inputs";
+import { expectBalance } from "@tests/support/money";
+import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 /**
  * Gastos recorrentes, materialização lazy e projeção.
@@ -35,24 +35,6 @@ import { setFxAvailable, setRates } from "../setup-fx";
  */
 
 const NOW = new Date(Date.UTC(2026, 7, 21));
-
-function definition(
-  overrides: Partial<RecurringExpenseInput> & { categoryId: string },
-): RecurringExpenseInput {
-  return {
-    description: "Assinatura de teste",
-    amount: 39.9,
-    currency: "BRL",
-    frequency: "MONTHLY",
-    dueDay: 10,
-    isEstimated: false,
-    startDate: "2026-08-01",
-    endDate: null,
-    accountId: null,
-    creditCardId: null,
-    ...overrides,
-  };
-}
 
 /** Lançamentos gerados por uma recorrência, em ordem cronológica. */
 async function generated(recurringExpenseId: string) {
@@ -71,7 +53,6 @@ async function generated(recurringExpenseId: string) {
 }
 
 beforeEach(() => {
-  setFxAvailable(true);
   setRates({ "USD->BRL": 5.4, "BRL->USD": 0.1852 });
 });
 
@@ -83,7 +64,7 @@ describe("materialização em conta bancária", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, accountId: account.id, amount: 180 }),
+      recurringExpenseInput({ categoryId: category.id, accountId: account.id, amount: 180 }),
     );
 
     const result = await materializeRecurring(user.id, 2026, 8, NOW);
@@ -99,7 +80,7 @@ describe("materialização em conta bancária", () => {
 
     expect(stored.currentBalance.toFixed(2)).toBe("1000.00");
     // Uma pendência também não entra no recálculo, que só soma confirmados.
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("1000.00");
+    await expectBalance(account.id, "1000.00");
   });
 
   it("materializar duas vezes não duplica nada", async () => {
@@ -109,7 +90,7 @@ describe("materialização em conta bancária", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, accountId: account.id }),
+      recurringExpenseInput({ categoryId: category.id, accountId: account.id }),
     );
 
     expect((await materializeRecurring(user.id, 2026, 8, NOW)).created).toBe(1);
@@ -126,7 +107,7 @@ describe("materialização em conta bancária", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({
+      recurringExpenseInput({
         categoryId: category.id,
         accountId: account.id,
         startDate: "2026-06-01",
@@ -150,7 +131,7 @@ describe("materialização em conta bancária", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, accountId: account.id }),
+      recurringExpenseInput({ categoryId: category.id, accountId: account.id }),
     );
 
     await materializeRecurring(user.id, 2026, 8, NOW);
@@ -171,7 +152,7 @@ describe("materialização em conta bancária", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({
+      recurringExpenseInput({
         categoryId: category.id,
         accountId: account.id,
         amount: 15,
@@ -197,7 +178,7 @@ describe("materialização em conta bancária", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, accountId: account.id }),
+      recurringExpenseInput({ categoryId: category.id, accountId: account.id }),
     );
 
     await materializeRecurring(user.id, 2026, 8, NOW);
@@ -214,7 +195,7 @@ describe("materialização em conta bancária", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({
+      recurringExpenseInput({
         categoryId: category.id,
         accountId: account.id,
         startDate: "2026-06-01",
@@ -238,7 +219,7 @@ describe("materialização em conta bancária", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, accountId: account.id }),
+      recurringExpenseInput({ categoryId: category.id, accountId: account.id }),
     );
 
     // 2099 está muito além do limite; a janela é cortada em agosto de 2027.
@@ -258,7 +239,7 @@ describe("materialização em conta bancária", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({
+      recurringExpenseInput({
         categoryId: category.id,
         accountId: account.id,
         currency: "USD",
@@ -290,7 +271,7 @@ describe("materialização no cartão de crédito", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({
+      recurringExpenseInput({
         categoryId: category.id,
         creditCardId: card.id,
         amount: 39.9,
@@ -313,7 +294,7 @@ describe("materialização no cartão de crédito", () => {
     ).toEqual(["2026-8: 39.90", "2026-7: 39.90"]);
 
     // Cobrança no cartão não move o saldo da conta.
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("500.00");
+    await expectBalance(account.id, "500.00");
   });
 
   it("vencimento depois do fechamento entra na fatura seguinte", async () => {
@@ -323,7 +304,7 @@ describe("materialização no cartão de crédito", () => {
 
     await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, creditCardId: card.id, dueDay: 25 }),
+      recurringExpenseInput({ categoryId: category.id, creditCardId: card.id, dueDay: 25 }),
     );
 
     await materializeRecurring(user.id, 2026, 8, NOW);
@@ -344,7 +325,7 @@ describe("materialização no cartão de crédito", () => {
 
     await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, creditCardId: card.id }),
+      recurringExpenseInput({ categoryId: category.id, creditCardId: card.id }),
     );
 
     await materializeRecurring(user.id, 2026, 8, NOW);
@@ -387,7 +368,7 @@ describe("materialização no cartão de crédito", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, creditCardId: card.id, startDate: "2026-08-01" }),
+      recurringExpenseInput({ categoryId: category.id, creditCardId: card.id, startDate: "2026-08-01" }),
     );
 
     const result = await materializeRecurring(user.id, 2026, 8, NOW);
@@ -429,7 +410,7 @@ describe("materialização no cartão de crédito", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, creditCardId: card.id, startDate: "2026-08-01" }),
+      recurringExpenseInput({ categoryId: category.id, creditCardId: card.id, startDate: "2026-08-01" }),
     );
 
     await materializeRecurring(user.id, 2026, 8, NOW);
@@ -458,7 +439,7 @@ describe("confirmação da pendência", () => {
 
     await createRecurringExpense(
       user.id,
-      definition({
+      recurringExpenseInput({
         categoryId: category.id,
         accountId: account.id,
         amount: 180,
@@ -496,7 +477,7 @@ describe("confirmação da pendência", () => {
     const stored = await prisma.financialAccount.findUniqueOrThrow({ where: { id: account.id } });
 
     expect(stored.currentBalance.toFixed(2)).toBe("796.53");
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("796.53");
+    await expectBalance(account.id, "796.53");
   });
 
   it("sai da lista de pendências depois de confirmada", async () => {
@@ -543,7 +524,7 @@ describe("confirmação da pendência", () => {
     const stored = await prisma.financialAccount.findUniqueOrThrow({ where: { id: account.id } });
 
     expect(stored.currentBalance.toFixed(2)).toBe("820.00");
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("820.00");
+    await expectBalance(account.id, "820.00");
   });
 
   it("pendência de outro usuário é inacessível", async () => {
@@ -570,12 +551,12 @@ describe("projeção de saldo", () => {
     // Pendência em conta: 180 a sair.
     await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, accountId: account.id, amount: 180 }),
+      recurringExpenseInput({ categoryId: category.id, accountId: account.id, amount: 180 }),
     );
     // Cobrança no cartão: 39,90 na fatura de agosto, que vence em setembro.
     await createRecurringExpense(
       user.id,
-      definition({
+      recurringExpenseInput({
         categoryId: category.id,
         creditCardId: card.id,
         amount: 39.9,
@@ -636,7 +617,7 @@ describe("projeção de saldo", () => {
 
     await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, accountId: brl.id, amount: 180 }),
+      recurringExpenseInput({ categoryId: category.id, accountId: brl.id, amount: 180 }),
     );
     await materializeRecurring(user.id, 2026, 8, NOW);
 
@@ -672,7 +653,7 @@ describe("projeção de saldo", () => {
 
     await createRecurringExpense(
       other.id,
-      definition({ categoryId: category.id, accountId: account.id }),
+      recurringExpenseInput({ categoryId: category.id, accountId: account.id }),
     );
     await materializeRecurring(other.id, 2026, 8, NOW);
 
@@ -696,13 +677,13 @@ describe("definições", () => {
     const category = await makeCategory(user.id);
 
     await expect(
-      createRecurringExpense(user.id, definition({ categoryId: category.id })),
+      createRecurringExpense(user.id, recurringExpenseInput({ categoryId: category.id })),
     ).rejects.toThrow(InvalidOperationError);
 
     await expect(
       createRecurringExpense(
         user.id,
-        definition({ categoryId: category.id, accountId: account.id, creditCardId: card.id }),
+        recurringExpenseInput({ categoryId: category.id, accountId: account.id, creditCardId: card.id }),
       ),
     ).rejects.toThrow(InvalidOperationError);
   });
@@ -718,14 +699,14 @@ describe("definições", () => {
     await expect(
       createRecurringExpense(
         user.id,
-        definition({ categoryId: category.id, accountId: foreignAccount.id }),
+        recurringExpenseInput({ categoryId: category.id, accountId: foreignAccount.id }),
       ),
     ).rejects.toThrow(NotFoundError);
 
     await expect(
       createRecurringExpense(
         user.id,
-        definition({ categoryId: foreignCategory.id, accountId: account.id }),
+        recurringExpenseInput({ categoryId: foreignCategory.id, accountId: account.id }),
       ),
     ).rejects.toThrow(NotFoundError);
   });
@@ -738,7 +719,7 @@ describe("definições", () => {
     await expect(
       createRecurringExpense(
         user.id,
-        definition({
+        recurringExpenseInput({
           categoryId: category.id,
           accountId: account.id,
           startDate: "2026-08-01",
@@ -755,7 +736,7 @@ describe("definições", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, accountId: account.id, amount: 100 }),
+      recurringExpenseInput({ categoryId: category.id, accountId: account.id, amount: 100 }),
     );
 
     await materializeRecurring(user.id, 2026, 8, NOW);
@@ -763,7 +744,7 @@ describe("definições", () => {
     await updateRecurringExpense(
       user.id,
       recurring.id,
-      definition({ categoryId: category.id, accountId: account.id, amount: 250 }),
+      recurringExpenseInput({ categoryId: category.id, accountId: account.id, amount: 250 }),
     );
 
     // Agosto fica com o valor projetado na época; setembro já nasce com o novo.
@@ -782,7 +763,7 @@ describe("definições", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({
+      recurringExpenseInput({
         categoryId: category.id,
         accountId: account.id,
         startDate: "2026-07-01",
@@ -811,7 +792,7 @@ describe("definições", () => {
     expect(remaining[0]!.status).toBe("CONFIRMED");
     // Sem vínculo com a recorrência apagada, mas o saldo continua batendo.
     expect(remaining[0]!.recurringExpenseId).toBeNull();
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("900.00");
+    await expectBalance(account.id, "900.00");
   });
 
   it("apagar remove o item de uma fatura em aberto, que some por ficar vazia", async () => {
@@ -821,7 +802,7 @@ describe("definições", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, creditCardId: card.id }),
+      recurringExpenseInput({ categoryId: category.id, creditCardId: card.id }),
     );
 
     await materializeRecurring(user.id, 2026, 8, NOW);
@@ -837,11 +818,11 @@ describe("definições", () => {
 
     const zeta = await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, accountId: account.id, description: "Zeta" }),
+      recurringExpenseInput({ categoryId: category.id, accountId: account.id, description: "Zeta" }),
     );
     await createRecurringExpense(
       user.id,
-      definition({ categoryId: category.id, accountId: account.id, description: "Água" }),
+      recurringExpenseInput({ categoryId: category.id, accountId: account.id, description: "Água" }),
     );
 
     await setRecurringActive(user.id, zeta.id, false);
@@ -862,7 +843,7 @@ describe("definições", () => {
 
     const recurring = await createRecurringExpense(
       other.id,
-      definition({ categoryId: category.id, accountId: account.id }),
+      recurringExpenseInput({ categoryId: category.id, accountId: account.id }),
     );
 
     await expect(deleteRecurringExpense(user.id, recurring.id)).rejects.toThrow(NotFoundError);
@@ -879,7 +860,7 @@ describe("ajuste do valor real de uma cobrança no cartão", () => {
 
     const recurring = await createRecurringExpense(
       user.id,
-      definition({
+      recurringExpenseInput({
         categoryId: category.id,
         creditCardId: card.id,
         amount: 39.9,

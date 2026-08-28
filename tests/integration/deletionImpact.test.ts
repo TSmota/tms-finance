@@ -12,8 +12,8 @@ import { payInvoice } from "@/lib/invoicePayments";
 import { createTransaction } from "@/lib/transactions";
 import { createRecurringExpense } from "@/lib/recurring";
 import { describeDeletionImpact, type DeletionImpact } from "@/lib/deletionImpact";
-import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "../factories";
-import { setRates } from "../setup-fx";
+import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "@tests/support/factories";
+import { setRates } from "@tests/setup-fx";
 
 /**
  * O preview de impacto tem de bater **exatamente** com o que a remoção apaga.

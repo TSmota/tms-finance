@@ -1,4 +1,6 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
+
+import { itAcrossTimeZones } from "@tests/support/timeZones";
 
 import { parseCalendarDate, toCalendarDate } from "./dates";
 import { InvalidOperationError } from "./errors";
@@ -174,15 +176,7 @@ describe("competências consecutivas para parcelas", () => {
 
 /** Mesma exigência de `@/lib/dates`: o resultado não pode depender do fuso. */
 describe("estabilidade entre fusos", () => {
-  const originalTz = process.env.TZ;
-
-  afterAll(() => {
-    process.env.TZ = originalTz;
-  });
-
-  it.each(["UTC", "America/Sao_Paulo", "Asia/Tokyo"])("é idêntico com TZ=%s", (tz) => {
-    process.env.TZ = tz;
-
+  itAcrossTimeZones("é idêntico", () => {
     expect(competency(20, "2026-08-20")).toEqual({ year: 2026, month: 8 });
     expect(competency(20, "2026-08-21")).toEqual({ year: 2026, month: 9 });
 

@@ -5,9 +5,8 @@ import { checkAgentRateLimit } from "@/lib/agentRateLimit";
 import { listCategoryTree } from "@/lib/categories";
 import { noArgs } from "@/mcp/args";
 import { runTool } from "@/mcp/guard";
-import { makeUser } from "../factories";
-import { auditFor, ctxFor, makeAgent } from "../mcpHarness";
-import { readResult } from "../mcpHarness";
+import { makeUser } from "@tests/support/factories";
+import { auditFor, ctxFor, makeAgent, readResult } from "@tests/support/mcpHarness";
 
 /**
  * Cota por token, contada em SQL sobre `rate_limit_hits`.

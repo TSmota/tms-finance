@@ -50,6 +50,11 @@ Comentários e UI em pt-BR; identificadores e mensagens de commit em inglês.
   só lê. Campo novo entra no `data` de **cada** escrita do serviço.
 - **MCP:** confira [src/mcp/scopes.ts](src/mcp/scopes.ts) antes de criar uma
   ferramenta; ali ficam o inventário e os escopos.
+- **Testes:** unitário ao lado do módulo (`src/**/*.test.ts`), integração em
+  `tests/integration/` com o nome do serviço que exercita. Apoio em
+  `tests/support/`, importado por `@tests/*`: fábrica escreve no banco, builder
+  monta payload, `expectBalance` afirma as duas pontas do saldo. Não monte
+  payload à mão nem afirme saldo lendo só `currentBalance`.
 - **Procedimento por tarefa:** siga a skill correspondente em
   [.github/skills/](.github/skills/); ela aponta para as regras, não as duplica.
 
