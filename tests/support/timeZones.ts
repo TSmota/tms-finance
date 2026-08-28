@@ -32,15 +32,9 @@ afterEach(() => {
 });
 
 /**
- * Roda o mesmo corpo em cada fuso, um caso de teste por fuso.
- *
- * O corpo é **aguardado**, e o tipo aceita `Promise<void>` de propósito: em
- * TypeScript um `async () => {}` é atribuível a `() => void`, então tipar o
- * parâmetro como síncrono não impede ninguém de passar um corpo assíncrono —
- * só faz a Promise ser descartada. O teste então é reportado como aprovado com
- * a asserção falhando por baixo, e o fuso é restaurado pelo `afterEach` no meio
- * da execução do corpo, o que faria as asserções pós-`await` rodarem no fuso
- * errado.
+ * Roda o mesmo corpo em cada fuso, um caso de teste por fuso. O corpo é
+ * aguardado, e o tipo aceita `Promise<void>` de propósito — o motivo está no
+ * ARCHITECTURE.md, seção Testes.
  */
 export function itAcrossTimeZones(
   name: string,

@@ -627,6 +627,16 @@ Regras:
   `TZ` não veio do ambiente — o caso do runner do CI. Atribuir `undefined` a uma
   variável de ambiente grava a string `"undefined"`, e o Node cai em UTC sem
   avisar.
+
+  O corpo é **aguardado**, e o parâmetro aceita `Promise<void>` de propósito.
+  Tipá-lo como síncrono não protegeria nada: em TypeScript um `async () => {}`
+  é atribuível a `() => void`, então o corpo assíncrono passa no typecheck e a
+  Promise é descartada. O efeito medido antes da correção: quatro casos
+  reportados como **aprovados** com `expect(1).toBe(2)` dentro, a falha
+  aparecendo como unhandled rejection apontando para `processTicksAndRejections`.
+  E o `afterEach` restauraria o fuso no meio do corpo, deixando as asserções
+  pós-`await` rodarem no fuso errado — justamente o que o helper existe para
+  controlar.
 - `resetDb` faz `TRUNCATE ... RESTART IDENTITY CASCADE` em `beforeEach`, com a
   lista de tabelas lida do catálogo — tabela nova entra no reset sem editar
   nada. Transação com rollback não serviria: o código sob teste já usa
