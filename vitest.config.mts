@@ -14,6 +14,25 @@ const dbForbidden = fileURLToPath(new URL("./tests/support/db-forbidden.ts", imp
 
 export default defineConfig({
   test: {
+    /**
+     * Visibilidade, não portão: o gate canônico segue sendo typecheck, lint,
+     * test e build.
+     *
+     * O `include` é o que faz o relatório valer: no Vitest 4 ele já relata todo
+     * arquivo que casa com o padrão, tenha ou não sido carregado por um teste —
+     * é assim que o módulo que ninguém exercita aparece como 0% em vez de
+     * simplesmente não aparecer.
+     *
+     * O escopo são as três camadas de regra. Componentes ficam de fora por
+     * decisão registrada na seção Testes: não há teste de UI funcional, e
+     * incluí-los só afundaria o número sem dizer nada.
+     */
+    coverage: {
+      provider: "v8",
+      include: ["src/lib/**/*.ts", "src/mcp/**/*.ts", "src/actions/**/*.ts"],
+      exclude: ["**/*.test.ts"],
+      reporter: ["text", "html"],
+    },
     projects: [
       {
         resolve: {
