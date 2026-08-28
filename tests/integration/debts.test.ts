@@ -629,7 +629,11 @@ describe("remoção", () => {
       }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 30 }));
+    await settleDebt(
+      user.id,
+      debt.id,
+      debtSettlementInput({ accountId: account.id, amount: 30 }),
+    );
 
     await deleteDebt(user.id, debt.id);
 
@@ -798,7 +802,11 @@ describe("edição da dívida", () => {
       debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 80 }));
+    await settleDebt(
+      user.id,
+      debt.id,
+      debtSettlementInput({ accountId: account.id, amount: 80 }),
+    );
 
     await updateDebt(
       user.id,
@@ -1378,7 +1386,11 @@ describe("histórico e isolamento", () => {
       }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 30 }));
+    await settleDebt(
+      user.id,
+      debt.id,
+      debtSettlementInput({ accountId: account.id, amount: 30 }),
+    );
 
     const { debt: summary, movements } = await getDebtDetail(user.id, debt.id);
 
