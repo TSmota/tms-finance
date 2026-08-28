@@ -101,7 +101,19 @@ async function accountImpact(userId: string, id: string): Promise<DeletionImpact
       prisma.invoice.count({ where: { userId, paymentAccountId: id } }),
       prisma.creditCard.count({ where: { userId, defaultPaymentAccountId: id } }),
       prisma.debt.count({
-        where: { userId, settlements: { some: { accountId: id } } },
+        where: {
+          userId,
+          OR: [
+            {
+              type: "LENT",
+              settlements: { some: { accountId: id, type: "EXPENSE" } },
+            },
+            {
+              type: "BORROWED",
+              settlements: { some: { accountId: id, type: "INCOME" } },
+            },
+          ],
+        },
       }),
       prisma.transaction.findFirst({
         where: { userId, accountId: id },
@@ -169,7 +181,11 @@ async function creditCardImpact(userId: string, id: string): Promise<DeletionImp
       prisma.transaction.count({ where: { userId, creditCardId: id } }),
       prisma.recurringExpense.count({ where: { userId, creditCardId: id } }),
       prisma.debt.count({
-        where: { userId, settlements: { some: { creditCardId: id } } },
+        where: {
+          userId,
+          type: "LENT",
+          settlements: { some: { creditCardId: id, type: "EXPENSE" } },
+        },
       }),
       prisma.transaction.findFirst({
         where: { userId, creditCardId: id },

@@ -7,7 +7,7 @@ import { Plus } from "lucide-react";
 
 import type { CurrencyCode } from "@/lib/currency";
 import { todayCalendarDate } from "@/lib/dates";
-import { splitTarget, TARGET_ACCOUNT_PREFIX } from "@/lib/paymentTarget";
+import { joinTarget, splitTarget } from "@/lib/paymentTarget";
 import { createDebt } from "@/actions/debts";
 import { FormModal } from "@/components/ui/FormModal";
 import { useActionModal } from "@/components/ui/useActionModal";
@@ -45,6 +45,8 @@ export function AddDebtButton(props: AddDebtButtonProps) {
     successMessage: "Dívida registrada",
   });
   const [showManualFx, setShowManualFx] = useState(false);
+  const initialAccount = accounts[0];
+  const initialCard = initialAccount ? undefined : cards[0];
 
   const initialValues: DebtFormValues = {
     personId: defaultPersonId ?? people[0]?.value ?? "",
@@ -52,8 +54,8 @@ export function AddDebtButton(props: AddDebtButtonProps) {
     type: "LENT",
     description: "",
     amount: 0,
-    currency: accounts[0]?.currency ?? baseCurrency,
-    target: accounts[0] ? `${TARGET_ACCOUNT_PREFIX}${accounts[0].value}` : "",
+    currency: initialAccount?.currency ?? initialCard?.currency ?? baseCurrency,
+    target: joinTarget(initialAccount?.value ?? null, initialCard?.value ?? null),
     installments: 1,
     date: todayCalendarDate(),
     dueDate: null,

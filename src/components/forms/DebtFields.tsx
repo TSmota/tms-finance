@@ -8,7 +8,7 @@ import { TriangleAlert } from "lucide-react";
 
 import { debtSchema } from "@/lib/validations";
 import { CURRENCY_LABELS, CURRENCY_OPTIONS, formatCurrency, type CurrencyCode } from "@/lib/currency";
-import { DEBT_TYPE_LABELS, DEBT_TYPE_OPTIONS, type DebtTypeCode } from "@/lib/debtTypes";
+import { availableDebtTypeOptions, DEBT_TYPE_LABELS, type DebtTypeCode } from "@/lib/debtTypes";
 import { describeSplit } from "@/lib/installmentSplit";
 import { MAX_INSTALLMENTS } from "@/lib/limits";
 import {
@@ -137,7 +137,7 @@ export function DebtFields(props: DebtFieldsProps) {
         <Select
           label="Tipo"
           description="Define para que lado o dinheiro se move"
-          data={DEBT_TYPE_OPTIONS}
+          data={availableDebtTypeOptions(accounts.length > 0)}
           allowDeselect={false}
           key={form.key("type")}
           {...form.getInputProps("type")}
