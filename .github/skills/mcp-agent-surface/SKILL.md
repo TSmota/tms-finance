@@ -20,7 +20,7 @@ Leia `ARCHITECTURE.md` — Superfície de agente antes de editar `src/mcp/`, `sr
    composição dessas peças, e o que sobra de código próprio é a regra que só ela
    tem. Copiou de uma vizinha? O trecho copiado vira peça compartilhada.
 2. Registre por `defineTool` ou `defineDestructiveTool` de `src/mcp/define.ts`, nunca por `server.registerTool` direto — o nome é escrito uma vez só.
-3. Toda ferramenta nova entra no mapa de escopos de `src/mcp/scopes.ts`; `tests/integration/mcpRegistry.test.ts` acusa o esquecimento.
+3. Toda ferramenta nova entra no mapa de escopos de `src/mcp/scopes.ts`; `tests/integration/mcp/registry.test.ts` acusa o esquecimento.
 4. Nunca registre, exiba ou persista bearer token ou pepper.
 5. Adicione teste para sucesso, escopo insuficiente, ausência de efeito após recusa e auditoria aplicável.
 

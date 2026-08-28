@@ -72,7 +72,7 @@ privado do módulo.
 | --- | --- |
 | Campo novo num formulário | [src/lib/validations.ts](src/lib/validations.ts) → `<domínio>Fields.tsx` → `data` de **cada** escrita do serviço → [src/mcp/serializers.ts](src/mcp/serializers.ts) |
 | Regra de negócio nova | `src/lib/<domínio>.ts`, e a `CHECK` na migration se ela for invariante |
-| Ferramenta MCP nova | [src/mcp/scopes.ts](src/mcp/scopes.ts) → `src/mcp/tools/<tipo>.ts` com `defineTool` → `tests/integration/mcpRegistry.test.ts` acusa o esquecimento |
+| Ferramenta MCP nova | [src/mcp/scopes.ts](src/mcp/scopes.ts) → `src/mcp/tools/<tipo>.ts` com `defineTool` → `tests/integration/mcp/registry.test.ts` acusa o esquecimento |
 | Tela nova | `page.tsx` só lê; o botão que escreve é um client component em `src/components/forms/` |
 | Remoção com cascata | [src/lib/deletionImpact.ts](src/lib/deletionImpact.ts) + o `*DeletionBlocker` do serviço; a UI usa `DeleteEntityButton` |
 | Invalidação de cache | [src/lib/revalidation.ts](src/lib/revalidation.ts), fonte única de action e MCP |
@@ -313,7 +313,7 @@ O invariante por linha `amount × exchangeRate = convertedAmount` só vale porqu
 qualquer multiplicação ([src/lib/fxService.ts](src/lib/fxService.ts)). Converter
 com a taxa cheia e só depois persistir `rate.toFixed(4)` viola a constraint. O
 teste da recusa vive em
-[tests/integration/schema.test.ts](tests/integration/schema.test.ts).
+[tests/integration/constraints.test.ts](tests/integration/constraints.test.ts).
 
 ---
 
@@ -336,7 +336,7 @@ teste da recusa vive em
 migration escrita à mão: XOR de `account_id`/`credit_card_id`, valores
 positivos, coerência de parcelas, faixa de dias do mês, `remaining <= original`,
 categoria que não é pai de si mesma, e outras. Estão **enumeradas por nome** em
-[tests/integration/schema.test.ts](tests/integration/schema.test.ts), que
+[tests/integration/constraints.test.ts](tests/integration/constraints.test.ts), que
 reprova constraint nova sem entrada na lista ou constraint removida. O Zod
 valida para dar mensagem boa; o `CHECK` impede que outro caminho escape. Enums
 em `CHECK` precisam de cast explícito: `"status" <>
@@ -718,7 +718,7 @@ sabido que existia — então `color` e `icon` saem por lá.
 
 Ferramenta nova entra por `defineTool` ou `defineDestructiveTool`
 ([src/mcp/define.ts](src/mcp/define.ts)), nunca por `server.registerTool` direto.
-Isso mantém nome e schema únicos. [tests/integration/mcpRegistry.test.ts](tests/integration/mcpRegistry.test.ts)
+Isso mantém nome e schema únicos. [tests/integration/mcp/registry.test.ts](tests/integration/mcp/registry.test.ts)
 compara o registro real com `TOOL_SCOPES` e verifica a primeira rodada das
 ferramentas destrutivas.
 
