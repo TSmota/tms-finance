@@ -5,7 +5,6 @@ import { prisma } from "@/lib/db";
 import { createDebt } from "@/lib/debts";
 import { registerTools } from "@/mcp/registry";
 import { makeAccount, makeCategory, makePerson, makeUser } from "../factories";
-import { setRates } from "../setup-fx";
 import { auditFor, ctxFor, makeAgent, readResult } from "../mcpHarness";
 
 /**
@@ -23,7 +22,6 @@ vi.mock("next/cache", () => ({
 const { revalidatePath } = await import("next/cache");
 
 beforeEach(() => {
-  setRates({});
   vi.mocked(revalidatePath).mockClear();
 });
 

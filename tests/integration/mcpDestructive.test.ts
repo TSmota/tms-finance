@@ -9,7 +9,6 @@ import { runDestructiveTool } from "@/mcp/guard";
 import { confirmCodec, resetConfirmCodec, type ConfirmPayload } from "@/mcp/confirm";
 import { idArgs } from "@/mcp/args";
 import { makeAccount, makeCategory, makePerson, makeUser } from "../factories";
-import { setRates } from "../setup-fx";
 import { auditFor, ctxFor, makeAgent, readResult, type Agent } from "../mcpHarness";
 
 /**
@@ -25,7 +24,6 @@ vi.mock("next/cache", () => ({
 }));
 
 beforeEach(() => {
-  setRates({});
   resetConfirmCodec();
 });
 

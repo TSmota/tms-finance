@@ -1,4 +1,4 @@
-import { vi } from "vitest";
+import { beforeEach, vi } from "vitest";
 
 /**
  * Câmbio determinístico para toda a suíte de integração.
@@ -15,6 +15,13 @@ import { vi } from "vitest";
  * O estado fica num objeto de módulo comum, e não em `vi.hoisted`, que não pode
  * ser exportado. A factory do `vi.mock` é lazy, então o objeto já existe quando
  * ela roda.
+ *
+ * O reset é daqui, não de cada arquivo: um mock global cujo estado o próprio
+ * setup não restaura vaza entre testes, e com `fileParallelism: false` a ordem é
+ * determinística — o vazamento passaria escondido até alguém renomear um
+ * arquivo. O estado limpo é **sem nenhuma cotação**, e não um conjunto padrão,
+ * para que cada arquivo continue declarando as taxas de que depende e para que
+ * a recusa por cotação ausente siga sendo um sinal, não um acidente.
  */
 const fx = {
   /** Cotações no formato `"USD->BRL"`. */
@@ -36,6 +43,11 @@ export function setRates(rates: Record<string, number>): void {
 export function setFxAvailable(available: boolean): void {
   fx.available = available;
 }
+
+beforeEach(() => {
+  fx.rates.clear();
+  fx.available = true;
+});
 
 vi.mock("@/lib/fxService", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/fxService")>();

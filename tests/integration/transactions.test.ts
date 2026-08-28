@@ -52,7 +52,6 @@ async function balanceOf(accountId: string): Promise<string> {
 }
 
 beforeEach(() => {
-  setFxAvailable(true);
   setRates({ "USD->BRL": 5.4, "BRL->USD": 0.1852, "EUR->BRL": 6.25 });
 });
 

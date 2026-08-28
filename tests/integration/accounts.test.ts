@@ -20,7 +20,6 @@ import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from 
 import { setFxAvailable, setRates } from "../setup-fx";
 
 beforeEach(() => {
-  setFxAvailable(true);
   setRates({ "USD->BRL": 5.4, "EUR->BRL": 6.25, "BRL->USD": 0.1852 });
 });
 

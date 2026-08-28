@@ -53,7 +53,6 @@ async function invoices(userId: string, cardId: string) {
 }
 
 beforeEach(() => {
-  setFxAvailable(true);
   setRates({ "USD->BRL": 5.4, "BRL->USD": 0.1852 });
 });
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { prisma } from "@/lib/db";
 import { createTransaction } from "@/lib/transactions";
@@ -21,11 +21,6 @@ import { auditFor, ctxFor, makeAgent, readResult } from "../mcpHarness";
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
-
-beforeEach(() => {
-  setRates({});
-  setFxAvailable(true);
-});
 
 async function scenario() {
   const user = await makeUser({ baseCurrency: "BRL" });

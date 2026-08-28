@@ -7,7 +7,6 @@ import { registerTools } from "@/mcp/registry";
 import { resetConfirmCodec } from "@/mcp/confirm";
 import { DESTRUCTIVE_TOOLS, READ_TOOLS, TOOL_SCOPES, WRITE_TOOLS } from "@/mcp/scopes";
 import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "../factories";
-import { setRates } from "../setup-fx";
 import { ctxFor, makeAgent } from "../mcpHarness";
 
 /**
@@ -28,7 +27,6 @@ vi.mock("next/cache", () => ({
 }));
 
 beforeEach(() => {
-  setRates({});
   resetConfirmCodec();
 });
 

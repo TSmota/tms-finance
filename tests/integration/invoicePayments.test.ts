@@ -55,7 +55,6 @@ async function scenario(options: { amount?: number; cardCurrency?: "BRL" | "USD"
 const payment = { date: "2026-09-05", manualFxRate: null };
 
 beforeEach(() => {
-  setFxAvailable(true);
   setRates({ "USD->BRL": 5.4, "BRL->USD": 0.1852 });
 });
 

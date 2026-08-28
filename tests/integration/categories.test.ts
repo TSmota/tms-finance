@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/db";
 import { InvalidOperationError, NotFoundError } from "@/lib/errors";
@@ -13,11 +13,6 @@ import { createTransaction } from "@/lib/transactions";
 import { createRecurringExpense } from "@/lib/recurring";
 import { createDebt } from "@/lib/debts";
 import { makeAccount, makeCategory, makePerson, makeUser } from "../factories";
-import { setRates } from "../setup-fx";
-
-beforeEach(() => {
-  setRates({});
-});
 
 function categoryInput(overrides: Partial<Parameters<typeof createCategory>[1]> = {}) {
   return {
