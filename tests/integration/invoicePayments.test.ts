@@ -324,7 +324,6 @@ describe("desfazer pagamento", () => {
 
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     await expectBalance(account.id, "1000.00");
-    await expectBalance(account.id, "1000.00");
   });
 
   it("permite pagar de novo, por outra conta", async () => {
