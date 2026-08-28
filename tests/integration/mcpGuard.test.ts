@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { prisma } from "@/lib/db";
-import { recomputeBalance } from "@/lib/accountBalance";
 import { createTransaction, deleteTransaction } from "@/lib/transactions";
 import { transactionSchema } from "@/lib/validations";
 import { REVALIDATION_TARGETS } from "@/lib/revalidation";
 import { runTool } from "@/mcp/guard";
 import { makeAccount, makeCategory, makeUser } from "@tests/support/factories";
+import { expectBalance } from "@tests/support/money";
 import { setRates } from "@tests/setup-fx";
 import { auditFor, ctxFor, ctxWithoutIdentity, makeAgent, readResult } from "@tests/support/mcpHarness";
 
@@ -166,7 +166,7 @@ describe("sucesso", () => {
     });
 
     expect(account2.currentBalance.toFixed(2)).toBe("750.00");
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("750.00");
+    await expectBalance(account.id, "750.00");
 
     // A trilha registra o id, que é o que permite desfazer depois.
     const [entry] = await auditFor("create_transaction");

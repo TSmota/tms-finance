@@ -15,6 +15,7 @@ import {
 import { getPeopleOverview, deletePerson } from "@/lib/people";
 import type { DebtInput, DebtSettlementInput } from "@/lib/validations";
 import { makeAccount, makeCategory, makePerson, makeUser } from "@tests/support/factories";
+import { expectBalance } from "@tests/support/money";
 import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 /**
@@ -399,7 +400,7 @@ describe("remoção", () => {
     const stored = await prisma.financialAccount.findUniqueOrThrow({ where: { id: account.id } });
 
     expect(stored.currentBalance.toFixed(2)).toBe("800.00");
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("800.00");
+    await expectBalance(account.id, "800.00");
   });
 
   it("recusa remover a movimentação de origem por esse caminho", async () => {
@@ -535,8 +536,8 @@ describe("edição da dívida", () => {
       debtInput({ personId: person.id, categoryId: category.id, accountId: other.id }),
     );
 
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("1000.00");
-    expect((await recomputeBalance(other.id)).toFixed(2)).toBe("300.00");
+    await expectBalance(account.id, "1000.00");
+    await expectBalance(other.id, "300.00");
 
     const stored = await prisma.financialAccount.findMany({
       where: { userId: user.id },
@@ -861,7 +862,7 @@ describe("posição por pessoa", () => {
     await deletePerson(user.id, person.id);
 
     expect(await prisma.person.count({ where: { userId: user.id } })).toBe(0);
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("1000.00");
+    await expectBalance(account.id, "1000.00");
   });
 });
 

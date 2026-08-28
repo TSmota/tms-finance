@@ -17,6 +17,7 @@ import {
 } from "@/lib/transactions";
 import type { TransactionInput } from "@/lib/validations";
 import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "@tests/support/factories";
+import { balanceOf, expectBalance } from "@tests/support/money";
 import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 /**
@@ -41,16 +42,6 @@ function input(overrides: Partial<TransactionInput> & { accountId: string }): Tr
   };
 }
 
-/** Saldo atual da conta, como string com 2 casas. */
-async function balanceOf(accountId: string): Promise<string> {
-  const account = await prisma.financialAccount.findUniqueOrThrow({
-    where: { id: accountId },
-    select: { currentBalance: true },
-  });
-
-  return account.currentBalance.toFixed(2);
-}
-
 beforeEach(() => {
   setRates({ "USD->BRL": 5.4, "BRL->USD": 0.1852, "EUR->BRL": 6.25 });
 });
@@ -62,7 +53,7 @@ describe("criação e saldo", () => {
 
     await createTransaction(user.id, input({ accountId: account.id, amount: 450.3 }));
 
-    expect(await balanceOf(account.id)).toBe("549.70");
+    await expectBalance(account.id, "549.70");
   });
 
   it("credita numa receita", async () => {
@@ -74,7 +65,7 @@ describe("criação e saldo", () => {
       input({ accountId: account.id, type: "INCOME", amount: 8000 }),
     );
 
-    expect(await balanceOf(account.id)).toBe("9000.00");
+    await expectBalance(account.id, "9000.00");
   });
 
   it("permite o saldo ficar negativo", async () => {
@@ -83,7 +74,7 @@ describe("criação e saldo", () => {
 
     await createTransaction(user.id, input({ accountId: account.id, amount: 250 }));
 
-    expect(await balanceOf(account.id)).toBe("-150.00");
+    await expectBalance(account.id, "-150.00");
   });
 
   it("não acumula erro de arredondamento em muitos lançamentos", async () => {
@@ -97,7 +88,7 @@ describe("criação e saldo", () => {
       );
     }
 
-    expect(await balanceOf(account.id)).toBe("0.30");
+    await expectBalance(account.id, "0.30");
   });
 
   it("marca o lançamento como CONFIRMED", async () => {
@@ -129,7 +120,7 @@ describe("conversão multi-moeda", () => {
     expect(created.convertedAmount.toFixed(2)).toBe("81.00");
 
     // É o convertedAmount que move o saldo, não o amount.
-    expect(await balanceOf(account.id)).toBe("919.00");
+    await expectBalance(account.id, "919.00");
   });
 
   it("usa taxa 1 quando a moeda do lançamento é a da conta", async () => {
@@ -155,7 +146,7 @@ describe("conversão multi-moeda", () => {
     );
 
     expect(created.exchangeRate.toFixed(4)).toBe("6.0000");
-    expect(await balanceOf(account.id)).toBe("-60.00");
+    await expectBalance(account.id, "-60.00");
   });
 
   it("falha sem criar nada quando o câmbio está indisponível", async () => {
@@ -169,7 +160,7 @@ describe("conversão multi-moeda", () => {
 
     // Nem transação, nem alteração de saldo.
     await expect(prisma.transaction.count()).resolves.toBe(0);
-    expect(await balanceOf(account.id)).toBe("1000.00");
+    await expectBalance(account.id, "1000.00");
   });
 
   it("não consulta o câmbio quando há taxa manual, mesmo com a API fora", async () => {
@@ -195,7 +186,7 @@ describe("edição", () => {
       user.id,
       input({ accountId: account.id, amount: 100 }),
     );
-    expect(await balanceOf(account.id)).toBe("900.00");
+    await expectBalance(account.id, "900.00");
 
     await updateTransaction(
       user.id,
@@ -203,7 +194,7 @@ describe("edição", () => {
       input({ accountId: account.id, amount: 250 }),
     );
 
-    expect(await balanceOf(account.id)).toBe("750.00");
+    await expectBalance(account.id, "750.00");
   });
 
   it("inverte o efeito ao trocar despesa por receita", async () => {
@@ -221,7 +212,7 @@ describe("edição", () => {
       input({ accountId: account.id, amount: 100, type: "INCOME" }),
     );
 
-    expect(await balanceOf(account.id)).toBe("1100.00");
+    await expectBalance(account.id, "1100.00");
   });
 
   it("move o efeito entre contas ao trocar a conta", async () => {
@@ -236,8 +227,8 @@ describe("edição", () => {
 
     await updateTransaction(user.id, created.id, input({ accountId: target.id, amount: 100 }));
 
-    expect(await balanceOf(origin.id)).toBe("1000.00");
-    expect(await balanceOf(target.id)).toBe("400.00");
+    await expectBalance(origin.id, "1000.00");
+    await expectBalance(target.id, "400.00");
   });
 
   it("recalcula a conversão ao trocar a moeda do lançamento", async () => {
@@ -257,7 +248,7 @@ describe("edição", () => {
 
     expect(updated.exchangeRate.toFixed(4)).toBe("5.4000");
     expect(updated.convertedAmount.toFixed(2)).toBe("54.00");
-    expect(await balanceOf(account.id)).toBe("946.00");
+    await expectBalance(account.id, "946.00");
   });
 });
 
@@ -273,7 +264,7 @@ describe("exclusão", () => {
 
     await deleteTransaction(user.id, created.id);
 
-    expect(await balanceOf(account.id)).toBe("1000.00");
+    await expectBalance(account.id, "1000.00");
     await expect(prisma.transaction.count()).resolves.toBe(0);
   });
 });
@@ -351,7 +342,7 @@ describe("isolamento entre usuários", () => {
     ).rejects.toThrow(NotFoundError);
     await expect(deleteTransaction(intruder.id, created.id)).rejects.toThrow(NotFoundError);
 
-    expect(await balanceOf(account.id)).toBe("900.00");
+    await expectBalance(account.id, "900.00");
   });
 
   it("não lista transações de outro usuário", async () => {

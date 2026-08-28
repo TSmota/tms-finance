@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/db";
 import { InvalidOperationError, NotFoundError } from "@/lib/errors";
-import { recomputeBalance } from "@/lib/accountBalance";
 import { listCardInvoices, listInvoiceItems } from "@/lib/invoices";
 import { createCardPurchase, updateCardPurchase } from "@/lib/cardPurchases";
 import { payInvoice, undoInvoicePayment } from "@/lib/invoicePayments";
@@ -19,6 +18,7 @@ import {
 import { getBalanceProjection } from "@/lib/projection";
 import type { RecurringExpenseInput } from "@/lib/validations";
 import { makeAccount, makeCategory, makeCreditCard, makeUser } from "@tests/support/factories";
+import { expectBalance } from "@tests/support/money";
 import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 /**
@@ -98,7 +98,7 @@ describe("materialização em conta bancária", () => {
 
     expect(stored.currentBalance.toFixed(2)).toBe("1000.00");
     // Uma pendência também não entra no recálculo, que só soma confirmados.
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("1000.00");
+    await expectBalance(account.id, "1000.00");
   });
 
   it("materializar duas vezes não duplica nada", async () => {
@@ -312,7 +312,7 @@ describe("materialização no cartão de crédito", () => {
     ).toEqual(["2026-8: 39.90", "2026-7: 39.90"]);
 
     // Cobrança no cartão não move o saldo da conta.
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("500.00");
+    await expectBalance(account.id, "500.00");
   });
 
   it("vencimento depois do fechamento entra na fatura seguinte", async () => {
@@ -495,7 +495,7 @@ describe("confirmação da pendência", () => {
     const stored = await prisma.financialAccount.findUniqueOrThrow({ where: { id: account.id } });
 
     expect(stored.currentBalance.toFixed(2)).toBe("796.53");
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("796.53");
+    await expectBalance(account.id, "796.53");
   });
 
   it("sai da lista de pendências depois de confirmada", async () => {
@@ -542,7 +542,7 @@ describe("confirmação da pendência", () => {
     const stored = await prisma.financialAccount.findUniqueOrThrow({ where: { id: account.id } });
 
     expect(stored.currentBalance.toFixed(2)).toBe("820.00");
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("820.00");
+    await expectBalance(account.id, "820.00");
   });
 
   it("pendência de outro usuário é inacessível", async () => {
@@ -810,7 +810,7 @@ describe("definições", () => {
     expect(remaining[0]!.status).toBe("CONFIRMED");
     // Sem vínculo com a recorrência apagada, mas o saldo continua batendo.
     expect(remaining[0]!.recurringExpenseId).toBeNull();
-    expect((await recomputeBalance(account.id)).toFixed(2)).toBe("900.00");
+    await expectBalance(account.id, "900.00");
   });
 
   it("apagar remove o item de uma fatura em aberto, que some por ficar vazia", async () => {
