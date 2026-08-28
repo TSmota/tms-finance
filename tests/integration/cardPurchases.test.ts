@@ -10,8 +10,8 @@ import {
 } from "@/lib/cardPurchases";
 import { listCardInvoices, listInvoiceItems } from "@/lib/invoices";
 import { payInvoice, undoInvoicePayment } from "@/lib/invoicePayments";
-import type { CardPurchaseInput } from "@/lib/validations";
 import { makeAccount, makeCategory, makeCreditCard, makeUser } from "@tests/support/factories";
+import { cardPurchaseInput } from "@tests/support/inputs";
 import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 /**
@@ -21,21 +21,6 @@ import { setFxAvailable, setRates } from "@tests/setup-fx";
  * soma exata, o saldo da conta bancária **não** se mexer, e a fatura ser única
  * por ciclo mesmo com várias compras.
  */
-
-function purchaseInput(
-  overrides: Partial<CardPurchaseInput> & { creditCardId: string },
-): CardPurchaseInput {
-  return {
-    categoryId: null,
-    description: "Compra de teste",
-    amount: 100,
-    currency: "BRL",
-    date: "2026-08-15",
-    installments: 1,
-    manualFxRate: null,
-    ...overrides,
-  };
-}
 
 /** Faturas do cartão em ordem cronológica, com total e contagem. */
 async function invoices(userId: string, cardId: string) {
@@ -61,7 +46,7 @@ describe("compra à vista", () => {
     const user = await makeUser();
     const card = await makeCreditCard(user.id, { closingDay: 20, dueDay: 5 });
 
-    await createCardPurchase(user.id, purchaseInput({ creditCardId: card.id, amount: 250.5 }));
+    await createCardPurchase(user.id, cardPurchaseInput({ creditCardId: card.id, amount: 250.5 }));
 
     expect(await invoices(user.id, card.id)).toEqual([
       { competencia: "2026-08", total: "250.50", itens: 1, status: "OPEN" },
@@ -73,7 +58,7 @@ describe("compra à vista", () => {
     const account = await makeAccount(user.id, { initialBalance: "1000.00" });
     const card = await makeCreditCard(user.id);
 
-    await createCardPurchase(user.id, purchaseInput({ creditCardId: card.id, amount: 500 }));
+    await createCardPurchase(user.id, cardPurchaseInput({ creditCardId: card.id, amount: 500 }));
 
     const stored = await prisma.financialAccount.findUniqueOrThrow({
       where: { id: account.id },
@@ -88,7 +73,7 @@ describe("compra à vista", () => {
 
     const [created] = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, installments: 1 }),
+      cardPurchaseInput({ creditCardId: card.id, installments: 1 }),
     );
 
     expect(created?.installmentNumber).toBe(1);
@@ -104,7 +89,7 @@ describe("regra do dia de fechamento", () => {
 
     await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, date: "2026-08-20" }),
+      cardPurchaseInput({ creditCardId: card.id, date: "2026-08-20" }),
     );
 
     expect((await invoices(user.id, card.id))[0]?.competencia).toBe("2026-08");
@@ -116,7 +101,7 @@ describe("regra do dia de fechamento", () => {
 
     await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, date: "2026-08-21" }),
+      cardPurchaseInput({ creditCardId: card.id, date: "2026-08-21" }),
     );
 
     expect((await invoices(user.id, card.id))[0]?.competencia).toBe("2026-09");
@@ -128,7 +113,7 @@ describe("regra do dia de fechamento", () => {
 
     await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, date: "2026-08-10" }),
+      cardPurchaseInput({ creditCardId: card.id, date: "2026-08-10" }),
     );
 
     const [invoice] = await listCardInvoices(user.id, card.id);
@@ -144,7 +129,7 @@ describe("compra parcelada", () => {
 
     await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 100, installments: 3, date: "2026-08-15" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 100, installments: 3, date: "2026-08-15" }),
     );
 
     expect(await invoices(user.id, card.id)).toEqual([
@@ -160,7 +145,7 @@ describe("compra parcelada", () => {
 
     const created = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 100, installments: 3 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 100, installments: 3 }),
     );
 
     expect(created.map((item) => item.installmentNumber)).toEqual([1, 2, 3]);
@@ -176,7 +161,7 @@ describe("compra parcelada", () => {
 
     const created = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 100, installments: 7 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 100, installments: 7 }),
     );
 
     const soma = created.reduce((total, item) => total + Number(item.convertedAmount), 0);
@@ -189,7 +174,7 @@ describe("compra parcelada", () => {
 
     await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 300, installments: 3, date: "2026-12-10" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 300, installments: 3, date: "2026-12-10" }),
     );
 
     expect((await invoices(user.id, card.id)).map((item) => item.competencia)).toEqual([
@@ -205,7 +190,7 @@ describe("compra parcelada", () => {
 
     await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 300, installments: 3, date: "2026-08-25" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 300, installments: 3, date: "2026-08-25" }),
     );
 
     expect((await invoices(user.id, card.id)).map((item) => item.competencia)).toEqual([
@@ -222,7 +207,7 @@ describe("compra parcelada", () => {
     await expect(
       createCardPurchase(
         user.id,
-        purchaseInput({ creditCardId: card.id, amount: 0.01, installments: 3 }),
+        cardPurchaseInput({ creditCardId: card.id, amount: 0.01, installments: 3 }),
       ),
     ).rejects.toThrow(InvalidOperationError);
 
@@ -239,11 +224,11 @@ describe("fatura única por ciclo", () => {
 
     await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 100, date: "2026-08-05" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 100, date: "2026-08-05" }),
     );
     await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 50, date: "2026-08-12" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 50, date: "2026-08-12" }),
     );
 
     expect(await invoices(user.id, card.id)).toEqual([
@@ -258,9 +243,9 @@ describe("fatura única por ciclo", () => {
 
     // O upsert em resolveInvoice existe justamente para esta corrida.
     await Promise.all([
-      createCardPurchase(user.id, purchaseInput({ creditCardId: card.id, amount: 10 })),
-      createCardPurchase(user.id, purchaseInput({ creditCardId: card.id, amount: 20 })),
-      createCardPurchase(user.id, purchaseInput({ creditCardId: card.id, amount: 30 })),
+      createCardPurchase(user.id, cardPurchaseInput({ creditCardId: card.id, amount: 10 })),
+      createCardPurchase(user.id, cardPurchaseInput({ creditCardId: card.id, amount: 20 })),
+      createCardPurchase(user.id, cardPurchaseInput({ creditCardId: card.id, amount: 30 })),
     ]);
 
     await expect(prisma.invoice.count()).resolves.toBe(1);
@@ -275,8 +260,8 @@ describe("fatura única por ciclo", () => {
     const first = await makeCreditCard(user.id, { name: "Cartão A", closingDay: 20, dueDay: 5 });
     const second = await makeCreditCard(user.id, { name: "Cartão B", closingDay: 28, dueDay: 10 });
 
-    await createCardPurchase(user.id, purchaseInput({ creditCardId: first.id, amount: 100 }));
-    await createCardPurchase(user.id, purchaseInput({ creditCardId: second.id, amount: 200 }));
+    await createCardPurchase(user.id, cardPurchaseInput({ creditCardId: first.id, amount: 100 }));
+    await createCardPurchase(user.id, cardPurchaseInput({ creditCardId: second.id, amount: 200 }));
 
     await expect(prisma.invoice.count()).resolves.toBe(2);
     expect((await invoices(user.id, first.id))[0]?.total).toBe("100.00");
@@ -293,7 +278,7 @@ describe("fatura paga não recebe lançamento", () => {
 
     await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 100, date: "2026-08-10" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 100, date: "2026-08-10" }),
     );
 
     const [invoice] = await listCardInvoices(user.id, card.id);
@@ -315,7 +300,7 @@ describe("fatura paga não recebe lançamento", () => {
     await expect(
       createCardPurchase(
         user.id,
-        purchaseInput({ creditCardId: card.id, amount: 70, date: "2026-08-15" }),
+        cardPurchaseInput({ creditCardId: card.id, amount: 70, date: "2026-08-15" }),
       ),
     ).rejects.toThrow(PaidInvoiceError);
 
@@ -331,7 +316,7 @@ describe("fatura paga não recebe lançamento", () => {
     await expect(
       createCardPurchase(
         user.id,
-        purchaseInput({
+        cardPurchaseInput({
           creditCardId: card.id,
           amount: 80,
           date: "2026-07-15",
@@ -351,14 +336,14 @@ describe("fatura paga não recebe lançamento", () => {
 
     const [setembro] = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 40, date: "2026-09-15" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 40, date: "2026-09-15" }),
     );
 
     await expect(
       updateCardPurchase(
         user.id,
         setembro!.id,
-        purchaseInput({ creditCardId: card.id, amount: 40, date: "2026-08-15" }),
+        cardPurchaseInput({ creditCardId: card.id, amount: 40, date: "2026-08-15" }),
       ),
     ).rejects.toThrow(PaidInvoiceError);
 
@@ -376,7 +361,7 @@ describe("fatura paga não recebe lançamento", () => {
 
     await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 70, date: "2026-08-15" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 70, date: "2026-08-15" }),
     );
 
     expect(await invoices(user.id, card.id)).toEqual([
@@ -392,7 +377,7 @@ describe("compra em moeda estrangeira", () => {
 
     const [created] = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 15, currency: "USD" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 15, currency: "USD" }),
     );
 
     expect(created?.amount.toFixed(2)).toBe("15.00");
@@ -410,7 +395,7 @@ describe("compra em moeda estrangeira", () => {
 
     const created = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 100, currency: "USD", installments: 3 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 100, currency: "USD", installments: 3 }),
     );
 
     for (const parcela of created) {
@@ -430,7 +415,7 @@ describe("compra em moeda estrangeira", () => {
 
     const [created] = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 1000, currency: "USD" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 1000, currency: "USD" }),
     );
 
     expect(created?.exchangeRate.toFixed(4)).toBe("5.1235");
@@ -446,7 +431,7 @@ describe("compra em moeda estrangeira", () => {
 
     const [created] = await createCardPurchase(
       user.id,
-      purchaseInput({
+      cardPurchaseInput({
         creditCardId: card.id,
         amount: 1000,
         currency: "USD",
@@ -464,7 +449,7 @@ describe("compra em moeda estrangeira", () => {
     setFxAvailable(false);
 
     await expect(
-      createCardPurchase(user.id, purchaseInput({ creditCardId: card.id, currency: "USD" })),
+      createCardPurchase(user.id, cardPurchaseInput({ creditCardId: card.id, currency: "USD" })),
     ).rejects.toThrow(FxUnavailableError);
 
     await expect(prisma.invoice.count()).resolves.toBe(0);
@@ -479,12 +464,12 @@ describe("exclusão de compra parcelada", () => {
 
     const created = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 100, installments: 3, date: "2026-08-15" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 100, installments: 3, date: "2026-08-15" }),
     );
     // Uma segunda compra na primeira fatura, que precisa sobreviver.
     await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 40, date: "2026-08-16" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 40, date: "2026-08-16" }),
     );
 
     // Apagar pela parcela do meio deve levar o grupo inteiro.
@@ -502,7 +487,7 @@ describe("exclusão de compra parcelada", () => {
 
     const created = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 100, installments: 3 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 100, installments: 3 }),
     );
 
     await deleteCardPurchase(user.id, created[0]!.id);
@@ -515,7 +500,7 @@ describe("exclusão de compra parcelada", () => {
     const owner = await makeUser();
     const intruder = await makeUser();
     const card = await makeCreditCard(owner.id);
-    const [created] = await createCardPurchase(owner.id, purchaseInput({ creditCardId: card.id }));
+    const [created] = await createCardPurchase(owner.id, cardPurchaseInput({ creditCardId: card.id }));
 
     await expect(deleteCardPurchase(intruder.id, created!.id)).rejects.toThrow(NotFoundError);
     await expect(prisma.transaction.count()).resolves.toBe(1);
@@ -530,7 +515,7 @@ describe("exclusão de compra parcelada", () => {
 
     const [created] = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 250 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 250 }),
     );
 
     const [invoice] = await listCardInvoices(user.id, card.id);
@@ -559,7 +544,7 @@ describe("exclusão de compra parcelada", () => {
 
     const created = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 300, installments: 3 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 300, installments: 3 }),
     );
 
     // Paga só a primeira fatura; as parcelas 2 e 3 seguem em faturas abertas.
@@ -591,7 +576,7 @@ describe("isolamento e listagem", () => {
     const card = await makeCreditCard(owner.id);
 
     await expect(
-      createCardPurchase(intruder.id, purchaseInput({ creditCardId: card.id })),
+      createCardPurchase(intruder.id, cardPurchaseInput({ creditCardId: card.id })),
     ).rejects.toThrow(NotFoundError);
   });
 
@@ -604,7 +589,7 @@ describe("isolamento e listagem", () => {
     await expect(
       createCardPurchase(
         user.id,
-        purchaseInput({ creditCardId: card.id, categoryId: foreign.id }),
+        cardPurchaseInput({ creditCardId: card.id, categoryId: foreign.id }),
       ),
     ).rejects.toThrow(NotFoundError);
   });
@@ -616,7 +601,7 @@ describe("isolamento e listagem", () => {
 
     await createCardPurchase(
       user.id,
-      purchaseInput({
+      cardPurchaseInput({
         creditCardId: card.id,
         amount: 100,
         installments: 3,
@@ -664,13 +649,13 @@ describe("edição da compra", () => {
 
     const [purchase] = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 39.9, description: "Streaming" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 39.9, description: "Streaming" }),
     );
 
     await updateCardPurchase(
       user.id,
       purchase!.id,
-      purchaseInput({
+      cardPurchaseInput({
         creditCardId: card.id,
         amount: 44.9,
         description: "Streaming (reajuste)",
@@ -691,14 +676,14 @@ describe("edição da compra", () => {
 
     const created = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 100, installments: 3 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 100, installments: 3 }),
     );
 
     // Clica na 2ª parcela, mas o valor informado é o total da compra.
     await updateCardPurchase(
       user.id,
       created[1]!.id,
-      purchaseInput({ creditCardId: card.id, amount: 200, installments: 3 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 200, installments: 3 }),
     );
 
     const rows = await group(user.id);
@@ -718,13 +703,13 @@ describe("edição da compra", () => {
 
     const created = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 90, installments: 3 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 90, installments: 3 }),
     );
 
     await updateCardPurchase(
       user.id,
       created[0]!.id,
-      purchaseInput({ creditCardId: card.id, amount: 90, installments: 2 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 90, installments: 2 }),
     );
 
     expect(await group(user.id)).toHaveLength(2);
@@ -741,14 +726,14 @@ describe("edição da compra", () => {
 
     const [purchase] = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 50, date: "2026-08-15" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 50, date: "2026-08-15" }),
     );
 
     // Depois do fechamento: a compra passa para a fatura de setembro.
     await updateCardPurchase(
       user.id,
       purchase!.id,
-      purchaseInput({ creditCardId: card.id, amount: 50, date: "2026-08-25" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 50, date: "2026-08-25" }),
     );
 
     // Agosto ficou sem lançamento nenhum e some: sem ela, restaria uma fatura
@@ -764,17 +749,17 @@ describe("edição da compra", () => {
 
     const [purchase] = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 50, date: "2026-08-15" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 50, date: "2026-08-15" }),
     );
     await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 30, date: "2026-08-16" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 30, date: "2026-08-16" }),
     );
 
     await updateCardPurchase(
       user.id,
       purchase!.id,
-      purchaseInput({ creditCardId: card.id, amount: 50, date: "2026-08-25" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 50, date: "2026-08-25" }),
     );
 
     expect(await invoices(user.id, card.id)).toEqual([
@@ -790,7 +775,7 @@ describe("edição da compra", () => {
 
     const [purchase] = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 50 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 50 }),
     );
 
     const [invoice] = await listCardInvoices(user.id, card.id);
@@ -805,7 +790,7 @@ describe("edição da compra", () => {
       updateCardPurchase(
         user.id,
         purchase!.id,
-        purchaseInput({ creditCardId: card.id, amount: 80 }),
+        cardPurchaseInput({ creditCardId: card.id, amount: 80 }),
       ),
     ).rejects.toThrow(InvalidOperationError);
 
@@ -826,13 +811,13 @@ describe("edição da compra", () => {
 
     const [purchase] = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 50 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 50 }),
     );
 
     await updateCardPurchase(
       user.id,
       purchase!.id,
-      purchaseInput({ creditCardId: card.id, amount: 500 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 500 }),
     );
 
     const stored = await prisma.financialAccount.findUniqueOrThrow({ where: { id: account.id } });
@@ -846,13 +831,13 @@ describe("edição da compra", () => {
 
     const [purchase] = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 100, currency: "BRL" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 100, currency: "BRL" }),
     );
 
     await updateCardPurchase(
       user.id,
       purchase!.id,
-      purchaseInput({ creditCardId: card.id, amount: 25, currency: "USD" }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 25, currency: "USD" }),
     );
 
     const [row] = await prisma.transaction.findMany({ where: { userId: user.id } });
@@ -869,13 +854,13 @@ describe("edição da compra", () => {
 
     const [purchase] = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: origin.id, amount: 70 }),
+      cardPurchaseInput({ creditCardId: origin.id, amount: 70 }),
     );
 
     await updateCardPurchase(
       user.id,
       purchase!.id,
-      purchaseInput({ creditCardId: target.id, amount: 70 }),
+      cardPurchaseInput({ creditCardId: target.id, amount: 70 }),
     );
 
     expect(await invoices(user.id, origin.id)).toEqual([]);
@@ -891,14 +876,14 @@ describe("edição da compra", () => {
 
     const [purchase] = await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 50 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 50 }),
     );
 
     await expect(
       updateCardPurchase(
         intruder.id,
         purchase!.id,
-        purchaseInput({ creditCardId: card.id, amount: 1 }),
+        cardPurchaseInput({ creditCardId: card.id, amount: 1 }),
       ),
     ).rejects.toThrow(NotFoundError);
   });
@@ -909,7 +894,7 @@ describe("edição da compra", () => {
 
     await createCardPurchase(
       user.id,
-      purchaseInput({ creditCardId: card.id, amount: 100, installments: 3 }),
+      cardPurchaseInput({ creditCardId: card.id, amount: 100, installments: 3 }),
     );
 
     const all = await listCardInvoices(user.id, card.id);

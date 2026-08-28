@@ -7,6 +7,7 @@ import { transactionSchema } from "@/lib/validations";
 import { REVALIDATION_TARGETS } from "@/lib/revalidation";
 import { runTool } from "@/mcp/guard";
 import { makeAccount, makeCategory, makeUser } from "@tests/support/factories";
+import { transactionInput } from "@tests/support/inputs";
 import { expectBalance } from "@tests/support/money";
 import { setRates } from "@tests/setup-fx";
 import { auditFor, ctxFor, ctxWithoutIdentity, makeAgent, readResult } from "@tests/support/mcpHarness";
@@ -40,17 +41,14 @@ async function scenario(scopes: readonly ("finance:read" | "transactions:write")
   return { user, account, category, agent, ctx: ctxFor(agent, "BRL") };
 }
 
-function transactionInput(accountId: string, categoryId: string | null) {
-  return {
+/** Despesa de 250 na conta: o valor que as asserções de saldo deste arquivo esperam. */
+function expense(accountId: string, categoryId: string | null) {
+  return transactionInput({
     accountId,
     categoryId,
-    type: "EXPENSE" as const,
     amount: 250,
-    currency: "BRL" as const,
-    date: "2026-08-15",
     description: "Compra de teste",
-    manualFxRate: null,
-  };
+  });
 }
 
 function createTool(ctx: ReturnType<typeof ctxFor>, input: unknown) {
@@ -70,7 +68,7 @@ describe("escopo", () => {
   it("recusa sem o escopo e NÃO escreve nada", async () => {
     const { account, category, ctx } = await scenario(["finance:read"]);
 
-    const result = await createTool(ctx, transactionInput(account.id, category.id));
+    const result = await createTool(ctx, expense(account.id, category.id));
     const payload = readResult(result);
 
     expect(result.isError).toBe(true);
@@ -110,7 +108,7 @@ describe("validação", () => {
     const { account, ctx } = await scenario(["transactions:write"]);
 
     const result = await createTool(ctx, {
-      ...transactionInput(account.id, null),
+      ...expense(account.id, null),
       amount: -5,
     });
     const payload = readResult(result);
@@ -133,7 +131,7 @@ describe("validação", () => {
     const { account, ctx } = await scenario(["transactions:write"]);
 
     const result = await createTool(ctx, {
-      ...transactionInput(account.id, null),
+      ...expense(account.id, null),
       date: "2026-02-30",
     });
 
@@ -146,7 +144,7 @@ describe("sucesso", () => {
   it("escreve, afirma as DUAS pontas, audita e revalida", async () => {
     const { account, category, ctx } = await scenario(["transactions:write"]);
 
-    const result = await createTool(ctx, transactionInput(account.id, category.id));
+    const result = await createTool(ctx, expense(account.id, category.id));
     const payload = readResult(result);
 
     expect(result.isError).toBe(false);
@@ -160,12 +158,6 @@ describe("sucesso", () => {
     expect(row.convertedAmount.toFixed(2)).toBe("250.00");
 
     // Ponta 2: o denormalizado bate com a soma dos lançamentos.
-    const account2 = await prisma.financialAccount.findUniqueOrThrow({
-      where: { id: account.id },
-      select: { currentBalance: true },
-    });
-
-    expect(account2.currentBalance.toFixed(2)).toBe("750.00");
     await expectBalance(account.id, "750.00");
 
     // A trilha registra o id, que é o que permite desfazer depois.
@@ -186,7 +178,7 @@ describe("sucesso", () => {
 
     const result = await createTool(
       owner.ctx,
-      transactionInput(strangerAccount.id, null),
+      expense(strangerAccount.id, null),
     );
     const payload = readResult(result);
 
@@ -227,7 +219,7 @@ describe("auditoria", () => {
     const { account, ctx } = await scenario(["transactions:write"]);
 
     await createTool(ctx, {
-      ...transactionInput(account.id, null),
+      ...expense(account.id, null),
       description: "x".repeat(2000),
     });
 
@@ -244,8 +236,8 @@ describe("auditoria", () => {
   it("grava uma linha por chamada, sempre", async () => {
     const { account, category, ctx } = await scenario(["transactions:write"]);
 
-    await createTool(ctx, transactionInput(account.id, category.id));
-    await createTool(ctx, { ...transactionInput(account.id, category.id), amount: -1 });
+    await createTool(ctx, expense(account.id, category.id));
+    await createTool(ctx, { ...expense(account.id, category.id), amount: -1 });
 
     const entries = await auditFor("create_transaction");
 

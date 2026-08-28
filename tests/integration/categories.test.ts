@@ -13,16 +13,7 @@ import { createTransaction } from "@/lib/transactions";
 import { createRecurringExpense } from "@/lib/recurring";
 import { createDebt } from "@/lib/debts";
 import { makeAccount, makeCategory, makePerson, makeUser } from "@tests/support/factories";
-
-function categoryInput(overrides: Partial<Parameters<typeof createCategory>[1]> = {}) {
-  return {
-    name: "Categoria",
-    color: "#40c057",
-    icon: null,
-    parentId: null,
-    ...overrides,
-  };
-}
+import { categoryInput } from "@tests/support/inputs";
 
 describe("hierarquia de dois níveis", () => {
   it("cria categoria raiz e subcategoria", async () => {

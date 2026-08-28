@@ -15,8 +15,8 @@ import {
   listRecentTransactions,
   updateTransaction,
 } from "@/lib/transactions";
-import type { TransactionInput } from "@/lib/validations";
 import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "@tests/support/factories";
+import { transactionInput } from "@tests/support/inputs";
 import { balanceOf, expectBalance } from "@tests/support/money";
 import { setFxAvailable, setRates } from "@tests/setup-fx";
 
@@ -29,19 +29,6 @@ import { setFxAvailable, setRates } from "@tests/setup-fx";
  * impedir acesso cruzado.
  */
 
-function input(overrides: Partial<TransactionInput> & { accountId: string }): TransactionInput {
-  return {
-    categoryId: null,
-    type: "EXPENSE",
-    amount: 100,
-    currency: "BRL",
-    date: "2026-08-15",
-    description: "Lançamento de teste",
-    manualFxRate: null,
-    ...overrides,
-  };
-}
-
 beforeEach(() => {
   setRates({ "USD->BRL": 5.4, "BRL->USD": 0.1852, "EUR->BRL": 6.25 });
 });
@@ -51,7 +38,7 @@ describe("criação e saldo", () => {
     const user = await makeUser();
     const account = await makeAccount(user.id, { initialBalance: "1000.00" });
 
-    await createTransaction(user.id, input({ accountId: account.id, amount: 450.3 }));
+    await createTransaction(user.id, transactionInput({ accountId: account.id, amount: 450.3 }));
 
     await expectBalance(account.id, "549.70");
   });
@@ -62,7 +49,7 @@ describe("criação e saldo", () => {
 
     await createTransaction(
       user.id,
-      input({ accountId: account.id, type: "INCOME", amount: 8000 }),
+      transactionInput({ accountId: account.id, type: "INCOME", amount: 8000 }),
     );
 
     await expectBalance(account.id, "9000.00");
@@ -72,7 +59,7 @@ describe("criação e saldo", () => {
     const user = await makeUser();
     const account = await makeAccount(user.id, { initialBalance: "100.00" });
 
-    await createTransaction(user.id, input({ accountId: account.id, amount: 250 }));
+    await createTransaction(user.id, transactionInput({ accountId: account.id, amount: 250 }));
 
     await expectBalance(account.id, "-150.00");
   });
@@ -84,7 +71,7 @@ describe("criação e saldo", () => {
     for (let index = 0; index < 30; index += 1) {
       await createTransaction(
         user.id,
-        input({ accountId: account.id, type: "INCOME", amount: 0.01 }),
+        transactionInput({ accountId: account.id, type: "INCOME", amount: 0.01 }),
       );
     }
 
@@ -95,7 +82,7 @@ describe("criação e saldo", () => {
     const user = await makeUser();
     const account = await makeAccount(user.id);
 
-    const created = await createTransaction(user.id, input({ accountId: account.id }));
+    const created = await createTransaction(user.id, transactionInput({ accountId: account.id }));
 
     expect(created.status).toBe("CONFIRMED");
   });
@@ -111,7 +98,7 @@ describe("conversão multi-moeda", () => {
 
     const created = await createTransaction(
       user.id,
-      input({ accountId: account.id, amount: 15, currency: "USD" }),
+      transactionInput({ accountId: account.id, amount: 15, currency: "USD" }),
     );
 
     expect(created.amount.toFixed(2)).toBe("15.00");
@@ -129,7 +116,7 @@ describe("conversão multi-moeda", () => {
 
     const created = await createTransaction(
       user.id,
-      input({ accountId: account.id, amount: 25, currency: "USD" }),
+      transactionInput({ accountId: account.id, amount: 25, currency: "USD" }),
     );
 
     expect(created.exchangeRate.toFixed(4)).toBe("1.0000");
@@ -142,7 +129,7 @@ describe("conversão multi-moeda", () => {
 
     const created = await createTransaction(
       user.id,
-      input({ accountId: account.id, amount: 10, currency: "USD", manualFxRate: 6 }),
+      transactionInput({ accountId: account.id, amount: 10, currency: "USD", manualFxRate: 6 }),
     );
 
     expect(created.exchangeRate.toFixed(4)).toBe("6.0000");
@@ -155,7 +142,7 @@ describe("conversão multi-moeda", () => {
     setFxAvailable(false);
 
     await expect(
-      createTransaction(user.id, input({ accountId: account.id, currency: "USD" })),
+      createTransaction(user.id, transactionInput({ accountId: account.id, currency: "USD" })),
     ).rejects.toThrow(FxUnavailableError);
 
     // Nem transação, nem alteração de saldo.
@@ -170,7 +157,7 @@ describe("conversão multi-moeda", () => {
 
     const created = await createTransaction(
       user.id,
-      input({ accountId: account.id, amount: 10, currency: "USD", manualFxRate: 5 }),
+      transactionInput({ accountId: account.id, amount: 10, currency: "USD", manualFxRate: 5 }),
     );
 
     expect(created.convertedAmount.toFixed(2)).toBe("50.00");
@@ -184,14 +171,14 @@ describe("edição", () => {
 
     const created = await createTransaction(
       user.id,
-      input({ accountId: account.id, amount: 100 }),
+      transactionInput({ accountId: account.id, amount: 100 }),
     );
     await expectBalance(account.id, "900.00");
 
     await updateTransaction(
       user.id,
       created.id,
-      input({ accountId: account.id, amount: 250 }),
+      transactionInput({ accountId: account.id, amount: 250 }),
     );
 
     await expectBalance(account.id, "750.00");
@@ -203,13 +190,13 @@ describe("edição", () => {
 
     const created = await createTransaction(
       user.id,
-      input({ accountId: account.id, amount: 100 }),
+      transactionInput({ accountId: account.id, amount: 100 }),
     );
 
     await updateTransaction(
       user.id,
       created.id,
-      input({ accountId: account.id, amount: 100, type: "INCOME" }),
+      transactionInput({ accountId: account.id, amount: 100, type: "INCOME" }),
     );
 
     await expectBalance(account.id, "1100.00");
@@ -222,10 +209,10 @@ describe("edição", () => {
 
     const created = await createTransaction(
       user.id,
-      input({ accountId: origin.id, amount: 100 }),
+      transactionInput({ accountId: origin.id, amount: 100 }),
     );
 
-    await updateTransaction(user.id, created.id, input({ accountId: target.id, amount: 100 }));
+    await updateTransaction(user.id, created.id, transactionInput({ accountId: target.id, amount: 100 }));
 
     await expectBalance(origin.id, "1000.00");
     await expectBalance(target.id, "400.00");
@@ -237,13 +224,13 @@ describe("edição", () => {
 
     const created = await createTransaction(
       user.id,
-      input({ accountId: account.id, amount: 10, currency: "BRL" }),
+      transactionInput({ accountId: account.id, amount: 10, currency: "BRL" }),
     );
 
     const updated = await updateTransaction(
       user.id,
       created.id,
-      input({ accountId: account.id, amount: 10, currency: "USD" }),
+      transactionInput({ accountId: account.id, amount: 10, currency: "USD" }),
     );
 
     expect(updated.exchangeRate.toFixed(4)).toBe("5.4000");
@@ -259,7 +246,7 @@ describe("exclusão", () => {
 
     const created = await createTransaction(
       user.id,
-      input({ accountId: account.id, amount: 137.45 }),
+      transactionInput({ accountId: account.id, amount: 137.45 }),
     );
 
     await deleteTransaction(user.id, created.id);
@@ -276,21 +263,21 @@ describe("consistência do saldo denormalizado", () => {
 
     const first = await createTransaction(
       user.id,
-      input({ accountId: account.id, type: "INCOME", amount: 8000 }),
+      transactionInput({ accountId: account.id, type: "INCOME", amount: 8000 }),
     );
     const second = await createTransaction(
       user.id,
-      input({ accountId: account.id, amount: 450.3 }),
+      transactionInput({ accountId: account.id, amount: 450.3 }),
     );
     await createTransaction(
       user.id,
-      input({ accountId: account.id, amount: 15, currency: "USD" }),
+      transactionInput({ accountId: account.id, amount: 15, currency: "USD" }),
     );
 
     await updateTransaction(
       user.id,
       second.id,
-      input({ accountId: account.id, amount: 500 }),
+      transactionInput({ accountId: account.id, amount: 500 }),
     );
     await deleteTransaction(user.id, first.id);
 
@@ -310,7 +297,7 @@ describe("isolamento entre usuários", () => {
     const account = await makeAccount(owner.id);
 
     await expect(
-      createTransaction(intruder.id, input({ accountId: account.id })),
+      createTransaction(intruder.id, transactionInput({ accountId: account.id })),
     ).rejects.toThrow(NotFoundError);
   });
 
@@ -323,7 +310,7 @@ describe("isolamento entre usuários", () => {
     await expect(
       createTransaction(
         owner.id,
-        input({ accountId: account.id, categoryId: foreignCategory.id }),
+        transactionInput({ accountId: account.id, categoryId: foreignCategory.id }),
       ),
     ).rejects.toThrow(NotFoundError);
   });
@@ -334,11 +321,11 @@ describe("isolamento entre usuários", () => {
     const account = await makeAccount(owner.id, { initialBalance: "1000.00" });
     const created = await createTransaction(
       owner.id,
-      input({ accountId: account.id, amount: 100 }),
+      transactionInput({ accountId: account.id, amount: 100 }),
     );
 
     await expect(
-      updateTransaction(intruder.id, created.id, input({ accountId: account.id, amount: 1 })),
+      updateTransaction(intruder.id, created.id, transactionInput({ accountId: account.id, amount: 1 })),
     ).rejects.toThrow(NotFoundError);
     await expect(deleteTransaction(intruder.id, created.id)).rejects.toThrow(NotFoundError);
 
@@ -351,8 +338,8 @@ describe("isolamento entre usuários", () => {
     const ownerAccount = await makeAccount(owner.id);
     const otherAccount = await makeAccount(other.id);
 
-    await createTransaction(owner.id, input({ accountId: ownerAccount.id }));
-    await createTransaction(other.id, input({ accountId: otherAccount.id }));
+    await createTransaction(owner.id, transactionInput({ accountId: ownerAccount.id }));
+    await createTransaction(other.id, transactionInput({ accountId: otherAccount.id }));
 
     const listed = await listMonthTransactions(owner.id, 2026, 8);
 
@@ -367,7 +354,7 @@ describe("listagem por competência", () => {
     const account = await makeAccount(user.id);
 
     for (const date of ["2026-07-31", "2026-08-01", "2026-08-31", "2026-09-01"]) {
-      await createTransaction(user.id, input({ accountId: account.id, date, description: date }));
+      await createTransaction(user.id, transactionInput({ accountId: account.id, date, description: date }));
     }
 
     const listed = await listMonthTransactions(user.id, 2026, 8);
@@ -382,7 +369,7 @@ describe("listagem por competência", () => {
 
     await createTransaction(
       user.id,
-      input({ accountId: account.id, categoryId: category.id }),
+      transactionInput({ accountId: account.id, categoryId: category.id }),
     );
 
     const [item] = await listMonthTransactions(user.id, 2026, 8);
@@ -434,7 +421,7 @@ describe("lançamentos que pertencem a outro serviço", () => {
     const before = await balanceOf(account.id);
 
     await expect(
-      updateTransaction(user.id, settlement.id, input({ accountId: account.id, amount: 5 })),
+      updateTransaction(user.id, settlement.id, transactionInput({ accountId: account.id, amount: 5 })),
     ).rejects.toThrow(InvalidOperationError);
     await expect(deleteTransaction(user.id, settlement.id)).rejects.toThrow(InvalidOperationError);
 
@@ -472,7 +459,7 @@ describe("lançamentos que pertencem a outro serviço", () => {
     const before = await balanceOf(account.id);
 
     await expect(
-      updateTransaction(user.id, payment.id, input({ accountId: account.id, amount: 5 })),
+      updateTransaction(user.id, payment.id, transactionInput({ accountId: account.id, amount: 5 })),
     ).rejects.toThrow(InvalidOperationError);
     await expect(deleteTransaction(user.id, payment.id)).rejects.toThrow(InvalidOperationError);
 
@@ -491,7 +478,7 @@ describe("lançamentos que pertencem a outro serviço", () => {
     const person = await makePerson(user.id);
     const card = await makeCreditCard(user.id, { closingDay: 20, dueDay: 5 });
 
-    await createTransaction(user.id, input({ accountId: account.id, description: "Mercado" }));
+    await createTransaction(user.id, transactionInput({ accountId: account.id, description: "Mercado" }));
 
     await createDebt(user.id, {
       personId: person.id,

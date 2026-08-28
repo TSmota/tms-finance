@@ -13,8 +13,8 @@ import {
   updateDebt,
 } from "@/lib/debts";
 import { getPeopleOverview, deletePerson } from "@/lib/people";
-import type { DebtInput, DebtSettlementInput } from "@/lib/validations";
 import { makeAccount, makeCategory, makePerson, makeUser } from "@tests/support/factories";
+import { debtInput, debtSettlementInput } from "@tests/support/inputs";
 import { expectBalance } from "@tests/support/money";
 import { setFxAvailable, setRates } from "@tests/setup-fx";
 
@@ -26,35 +26,6 @@ import { setFxAvailable, setRates } from "@tests/setup-fx";
  * única forma de verificar isso é conferindo os dois lados depois de cada
  * operação.
  */
-
-function debtInput(
-  overrides: Partial<DebtInput> & { personId: string; categoryId: string; accountId: string },
-): DebtInput {
-  return {
-    type: "LENT",
-    description: "Empréstimo de teste",
-    amount: 200,
-    currency: "BRL",
-    date: "2026-08-06",
-    dueDate: null,
-    manualFxRate: null,
-    ...overrides,
-  };
-}
-
-function settlementInput(
-  overrides: Partial<DebtSettlementInput> & { accountId: string },
-): DebtSettlementInput {
-  return {
-    amount: 80,
-    currency: "BRL",
-    date: "2026-08-16",
-    categoryId: null,
-    description: null,
-    manualFxRate: null,
-    ...overrides,
-  };
-}
 
 /** Cenário mínimo: usuário, conta com saldo, categoria de origem e pessoa. */
 async function scenario(options: { initialBalance?: string; currency?: "BRL" | "USD" } = {}) {
@@ -120,7 +91,7 @@ describe("empréstimo feito (LENT)", () => {
       debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 80 }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 80 }));
 
     expect(await state(user.id, debt.id, account.id)).toEqual({
       total: "200.00",
@@ -139,8 +110,8 @@ describe("empréstimo feito (LENT)", () => {
       debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 80 }));
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 120 }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 80 }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 120 }));
 
     expect(await state(user.id, debt.id, account.id)).toEqual({
       total: "200.00",
@@ -160,7 +131,7 @@ describe("empréstimo feito (LENT)", () => {
       debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id }));
 
     const { movements } = await getDebtDetail(user.id, debt.id);
 
@@ -179,7 +150,7 @@ describe("empréstimo feito (LENT)", () => {
     await settleDebt(
       user.id,
       debt.id,
-      settlementInput({ accountId: account.id, categoryId: other.id }),
+      debtSettlementInput({ accountId: account.id, categoryId: other.id }),
     );
 
     const { movements } = await getDebtDetail(user.id, debt.id);
@@ -230,7 +201,7 @@ describe("empréstimo recebido (BORROWED)", () => {
       }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 100 }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 100 }));
 
     expect(await state(user.id, debt.id, account.id)).toEqual({
       total: "300.00",
@@ -257,10 +228,10 @@ describe("limites da amortização", () => {
       debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 80 }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 80 }));
 
     await expect(
-      settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 120.01 })),
+      settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 120.01 })),
     ).rejects.toThrow(InvalidOperationError);
 
     expect(await state(user.id, debt.id, account.id)).toEqual({
@@ -281,10 +252,10 @@ describe("limites da amortização", () => {
       debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 200 }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 200 }));
 
     await expect(
-      settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 1 })),
+      settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 1 })),
     ).rejects.toThrow(InvalidOperationError);
   });
 
@@ -301,8 +272,8 @@ describe("limites da amortização", () => {
       }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 0.01 }));
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 0.02 }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 0.01 }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 0.02 }));
 
     expect(await state(user.id, debt.id, account.id)).toMatchObject({
       restante: "0.00",
@@ -323,8 +294,8 @@ describe("limites da amortização", () => {
     );
 
     const results = await Promise.allSettled([
-      settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 200 })),
-      settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 200 })),
+      settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 200 })),
+      settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 200 })),
     ]);
 
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
@@ -351,7 +322,7 @@ describe("remoção", () => {
     const settlement = await settleDebt(
       user.id,
       debt.id,
-      settlementInput({ accountId: account.id, amount: 80 }),
+      debtSettlementInput({ accountId: account.id, amount: 80 }),
     );
 
     await deleteSettlement(user.id, settlement.id);
@@ -379,7 +350,7 @@ describe("remoção", () => {
     const settlement = await settleDebt(
       user.id,
       debt.id,
-      settlementInput({ accountId: account.id, amount: 80 }),
+      debtSettlementInput({ accountId: account.id, amount: 80 }),
     );
 
     // Desfaz o efeito no saldo e volta a linha para pendente, como se ela
@@ -424,7 +395,7 @@ describe("remoção", () => {
       debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 80 }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 80 }));
     await deleteDebt(user.id, debt.id);
 
     expect(await prisma.debt.count({ where: { userId: user.id } })).toBe(0);
@@ -445,7 +416,7 @@ describe("edição da dívida", () => {
       debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 80 }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 80 }));
 
     await updateDebt(
       user.id,
@@ -477,7 +448,7 @@ describe("edição da dívida", () => {
       debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 150 }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 150 }));
 
     await expect(
       updateDebt(
@@ -576,7 +547,7 @@ describe("moedas", () => {
     await settleDebt(
       user.id,
       debt.id,
-      settlementInput({ accountId: account.id, amount: 40, currency: "USD" }),
+      debtSettlementInput({ accountId: account.id, amount: 40, currency: "USD" }),
     );
 
     expect(await state(user.id, debt.id, account.id)).toEqual({
@@ -606,7 +577,7 @@ describe("moedas", () => {
     await settleDebt(
       user.id,
       debt.id,
-      settlementInput({ accountId: account.id, amount: 108, currency: "BRL" }),
+      debtSettlementInput({ accountId: account.id, amount: 108, currency: "BRL" }),
     );
 
     expect(await state(user.id, debt.id, account.id)).toMatchObject({
@@ -637,7 +608,7 @@ describe("moedas", () => {
     await settleDebt(
       user.id,
       debt.id,
-      settlementInput({
+      debtSettlementInput({
         accountId: account.id,
         amount: 108,
         currency: "BRL",
@@ -675,7 +646,7 @@ describe("moedas", () => {
     await settleDebt(
       user.id,
       debt.id,
-      settlementInput({
+      debtSettlementInput({
         accountId: account.id,
         amount: 20,
         currency: "EUR",
@@ -729,7 +700,7 @@ describe("posição por pessoa", () => {
         amount: 200,
       }),
     );
-    await settleDebt(user.id, lent.id, settlementInput({ accountId: account.id, amount: 80 }));
+    await settleDebt(user.id, lent.id, debtSettlementInput({ accountId: account.id, amount: 80 }));
 
     await createDebt(
       user.id,
@@ -771,7 +742,7 @@ describe("posição por pessoa", () => {
       debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 200 }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 200 }));
 
     const overview = await getPeopleOverview(user.id, "BRL");
 
@@ -856,7 +827,7 @@ describe("posição por pessoa", () => {
 
     await expect(deletePerson(user.id, person.id)).rejects.toThrow(InvalidOperationError);
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 200 }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 200 }));
 
     // Quitada: a remoção passa, e o dinheiro movimentado fica no fluxo de caixa.
     await deletePerson(user.id, person.id);
@@ -875,7 +846,7 @@ describe("histórico e isolamento", () => {
       debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
     );
 
-    await settleDebt(user.id, debt.id, settlementInput({ accountId: account.id, amount: 80 }));
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 80 }));
 
     const { debt: summary, movements } = await getDebtDetail(user.id, debt.id);
 
@@ -913,7 +884,7 @@ describe("histórico e isolamento", () => {
         description: "Quitada",
       }),
     );
-    await settleDebt(user.id, paid.id, settlementInput({ accountId: account.id, amount: 10 }));
+    await settleDebt(user.id, paid.id, debtSettlementInput({ accountId: account.id, amount: 10 }));
 
     await createDebt(
       user.id,
@@ -942,7 +913,7 @@ describe("histórico e isolamento", () => {
     await expect(getDebtDetail(intruder.id, debt.id)).rejects.toThrow(NotFoundError);
     await expect(deleteDebt(intruder.id, debt.id)).rejects.toThrow(NotFoundError);
     await expect(
-      settleDebt(intruder.id, debt.id, settlementInput({ accountId: account.id })),
+      settleDebt(intruder.id, debt.id, debtSettlementInput({ accountId: account.id })),
     ).rejects.toThrow(NotFoundError);
     expect(await listDebts(intruder.id)).toEqual([]);
   });

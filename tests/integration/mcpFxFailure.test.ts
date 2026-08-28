@@ -5,6 +5,8 @@ import { createTransaction } from "@/lib/transactions";
 import { transactionSchema } from "@/lib/validations";
 import { runTool } from "@/mcp/guard";
 import { makeAccount, makeCategory, makeUser } from "@tests/support/factories";
+import { transactionInput } from "@tests/support/inputs";
+import { expectBalance } from "@tests/support/money";
 import { setFxAvailable, setRates } from "@tests/setup-fx";
 import { auditFor, ctxFor, makeAgent, readResult } from "@tests/support/mcpHarness";
 
@@ -33,16 +35,12 @@ async function scenario() {
 
 /** Gasto em USD numa conta BRL: precisa de conversão para mover o saldo. */
 function foreignExpense(accountId: string, manualFxRate: number | null) {
-  return {
+  return transactionInput({
     accountId,
-    categoryId: null,
-    type: "EXPENSE" as const,
-    amount: 100,
-    currency: "USD" as const,
-    date: "2026-08-15",
+    currency: "USD",
     description: "Compra em dólar",
     manualFxRate,
-  };
+  });
 }
 
 function call(ctx: ReturnType<typeof ctxFor>, input: unknown) {
@@ -107,12 +105,7 @@ describe("cotação indisponível", () => {
     expect(row.exchangeRate.toFixed(4)).toBe("5.0000");
     expect(row.convertedAmount.toFixed(2)).toBe("500.00");
 
-    const account2 = await prisma.financialAccount.findUniqueOrThrow({
-      where: { id: account.id },
-      select: { currentBalance: true },
-    });
-
-    expect(account2.currentBalance.toFixed(2)).toBe("500.00");
+    await expectBalance(account.id, "500.00");
   });
 
   it("com cotação disponível, converte sem pedir nada", async () => {
