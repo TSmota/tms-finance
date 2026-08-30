@@ -181,9 +181,12 @@ export function registerWriteTools(server: McpServer): void {
   defineTool(server, "create_debt", {
     title: "Registrar empréstimo",
     description:
-      "Registra um empréstimo entre pessoas e lança a movimentação de origem na " +
-      "conta. `type: LENT` = o usuário emprestou (sai da conta); `BORROWED` = " +
-      `pegou emprestado (entra). \`categoryId\` é obrigatória. ${FX_NOTE}`,
+      "Registra um empréstimo entre pessoas e lança a movimentação de origem. " +
+      "`type: LENT` = o usuário emprestou (sai o dinheiro); `BORROWED` = pegou " +
+      "emprestado (entra). Informe exatamente uma origem: `accountId` (move o " +
+      "saldo na hora) ou `creditCardId` (entra na fatura da competência e só sai " +
+      "quando a fatura for paga). Origem no cartão exige `type: LENT` e aceita " +
+      `\`installments\` > 1, que divide em faturas consecutivas. \`categoryId\` é obrigatória. ${FX_NOTE}`,
     schema: debtSchema,
     run: (agent, input) => debts.createDebt(agent.userId, input),
     serialize: (row) => ({ id: row.id }),
@@ -195,7 +198,10 @@ export function registerWriteTools(server: McpServer): void {
     title: "Editar empréstimo",
     description:
       "Substitui os dados da dívida e reajusta a movimentação de origem e os saldos. " +
-      "Não pode reduzir o valor original abaixo do que já foi amortizado.",
+      "A origem pode trocar de conta para cartão e vice-versa: informe o destino " +
+      "novo em `accountId` ou `creditCardId`. Leia `origin` em list_debts antes, " +
+      "ou o salvar move o lançamento de lugar. Não pode reduzir o valor original " +
+      "abaixo do que já foi amortizado, e recusa quando a origem está em fatura paga.",
     schema: updateDebtArgs,
     run: (agent, input) => debts.updateDebt(agent.userId, input.id, input.data),
     serialize: (row) => ({ id: row.id }),

@@ -12,8 +12,15 @@ import {
   settleDebt,
   updateDebt,
 } from "@/lib/debts";
+import { payInvoice } from "@/lib/invoicePayments";
 import { getPeopleOverview, deletePerson } from "@/lib/people";
-import { makeAccount, makeCategory, makePerson, makeUser } from "@tests/support/factories";
+import {
+  makeAccount,
+  makeCategory,
+  makeCreditCard,
+  makePerson,
+  makeUser,
+} from "@tests/support/factories";
 import { debtInput, debtSettlementInput } from "@tests/support/inputs";
 import { expectBalance } from "@tests/support/money";
 import { setFxAvailable, setRates } from "@tests/setup-fx";
@@ -40,6 +47,33 @@ async function scenario(options: { initialBalance?: string; currency?: "BRL" | "
   return { user, account, category, person };
 }
 
+/** Cenário com cartão: fecha dia 20, vence dia 5. */
+async function cardScenario(options: { currency?: "BRL" | "USD" } = {}) {
+  const shared = await scenario();
+  const card = await makeCreditCard(shared.user.id, {
+    name: "Nubank",
+    closingDay: 20,
+    dueDay: 5,
+    currency: options.currency ?? "BRL",
+  });
+
+  return { ...shared, card };
+}
+
+/** Faturas do cartão, em ordem de competência, com o total de cada uma. */
+async function invoices(cardId: string) {
+  const rows = await prisma.invoice.findMany({
+    where: { creditCardId: cardId },
+    orderBy: [{ year: "asc" }, { month: "asc" }],
+  });
+
+  return rows.map((row) => ({
+    competencia: `${row.year}-${String(row.month).padStart(2, "0")}`,
+    total: row.totalAmount.toFixed(2),
+    status: row.status,
+  }));
+}
+
 /** Estado das duas pontas, para asserção em uma linha. */
 async function state(userId: string, debtId: string, accountId: string) {
   const debt = await prisma.debt.findUniqueOrThrow({ where: { id: debtId } });
@@ -57,6 +91,180 @@ async function state(userId: string, debtId: string, accountId: string) {
 
 beforeEach(() => {
   setRates({ "USD->BRL": 5.4, "BRL->USD": 0.1852 });
+});
+
+describe("origem no cartão", () => {
+  it("lança a origem na fatura e não move saldo de conta", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 300,
+        // Dia 6 é antes do fechamento (20): entra na fatura de agosto.
+        date: "2026-08-06",
+      }),
+    );
+
+    expect(await invoices(card.id)).toEqual([
+      { competencia: "2026-08", total: "300.00", status: "OPEN" },
+    ]);
+
+    // O dinheiro só sai quando a fatura é paga.
+    const saldo = await prisma.financialAccount.findUniqueOrThrow({
+      where: { id: account.id },
+    });
+
+    expect(saldo.currentBalance.toFixed(2)).toBe("1000.00");
+    expect(await recomputeBalance(account.id)).toEqual(saldo.currentBalance);
+
+    const origin = await prisma.transaction.findFirstOrThrow({
+      where: { debtId: debt.id },
+    });
+
+    expect(origin.accountId).toBeNull();
+    expect(origin.creditCardId).toBe(card.id);
+    expect(origin.categoryId).toBe(category.id);
+    expect(origin.type).toBe("EXPENSE");
+  });
+
+  it("compra depois do fechamento cai na fatura do mês seguinte", async () => {
+    const { user, category, person, card } = await cardScenario();
+
+    await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 100,
+        // Dia 21 é depois do fechamento (20).
+        date: "2026-08-21",
+      }),
+    );
+
+    expect(await invoices(card.id)).toEqual([
+      { competencia: "2026-09", total: "100.00", status: "OPEN" },
+    ]);
+  });
+
+  it("parcela em faturas consecutivas, com os centavos na primeira", async () => {
+    const { user, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 100,
+        installments: 3,
+        date: "2026-08-06",
+      }),
+    );
+
+    expect(await invoices(card.id)).toEqual([
+      { competencia: "2026-08", total: "33.34", status: "OPEN" },
+      { competencia: "2026-09", total: "33.33", status: "OPEN" },
+      { competencia: "2026-10", total: "33.33", status: "OPEN" },
+    ]);
+
+    const parcelas = await prisma.transaction.findMany({
+      where: { debtId: debt.id },
+      orderBy: { installmentNumber: "asc" },
+    });
+
+    expect(
+      parcelas.map((row) => ({
+        n: row.installmentNumber,
+        de: row.totalInstallments,
+        valor: row.amount.toFixed(2),
+        data: row.date.toISOString().slice(0, 10),
+      })),
+    ).toEqual([
+      { n: 1, de: 3, valor: "33.34", data: "2026-08-06" },
+      { n: 2, de: 3, valor: "33.33", data: "2026-08-06" },
+      { n: 3, de: 3, valor: "33.33", data: "2026-08-06" },
+    ]);
+
+    // A 1ª parcela é a âncora; as seguintes apontam para ela.
+    const ancora = parcelas[0]!;
+
+    expect(ancora.parentInstallmentId).toBeNull();
+    expect(parcelas.slice(1).every((row) => row.parentInstallmentId === ancora.id)).toBe(true);
+
+    // A soma das parcelas é exatamente o total da dívida.
+    const gravada = await prisma.debt.findUniqueOrThrow({ where: { id: debt.id } });
+
+    expect(gravada.originalAmount.toFixed(2)).toBe("100.00");
+  });
+
+  it("recusa BORROWED com origem no cartão", async () => {
+    const { user, category, person, card } = await cardScenario();
+
+    await expect(
+      createDebt(
+        user.id,
+        debtInput({
+          personId: person.id,
+          categoryId: category.id,
+          creditCardId: card.id,
+          type: "BORROWED",
+        }),
+      ),
+    ).rejects.toThrow();
+
+    expect(await invoices(card.id)).toEqual([]);
+  });
+
+  it("recusa cartão de outro usuário", async () => {
+    const { user, category, person } = await cardScenario();
+    const outro = await makeUser();
+    const cartaoAlheio = await makeCreditCard(outro.id);
+
+    await expect(
+      createDebt(
+        user.id,
+        debtInput({
+          personId: person.id,
+          categoryId: category.id,
+          creditCardId: cartaoAlheio.id,
+        }),
+      ),
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it("amortiza em conta uma dívida originada no cartão", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 300,
+        date: "2026-08-06",
+      }),
+    );
+
+    await settleDebt(user.id, debt.id, debtSettlementInput({ accountId: account.id, amount: 120 }));
+
+    expect(await state(user.id, debt.id, account.id)).toMatchObject({
+      total: "300.00",
+      restante: "180.00",
+      status: "PARTIALLY_PAID",
+      // O recebimento entra na conta; a fatura não é tocada.
+      saldo: "1120.00",
+    });
+
+    expect(await invoices(card.id)).toEqual([
+      { competencia: "2026-08", total: "300.00", status: "OPEN" },
+    ]);
+  });
 });
 
 describe("empréstimo feito (LENT)", () => {
@@ -405,9 +613,269 @@ describe("remoção", () => {
 
     expect(stored.currentBalance.toFixed(2)).toBe("1000.00");
   });
+
+  it("remover dívida com origem no cartão recalcula as faturas", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 90,
+        installments: 3,
+        date: "2026-08-06",
+      }),
+    );
+
+    await settleDebt(
+      user.id,
+      debt.id,
+      debtSettlementInput({ accountId: account.id, amount: 30 }),
+    );
+
+    await deleteDebt(user.id, debt.id);
+
+    // As três faturas ficaram vazias e foram apagadas.
+    expect(await invoices(card.id)).toEqual([]);
+    expect(await prisma.transaction.count({ where: { userId: user.id } })).toBe(0);
+
+    // O saldo volta ao inicial: a amortização foi estornada, a origem nunca o tocou.
+    const saldo = await prisma.financialAccount.findUniqueOrThrow({
+      where: { id: account.id },
+    });
+
+    expect(saldo.currentBalance.toFixed(2)).toBe("1000.00");
+  });
+
+  it("recusa remover dívida cuja origem está em fatura paga", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 200,
+        date: "2026-08-06",
+      }),
+    );
+
+    const invoice = await prisma.invoice.findFirstOrThrow({
+      where: { creditCardId: card.id },
+    });
+
+    await payInvoice(user.id, invoice.id, {
+      accountId: account.id,
+      date: "2026-09-05",
+      manualFxRate: null,
+    });
+
+    await expect(deleteDebt(user.id, debt.id)).rejects.toThrow(InvalidOperationError);
+
+    expect(await prisma.debt.count({ where: { id: debt.id } })).toBe(1);
+    expect(await invoices(card.id)).toEqual([
+      { competencia: "2026-08", total: "200.00", status: "PAID" },
+    ]);
+  });
 });
 
 describe("edição da dívida", () => {
+  it("conta → cartão: estorna o saldo e abre a fatura", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
+    );
+
+    expect(await state(user.id, debt.id, account.id)).toMatchObject({ saldo: "800.00" });
+
+    await updateDebt(
+      user.id,
+      debt.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 200,
+        date: "2026-08-06",
+      }),
+    );
+
+    // O saldo volta ao que era: o dinheiro agora sai quando a fatura for paga.
+    expect(await state(user.id, debt.id, account.id)).toMatchObject({
+      total: "200.00",
+      restante: "200.00",
+      saldo: "1000.00",
+    });
+    expect(await invoices(card.id)).toEqual([
+      { competencia: "2026-08", total: "200.00", status: "OPEN" },
+    ]);
+    expect(await recomputeBalance(account.id)).toEqual(
+      (await prisma.financialAccount.findUniqueOrThrow({ where: { id: account.id } }))
+        .currentBalance,
+    );
+  });
+
+  it("cartão → conta: recalcula a fatura, apaga a que ficou vazia e debita", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 200,
+        date: "2026-08-06",
+      }),
+    );
+
+    await updateDebt(
+      user.id,
+      debt.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        accountId: account.id,
+        amount: 200,
+        date: "2026-08-06",
+      }),
+    );
+
+    // A fatura ficou sem lançamento nenhum e foi apagada.
+    expect(await invoices(card.id)).toEqual([]);
+    expect(await state(user.id, debt.id, account.id)).toMatchObject({
+      total: "200.00",
+      saldo: "800.00",
+    });
+  });
+
+  it("cartão → cartão: 3x vira 6x e redistribui as faturas", async () => {
+    const { user, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 90,
+        installments: 3,
+        date: "2026-08-06",
+      }),
+    );
+
+    expect(await invoices(card.id)).toHaveLength(3);
+
+    await updateDebt(
+      user.id,
+      debt.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 120,
+        installments: 6,
+        date: "2026-08-06",
+      }),
+    );
+
+    expect(await invoices(card.id)).toEqual([
+      { competencia: "2026-08", total: "20.00", status: "OPEN" },
+      { competencia: "2026-09", total: "20.00", status: "OPEN" },
+      { competencia: "2026-10", total: "20.00", status: "OPEN" },
+      { competencia: "2026-11", total: "20.00", status: "OPEN" },
+      { competencia: "2026-12", total: "20.00", status: "OPEN" },
+      { competencia: "2027-01", total: "20.00", status: "OPEN" },
+    ]);
+  });
+
+  it("preserva o valor já amortizado ao trocar de destino", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({ personId: person.id, categoryId: category.id, accountId: account.id }),
+    );
+
+    await settleDebt(
+      user.id,
+      debt.id,
+      debtSettlementInput({ accountId: account.id, amount: 80 }),
+    );
+
+    await updateDebt(
+      user.id,
+      debt.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 200,
+        date: "2026-08-06",
+      }),
+    );
+
+    expect(await state(user.id, debt.id, account.id)).toMatchObject({
+      total: "200.00",
+      restante: "120.00",
+      status: "PARTIALLY_PAID",
+      // 1000 − 200 (origem estornada) + 80 (amortização, intacta) = 1080.
+      saldo: "1080.00",
+    });
+  });
+
+  it("recusa editar dívida cuja origem está em fatura paga", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 200,
+        date: "2026-08-06",
+      }),
+    );
+
+    const invoice = await prisma.invoice.findFirstOrThrow({
+      where: { creditCardId: card.id },
+    });
+
+    await payInvoice(user.id, invoice.id, {
+      accountId: account.id,
+      date: "2026-09-05",
+      manualFxRate: null,
+    });
+
+    await expect(
+      updateDebt(
+        user.id,
+        debt.id,
+        debtInput({
+          personId: person.id,
+          categoryId: category.id,
+          creditCardId: card.id,
+          amount: 500,
+          date: "2026-08-06",
+        }),
+      ),
+    ).rejects.toThrow(InvalidOperationError);
+
+    // Nada mudou: nem a dívida, nem a fatura.
+    const gravada = await prisma.debt.findUniqueOrThrow({ where: { id: debt.id } });
+
+    expect(gravada.originalAmount.toFixed(2)).toBe("200.00");
+    expect(await invoices(card.id)).toEqual([
+      { competencia: "2026-08", total: "200.00", status: "PAID" },
+    ]);
+  });
+
   it("aumentar o total ajusta a origem, o restante e o saldo", async () => {
     const { user, account, category, person } = await scenario();
 
@@ -857,6 +1325,8 @@ describe("histórico e isolamento", () => {
       remainingAmount: 120,
       settledAmount: 80,
       settlementCount: 1,
+      originInstallments: 1,
+      originTarget: { kind: "account", id: account.id },
     });
 
     expect(
@@ -869,6 +1339,105 @@ describe("histórico e isolamento", () => {
       { data: "2026-08-06", origem: true, valor: 200 },
       { data: "2026-08-16", origem: false, valor: 80 },
     ]);
+  });
+
+  it("expõe a origem em cartão para o formulário de edição", async () => {
+    const { user, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 90,
+        installments: 3,
+        date: "2026-08-06",
+      }),
+    );
+
+    const [item] = await listDebts(user.id);
+
+    expect(item).toMatchObject({
+      originTarget: { kind: "card", id: card.id },
+      originAccountId: null,
+      originInstallments: 3,
+      originLocked: false,
+      originCardName: "Nubank",
+      // As três parcelas são origem, não amortização.
+      settlementCount: 0,
+    });
+    expect(item?.originDate?.toISOString().slice(0, 10)).toBe("2026-08-06");
+    expect(debt.id).toBe(item?.id);
+  });
+
+  it("marca todas as parcelas da origem no histórico", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 90,
+        installments: 3,
+        date: "2026-08-06",
+      }),
+    );
+
+    await settleDebt(
+      user.id,
+      debt.id,
+      debtSettlementInput({ accountId: account.id, amount: 30 }),
+    );
+
+    const { debt: summary, movements } = await getDebtDetail(user.id, debt.id);
+
+    expect(summary.settlementCount).toBe(1);
+    expect(
+      movements.map((movement) => ({
+        origem: movement.isOrigin,
+        parcela: movement.installmentNumber,
+        de: movement.totalInstallments,
+        cartao: movement.cardName,
+        conta: movement.accountName,
+      })),
+    ).toEqual([
+      { origem: true, parcela: 1, de: 3, cartao: "Nubank", conta: null },
+      { origem: true, parcela: 2, de: 3, cartao: "Nubank", conta: null },
+      { origem: true, parcela: 3, de: 3, cartao: "Nubank", conta: null },
+      { origem: false, parcela: null, de: null, cartao: null, conta: expect.any(String) },
+    ]);
+  });
+
+  it("marca a origem como travada quando a fatura foi paga", async () => {
+    const { user, account, category, person, card } = await cardScenario();
+
+    await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        creditCardId: card.id,
+        amount: 200,
+        date: "2026-08-06",
+      }),
+    );
+
+    const invoice = await prisma.invoice.findFirstOrThrow({
+      where: { creditCardId: card.id },
+    });
+
+    await payInvoice(user.id, invoice.id, {
+      accountId: account.id,
+      date: "2026-09-05",
+      manualFxRate: null,
+    });
+
+    const [item] = await listDebts(user.id);
+
+    expect(item?.originLocked).toBe(true);
   });
 
   it("ordena dívidas em aberto antes das quitadas", async () => {

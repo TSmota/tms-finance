@@ -29,12 +29,8 @@ import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { ConfirmPendingButton } from "@/components/forms/ConfirmPendingButton";
 import type { AccountOption, Option } from "@/lib/options";
 import type { TransactionRow } from "@/lib/transactionRow";
+import { MANAGED_BY_LABEL } from "@/lib/managedBy";
 import { CategoryBadge } from "@/components/ui/CategoryBadge";
-
-const MANAGED_BY_LABEL = {
-  debt: { label: "Dívida", hint: "Ajuste pela tela de dívidas" },
-  invoice: { label: "Fatura", hint: "Desfaça o pagamento pela tela do cartão" },
-} as const;
 
 interface TransactionsTableProps {
   transactions: TransactionRow[];

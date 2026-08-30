@@ -49,3 +49,10 @@ export const DEBT_TYPE_OPTIONS = DEBT_TYPE_CODES.map((code) => ({
   value: code,
   label: DEBT_TYPE_LABELS[code],
 }));
+
+/** Dívida recebida exige conta; cartão só pode originar valor emprestado. */
+export function availableDebtTypeOptions(hasAccount: boolean): typeof DEBT_TYPE_OPTIONS {
+  return hasAccount
+    ? DEBT_TYPE_OPTIONS
+    : DEBT_TYPE_OPTIONS.filter((option) => option.value === "LENT");
+}

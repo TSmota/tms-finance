@@ -7,7 +7,7 @@ import { updateRecurringExpense } from "@/actions/recurring";
 import { FormModal } from "@/components/ui/FormModal";
 import { IconButton } from "@/components/ui/IconButton";
 import { useActionModal } from "@/components/ui/useActionModal";
-import { splitTarget } from "@/lib/recurringTarget";
+import { splitTarget } from "@/lib/paymentTarget";
 import {
   RecurringFields,
   validateRecurring,

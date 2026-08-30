@@ -260,6 +260,8 @@ export interface InvoiceItem {
   categoryColor: string | null;
   installmentNumber: number | null;
   totalInstallments: number | null;
+  /** Preenchido quando o lançamento pertence a uma dívida. */
+  debtId: string | null;
   /** 1ª parcela do grupo — a âncora que identifica a compra inteira. */
   anchorId: string;
   /**
@@ -326,6 +328,7 @@ export async function listItemsByInvoice(
       categoryColor: item.category?.color ?? null,
       installmentNumber: item.installmentNumber,
       totalInstallments: item.totalInstallments,
+      debtId: item.debtId,
       anchorId,
       groupTotal: totalByAnchor.get(anchorId) ?? item.amount.toNumber(),
       fromRecurring: item.recurringExpenseId !== null,

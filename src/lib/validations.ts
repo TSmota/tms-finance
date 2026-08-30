@@ -318,24 +318,48 @@ const optionalCalendarDateSchema = z
   .optional()
   .transform((value) => (value ? value : null));
 
-export const debtSchema = z.object({
-  personId: idSchema,
-  /** Motivo/origem: obrigatória, diferente das transações comuns. */
-  categoryId: idSchema,
-  type: z.enum(DEBT_TYPE_CODES, { message: "Tipo de dívida inválido" }),
-  description: requiredText(TEXT_LIMITS.description, "Descrição é obrigatória"),
-  amount: positiveAmountSchema,
-  currency: currencySchema,
-  /** Conta pela qual o dinheiro saiu (LENT) ou entrou (BORROWED). */
-  accountId: idSchema,
-  date: calendarDateSchema,
-  dueDate: optionalCalendarDateSchema,
-  manualFxRate: z.coerce
-    .number()
-    .positive("A taxa de câmbio deve ser positiva")
-    .optional()
-    .nullable(),
-});
+export const debtSchema = z
+  .object({
+    personId: idSchema,
+    /** Motivo/origem: obrigatória, diferente das transações comuns. */
+    categoryId: idSchema,
+    type: z.enum(DEBT_TYPE_CODES, { message: "Tipo de dívida inválido" }),
+    description: requiredText(TEXT_LIMITS.description, "Descrição é obrigatória"),
+    amount: positiveAmountSchema,
+    currency: currencySchema,
+    /** Origem do dinheiro: conta pela qual ele passou, ou cartão em que foi lançado. */
+    accountId: optionalIdSchema,
+    creditCardId: optionalIdSchema,
+    /** Só no cartão: divide a origem em parcelas sequenciais. */
+    installments: z.coerce
+      .number()
+      .int("O número de parcelas deve ser inteiro")
+      .min(1, "Mínimo de 1 parcela")
+      .max(MAX_INSTALLMENTS, `Máximo de ${MAX_INSTALLMENTS} parcelas`)
+      .default(1),
+    date: calendarDateSchema,
+    dueDate: optionalCalendarDateSchema,
+    manualFxRate: z.coerce
+      .number()
+      .positive("A taxa de câmbio deve ser positiva")
+      .optional()
+      .nullable(),
+  })
+  // O banco tem CHECK equivalente; validar aqui devolve mensagem em vez de erro
+  // de constraint, e o formulário aponta o campo certo.
+  .refine((value) => (value.accountId === null) !== (value.creditCardId === null), {
+    message: "Escolha a origem: conta bancária ou cartão de crédito",
+    path: ["accountId"],
+  })
+  // A origem de BORROWED é uma entrada, e o total da fatura não tem sinal.
+  .refine((value) => value.creditCardId === null || value.type === "LENT", {
+    message: "Só empréstimo feito pelo usuário pode ter origem no cartão",
+    path: ["creditCardId"],
+  })
+  .refine((value) => value.installments === 1 || value.creditCardId !== null, {
+    message: "Parcelamento só existe na origem em cartão",
+    path: ["installments"],
+  });
 
 /** Abate parcial ou total. */
 export const debtSettlementSchema = z.object({

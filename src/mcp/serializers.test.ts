@@ -115,9 +115,32 @@ const debt = {
   categoryName: "Mercado",
   categoryColor: "#fff",
   settlementCount: 2,
-  originAccountId: "a1",
+  originTarget: { kind: "card" as const, id: "c1" },
+  originAccountId: null,
   originDate: new Date("2026-07-01T00:00:00Z"),
+  originInstallments: 3,
+  originLocked: false,
+  originCardName: "Nubank",
   createdAt: new Date("2026-07-01T00:00:00Z"),
+};
+
+const debtMovement = {
+  id: "t2",
+  description: "Empréstimo (2/3)",
+  date: new Date("2026-08-01T00:00:00Z"),
+  isOrigin: true,
+  amount: 333.33,
+  currency: BRL,
+  convertedAmount: 333.33,
+  accountId: null,
+  accountName: null,
+  accountCurrency: null,
+  creditCardId: "c1",
+  cardName: "Nubank",
+  installmentNumber: 2,
+  totalInstallments: 3,
+  categoryName: "Mercado",
+  categoryColor: "#fff",
 };
 
 /** Uma amostra de cada projeção, para a varredura ter o que varrer. */
@@ -162,7 +185,7 @@ const samples: Array<[string, unknown]> = [
   ["accounts", dto.accountsDto({ accounts: [account], netWorth: 1234.5, netWorthComplete: true }, BRL)],
   ["transactions", dto.transactionsDto([transaction])],
   ["debts", dto.debtsDto([debt])],
-  ["debtDetail", dto.debtDetailDto({ debt, movements: [] })],
+  ["debtDetail", dto.debtDetailDto({ debt, movements: [debtMovement] })],
   [
     "people",
     dto.peopleOverviewDto(
@@ -253,6 +276,69 @@ describe("projeções para o agente", () => {
 
   it("propaga complete: false para o agente relatar a incerteza", () => {
     expect(dto.monthSummaryDto(monthSummary, BRL).complete).toBe(false);
+  });
+
+  it("expõe origem da dívida e parcelas do movimento", () => {
+    const payload = dto.debtDetailDto({ debt, movements: [debtMovement] });
+
+    expect(payload.debt).toMatchObject({
+      origin: { kind: "card", id: "c1", installments: 3 },
+      origin_locked: false,
+    });
+    expect(payload.movements[0]).toMatchObject({
+      account: null,
+      card: { id: "c1", name: "Nubank" },
+      installment_number: 2,
+      total_installments: 3,
+    });
+    expect(payload).toMatchInlineSnapshot(`
+      {
+        "debt": {
+          "category": {
+            "id": "c1",
+            "name": "Mercado",
+          },
+          "currency": "BRL",
+          "description": "Empréstimo",
+          "due_date": "2026-09-01",
+          "id": "d1",
+          "origin": {
+            "id": "c1",
+            "installments": 3,
+            "kind": "card",
+          },
+          "origin_locked": false,
+          "original_amount": "1000.00",
+          "person": {
+            "id": "p1",
+            "name": "João",
+          },
+          "remaining_amount": "400.00",
+          "settled_amount": "600.00",
+          "settlement_count": 2,
+          "status": "PARTIALLY_PAID",
+          "type": "LENT",
+        },
+        "movements": [
+          {
+            "account": null,
+            "amount": "333.33",
+            "card": {
+              "id": "c1",
+              "name": "Nubank",
+            },
+            "converted_amount": "333.33",
+            "currency": "BRL",
+            "date": "2026-08-01",
+            "description": "Empréstimo (2/3)",
+            "id": "t2",
+            "installment_number": 2,
+            "is_origin": true,
+            "total_installments": 3,
+          },
+        ],
+      }
+    `);
   });
 
   it("marca conta sem cotação com null em vez de repetir o saldo nativo", () => {

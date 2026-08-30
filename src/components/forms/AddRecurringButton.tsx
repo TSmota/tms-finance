@@ -9,7 +9,7 @@ import type { CurrencyCode } from "@/lib/currency";
 import { createRecurringExpense } from "@/actions/recurring";
 import { FormModal } from "@/components/ui/FormModal";
 import { useActionModal } from "@/components/ui/useActionModal";
-import { splitTarget } from "@/lib/recurringTarget";
+import { splitTarget } from "@/lib/paymentTarget";
 import {
   RecurringFields,
   validateRecurring,

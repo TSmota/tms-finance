@@ -86,12 +86,35 @@ async function accountImpact(userId: string, id: string): Promise<DeletionImpact
     throw new NotFoundError("Conta não encontrada");
   }
 
-  const [transactions, recurring, invoicesPaid, defaultForCards, oldest, blockedBy] =
+  const [
+    transactions,
+    recurring,
+    invoicesPaid,
+    defaultForCards,
+    debtsLosingOrigin,
+    oldest,
+    blockedBy,
+  ] =
     await Promise.all([
       prisma.transaction.count({ where: { userId, accountId: id } }),
       prisma.recurringExpense.count({ where: { userId, accountId: id } }),
       prisma.invoice.count({ where: { userId, paymentAccountId: id } }),
       prisma.creditCard.count({ where: { userId, defaultPaymentAccountId: id } }),
+      prisma.debt.count({
+        where: {
+          userId,
+          OR: [
+            {
+              type: "LENT",
+              settlements: { some: { accountId: id, type: "EXPENSE" } },
+            },
+            {
+              type: "BORROWED",
+              settlements: { some: { accountId: id, type: "INCOME" } },
+            },
+          ],
+        },
+      }),
       prisma.transaction.findFirst({
         where: { userId, accountId: id },
         orderBy: { date: "asc" },
@@ -129,6 +152,12 @@ async function accountImpact(userId: string, id: string): Promise<DeletionImpact
         count: defaultForCards,
         effect: "detach",
       },
+      {
+        key: "debts_losing_origin",
+        label: "dívidas que perdem a movimentação de origem",
+        count: debtsLosingOrigin,
+        effect: "detach",
+      },
     ]),
     blockedBy,
     oldestRecord: oldest ? toCalendarDate(oldest.date) : null,
@@ -146,17 +175,25 @@ async function creditCardImpact(userId: string, id: string): Promise<DeletionImp
     throw new NotFoundError("Cartão não encontrado");
   }
 
-  const [invoices, transactions, recurring, oldest, blockedBy] = await Promise.all([
-    prisma.invoice.count({ where: { userId, creditCardId: id } }),
-    prisma.transaction.count({ where: { userId, creditCardId: id } }),
-    prisma.recurringExpense.count({ where: { userId, creditCardId: id } }),
-    prisma.transaction.findFirst({
-      where: { userId, creditCardId: id },
-      orderBy: { date: "asc" },
-      select: { date: true },
-    }),
-    creditCardDeletionBlocker(userId, id),
-  ]);
+  const [invoices, transactions, recurring, debtsLosingOrigin, oldest, blockedBy] =
+    await Promise.all([
+      prisma.invoice.count({ where: { userId, creditCardId: id } }),
+      prisma.transaction.count({ where: { userId, creditCardId: id } }),
+      prisma.recurringExpense.count({ where: { userId, creditCardId: id } }),
+      prisma.debt.count({
+        where: {
+          userId,
+          type: "LENT",
+          settlements: { some: { creditCardId: id, type: "EXPENSE" } },
+        },
+      }),
+      prisma.transaction.findFirst({
+        where: { userId, creditCardId: id },
+        orderBy: { date: "asc" },
+        select: { date: true },
+      }),
+      creditCardDeletionBlocker(userId, id),
+    ]);
 
   return {
     target: "credit_card",
@@ -175,6 +212,12 @@ async function creditCardImpact(userId: string, id: string): Promise<DeletionImp
         label: "gastos recorrentes apagados junto",
         count: recurring,
         effect: "destroy",
+      },
+      {
+        key: "debts_losing_origin",
+        label: "dívidas que perdem a movimentação de origem",
+        count: debtsLosingOrigin,
+        effect: "detach",
       },
     ]),
     blockedBy,

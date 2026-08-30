@@ -8,6 +8,7 @@ import {
   DEBT_TYPE_CODES,
   DEBT_TYPE_LABELS,
   DEBT_TYPE_OPTIONS,
+  availableDebtTypeOptions,
 } from "./debtTypes";
 
 /**
@@ -37,5 +38,10 @@ describe("correspondência com os enums do schema", () => {
 
   it("expõe as opções de Select na ordem dos códigos", () => {
     expect(DEBT_TYPE_OPTIONS.map((option) => option.value)).toEqual([...DEBT_TYPE_CODES]);
+  });
+
+  it("oferece apenas dívida emprestada quando não há conta", () => {
+    expect(availableDebtTypeOptions(false).map((option) => option.value)).toEqual(["LENT"]);
+    expect(availableDebtTypeOptions(true)).toBe(DEBT_TYPE_OPTIONS);
   });
 });

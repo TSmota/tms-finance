@@ -8,10 +8,17 @@ import {
   deleteCardPurchase,
   updateCardPurchase,
 } from "@/lib/cardPurchases";
+import { createDebt } from "@/lib/debts";
 import { listCardInvoices, listInvoiceItems } from "@/lib/invoices";
 import { payInvoice, undoInvoicePayment } from "@/lib/invoicePayments";
-import { makeAccount, makeCategory, makeCreditCard, makeUser } from "@tests/support/factories";
-import { cardPurchaseInput } from "@tests/support/inputs";
+import {
+  makeAccount,
+  makeCategory,
+  makeCreditCard,
+  makePerson,
+  makeUser,
+} from "@tests/support/factories";
+import { cardPurchaseInput, debtInput } from "@tests/support/inputs";
 import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 /**
@@ -570,6 +577,72 @@ describe("exclusão de compra parcelada", () => {
 });
 
 describe("isolamento e listagem", () => {
+  it("recusa editar a origem de uma dívida pela compra do cartão", async () => {
+    const user = await makeUser();
+    const card = await makeCreditCard(user.id, { closingDay: 20, dueDay: 5 });
+    const category = await makeCategory(user.id);
+    const person = await makePerson(user.id);
+
+    const debt = await createDebt(user.id, debtInput({
+      personId: person.id,
+      categoryId: category.id,
+      description: "Passagens do grupo",
+      amount: 300,
+      creditCardId: card.id,
+    }));
+
+    const origin = await prisma.transaction.findFirstOrThrow({
+      where: { debtId: debt.id },
+    });
+
+    await expect(
+      updateCardPurchase(user.id, origin.id, {
+        creditCardId: card.id,
+        categoryId: category.id,
+        description: "Editado por fora",
+        amount: 1,
+        currency: "BRL",
+        date: "2026-08-06",
+        installments: 1,
+        manualFxRate: null,
+      }),
+    ).rejects.toThrow(InvalidOperationError);
+
+    await expect(deleteCardPurchase(user.id, origin.id)).rejects.toThrow(
+      InvalidOperationError,
+    );
+
+    const stored = await prisma.transaction.findUniqueOrThrow({
+      where: { id: origin.id },
+    });
+
+    expect(stored.amount.toFixed(2)).toBe("300.00");
+  });
+
+  it("marca o item de fatura que pertence a uma dívida", async () => {
+    const user = await makeUser();
+    const card = await makeCreditCard(user.id, { closingDay: 20, dueDay: 5 });
+    const category = await makeCategory(user.id);
+    const person = await makePerson(user.id);
+
+    const debt = await createDebt(user.id, debtInput({
+      personId: person.id,
+      categoryId: category.id,
+      description: "Passagens do grupo",
+      amount: 300,
+      creditCardId: card.id,
+    }));
+
+    const invoice = await prisma.invoice.findFirstOrThrow({
+      where: { creditCardId: card.id },
+    });
+
+    const items = await listInvoiceItems(user.id, invoice.id);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.debtId).toBe(debt.id);
+  });
+
   it("recusa cartão de outro usuário", async () => {
     const owner = await makeUser();
     const intruder = await makeUser();

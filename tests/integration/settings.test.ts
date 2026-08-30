@@ -180,6 +180,8 @@ describe("trocar a moeda base não reinterpreta histórico", () => {
       amount: 60,
       currency: "USD",
       accountId: usd.id,
+      creditCardId: null,
+      installments: 1,
       date: "2026-08-13",
       dueDate: null,
       manualFxRate: null,

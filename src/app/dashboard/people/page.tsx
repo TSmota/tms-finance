@@ -18,6 +18,7 @@ import {
 import { requireUser } from "@/lib/session";
 import { getPeopleOverview } from "@/lib/people";
 import { listDebts } from "@/lib/debts";
+import { listCreditCardOptions } from "@/lib/creditCards";
 import { loadFormOptions } from "@/lib/formOptions";
 import { formatCurrency } from "@/lib/currency";
 import { AddPersonButton } from "@/components/forms/AddPersonButton";
@@ -32,10 +33,11 @@ import { PageHeader } from "@/components/ui/PageHeader";
 export default async function PeoplePage() {
   const user = await requireUser();
 
-  const [overview, debts, options] = await Promise.all([
+  const [overview, debts, options, cards] = await Promise.all([
     getPeopleOverview(user.id, user.baseCurrency),
     listDebts(user.id),
     loadFormOptions(user.id),
+    listCreditCardOptions(user.id),
   ]);
 
   const personOptions = overview.people.map((person) => ({
@@ -55,6 +57,7 @@ export default async function PeoplePage() {
                 people={personOptions}
                 categories={options.categories}
                 accounts={options.accounts}
+                cards={cards}
                 baseCurrency={user.baseCurrency}
               />
             )}

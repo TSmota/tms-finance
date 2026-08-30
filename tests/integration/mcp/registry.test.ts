@@ -93,6 +93,8 @@ async function destructiveScenario() {
     amount: 100,
     currency: "BRL",
     accountId: debtAccount.id,
+    creditCardId: null,
+    installments: 1,
     date: "2026-08-01",
     dueDate: null,
     manualFxRate: null,
