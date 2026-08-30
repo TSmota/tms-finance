@@ -12,6 +12,7 @@ import { availableDebtTypeOptions, DEBT_TYPE_LABELS, type DebtTypeCode } from "@
 import { describeSplit } from "@/lib/installmentSplit";
 import { MAX_INSTALLMENTS } from "@/lib/limits";
 import {
+  defaultAccountTarget,
   splitTarget,
   TARGET_ACCOUNT_PREFIX,
   TARGET_CARD_PREFIX,
@@ -145,10 +146,7 @@ export function DebtFields(props: DebtFieldsProps) {
             form.getInputProps("type").onChange(value);
 
             if (value === "BORROWED" && target.startsWith(TARGET_CARD_PREFIX)) {
-              form.setFieldValue(
-                "target",
-                accounts[0] ? `${TARGET_ACCOUNT_PREFIX}${accounts[0].value}` : "",
-              );
+              form.setFieldValue("target", defaultAccountTarget(accounts));
               form.setFieldValue("installments", 1);
             }
           }}

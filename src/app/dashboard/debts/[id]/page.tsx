@@ -31,7 +31,7 @@ import {
   DEBT_TYPE_LABELS,
   DEBT_TYPE_POSITION,
 } from "@/lib/debtTypes";
-import { toCalendarDate, formatDay } from "@/lib/dates";
+import { formatDay } from "@/lib/dates";
 import { SettleDebtButton } from "@/components/forms/SettleDebtButton";
 import { EditDebtButton } from "@/components/forms/EditDebtButton";
 import { deleteSettlement } from "@/actions/debts";
@@ -39,7 +39,7 @@ import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { BackLink } from "@/components/ui/AppLink";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CategoryBadge } from "@/components/ui/CategoryBadge";
-import { joinTarget, TARGET_ACCOUNT_PREFIX } from "@/lib/paymentTarget";
+import { toDebtFormValues } from "@/components/forms/debtFormValues";
 
 export default async function DebtDetailPage({
   params,
@@ -88,26 +88,7 @@ export default async function DebtDetailPage({
             )}
             <EditDebtButton
               id={debt.id}
-              values={{
-                personId: debt.personId,
-                categoryId: debt.categoryId,
-                type: debt.type,
-                description: debt.description,
-                amount: debt.originalAmount,
-                currency: debt.currency,
-                target: debt.originTarget
-                  ? joinTarget(
-                      debt.originTarget.kind === "account" ? debt.originTarget.id : null,
-                      debt.originTarget.kind === "card" ? debt.originTarget.id : null,
-                    )
-                  : options.accounts[0]
-                    ? `${TARGET_ACCOUNT_PREFIX}${options.accounts[0].value}`
-                    : "",
-                installments: debt.originInstallments,
-                date: toCalendarDate(debt.originDate ?? debt.createdAt),
-                dueDate: debt.dueDate ? toCalendarDate(debt.dueDate) : null,
-                manualFxRate: undefined,
-              }}
+              values={toDebtFormValues(debt, options.accounts)}
               people={people}
               categories={options.categories}
               accounts={options.accounts}

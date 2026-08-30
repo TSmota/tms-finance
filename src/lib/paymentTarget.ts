@@ -11,6 +11,8 @@
  * server" — erro invisível ao build, ao typecheck e aos testes.
  */
 
+import type { Option } from "@/lib/options";
+
 export const TARGET_ACCOUNT_PREFIX = "account:";
 export const TARGET_CARD_PREFIX = "card:";
 
@@ -40,4 +42,9 @@ export function joinTarget(accountId: string | null, creditCardId: string | null
   }
 
   return "";
+}
+
+/** Destino sugerido quando não há origem gravada: a primeira conta, se houver. */
+export function defaultAccountTarget(accounts: Option[]): string {
+  return joinTarget(accounts[0]?.value ?? null, null);
 }

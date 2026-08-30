@@ -26,7 +26,7 @@ import {
   DEBT_TYPE_POSITION,
   type DebtTypeCode,
 } from "@/lib/debtTypes";
-import { toCalendarDate, formatDay } from "@/lib/dates";
+import { formatDay } from "@/lib/dates";
 import { AddDebtButton } from "@/components/forms/AddDebtButton";
 import { EditDebtButton } from "@/components/forms/EditDebtButton";
 import { deleteDebt } from "@/actions/debts";
@@ -35,9 +35,8 @@ import { SettleDebtButton } from "@/components/forms/SettleDebtButton";
 import { LinkButton } from "@/components/ui/AppLink";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
-import type { DebtFormValues } from "@/components/forms/DebtFields";
+import { toDebtFormValues } from "@/components/forms/debtFormValues";
 import { CategoryBadge } from "@/components/ui/CategoryBadge";
-import { joinTarget, TARGET_ACCOUNT_PREFIX } from "@/lib/paymentTarget";
 import type { CardOption } from "@/lib/options";
 
 interface DebtsPageProps {
@@ -46,34 +45,6 @@ interface DebtsPageProps {
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * Valores iniciais do formulário de edição, a partir da dívida gravada.
- *
- * O destino e a data vêm da **movimentação de origem**, não de um palpite:
- * salvar sem mexer nesses campos precisa deixar o lançamento exatamente onde
- * ele está.
- */
-function toFormValues(debt: DebtListItem, fallbackTarget: string): DebtFormValues {
-  return {
-    personId: debt.personId,
-    categoryId: debt.categoryId,
-    type: debt.type,
-    description: debt.description,
-    amount: debt.originalAmount,
-    currency: debt.currency,
-    target: debt.originTarget
-      ? joinTarget(
-          debt.originTarget.kind === "account" ? debt.originTarget.id : null,
-          debt.originTarget.kind === "card" ? debt.originTarget.id : null,
-        )
-      : fallbackTarget,
-    installments: debt.originInstallments,
-    date: toCalendarDate(debt.originDate ?? debt.createdAt),
-    dueDate: debt.dueDate ? toCalendarDate(debt.dueDate) : null,
-    manualFxRate: undefined,
-  };
-}
 
 export default async function DebtsPage({ searchParams }: DebtsPageProps) {
   const user = await requireUser();
@@ -278,10 +249,7 @@ function DebtCard({ debt, people, categories, accounts, cards }: DebtCardProps) 
         <Group gap={4} wrap="nowrap">
           <EditDebtButton
             id={debt.id}
-            values={toFormValues(
-              debt,
-              accounts[0] ? `${TARGET_ACCOUNT_PREFIX}${accounts[0].value}` : "",
-            )}
+            values={toDebtFormValues(debt, accounts)}
             people={people}
             categories={categories}
             accounts={accounts}
