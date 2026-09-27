@@ -167,7 +167,7 @@ export async function recalcInvoiceTotals(
 
   const ordered = await tx.invoice.findMany({
     where: { id: { in: ids } },
-    orderBy: [{ year: "asc" }, { month: "asc" }],
+    orderBy: [{ year: "asc" }, { month: "asc" }, { id: "asc" }],
     select: { id: true },
   });
 
