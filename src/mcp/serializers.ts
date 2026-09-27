@@ -386,3 +386,24 @@ export function deletionImpactDto(impact: DeletionImpact) {
     blocked_by: impact.blockedBy,
   };
 }
+
+
+export function transferDto(row: import("@prisma/client").Transfer) {
+  return { id: row.id, sourceAccountId: row.sourceAccountId, destinationAccountId: row.destinationAccountId, amount: row.amount.toFixed(2), currency: row.currency, date: day(row.date), description: row.description };
+}
+
+export function savingsGoalDto(row: import("@/lib/savingsGoals").SavingsGoalView) {
+  return { id: row.id, name: row.name, currency: row.currency, targetAmount: row.targetAmount, dueDate: row.dueDate, paused: row.paused, status: row.status, progress: row.progress, percentage: row.percentage, entries: row.entries.map((entry) => ({ id: entry.id, amount: entry.amount, date: entry.date, description: entry.description })) };
+}
+
+export function payableDto(row: import("@/lib/batchPayments").PayableItem) {
+  return { id: row.id, kind: row.kind, description: row.description, amount: row.amount, currency: row.currency };
+}
+
+export function historyDto(rows: import("@/lib/dashboardHistory").HistoryMonth[], currency: Currency) {
+  return { currency, months: rows.map((row) => ({ month: row.label, income: amount(row.income), cash_out: amount(row.expenses), net: amount(row.net), complete: row.complete })) };
+}
+
+export function netWorthDto(row: { amount: number; complete: boolean }, currency: Currency) {
+  return { currency, amount: amount(row.amount), complete: row.complete, formula: "contas + recebíveis - dívidas a pagar - faturas abertas" };
+}

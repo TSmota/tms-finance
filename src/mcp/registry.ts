@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 
+import { registerRoadmapTools } from "@/mcp/tools/roadmap";
 import { registerReadTools } from "@/mcp/tools/read";
 import { registerWriteTools } from "@/mcp/tools/write";
 import { registerDestructiveTools } from "@/mcp/tools/destructive";
@@ -20,6 +21,7 @@ import { registerDestructiveTools } from "@/mcp/tools/destructive";
  */
 export function registerTools(server: McpServer): void {
   registerReadTools(server);
+  registerRoadmapTools(server);
   registerWriteTools(server);
   registerDestructiveTools(server);
 }

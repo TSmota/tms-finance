@@ -12,6 +12,7 @@ import type { AgentScope } from "@/lib/agentScopes";
  */
 
 export const READ_TOOLS = [
+  "list_transfers", "list_savings_goals", "list_payables", "get_monthly_history", "get_net_worth",
   "get_month_summary",
   "get_open_invoices",
   "get_debts_by_category",
@@ -31,6 +32,13 @@ export const READ_TOOLS = [
 ] as const;
 
 export const WRITE_TOOLS = {
+  create_transfer: "transfers:write",
+  update_transfer: "transfers:write",
+  delete_transfer: "transfers:write",
+  create_savings_goal: "goals:write",
+  update_savings_goal: "goals:write",
+  add_savings_entry: "goals:write",
+  pay_batch: "payments:write",
   create_transaction: "transactions:write",
   update_transaction: "transactions:write",
   delete_transaction: "transactions:write",
