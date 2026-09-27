@@ -57,6 +57,11 @@ pode fazer isso.
 - **Helper de transação** — recebe `tx: Tx` primeiro e **nenhum** `userId`. Roda
   dentro de uma transação, sobre linhas cuja posse o serviço já conferiu.
 
+As preparações `prepareInvoicePayment(userId, ...)` e
+`prepareDebtSettlement(userId, ...)` validam posse e resolvem câmbio antes de
+devolver uma função que executa sob `Tx`. As entradas individuais abrem sua
+transação; `payBatch` compõe essas mesmas funções numa única transação.
+
 Os helpers exportados são `applyToBalance` e `lockTransaction` em
 [src/lib/accountBalance.ts](src/lib/accountBalance.ts); `resolveInvoice`,
 `recalcInvoiceTotal` e `recalcInvoiceTotals` em

@@ -117,3 +117,28 @@ em [ARCHITECTURE.md](../ARCHITECTURE.md).
   total da fatura não tem sinal. Enquanto qualquer parcela da origem estiver em
   fatura paga, a dívida não é editada nem removida (RN-03.5). A **amortização** é
   sempre em conta, nos dois tipos.
+
+
+## RN-06: Transferências internas
+
+- Uma entidade própria representa débito e crédito atômicos entre contas do usuário da mesma moeda. Não integra receitas, despesas ou categorias.
+- Edição estorna a versão bloqueada e aplica a nova; exclusão estorna ambas as contas. Uma conta com transferências não pode ser excluída.
+- Primeira versão: operações imediatas, sem câmbio, tarifas ou agendamento. O histórico dedicado mostra as 200 mais recentes; exportação inclui todas.
+
+## RN-07: Metas de poupança
+
+- Progresso manual é a soma de aportes positivos e retiradas negativas, sem movimentar contas ou patrimônio. Não há conta reservada nesta versão.
+- Moeda imutável, prazo opcional, alvo editável. A meta está concluída quando o progresso alcança o alvo; mudar o alvo ou retirar pode reabri-la. Pausa impede movimentações.
+- Retiradas nunca excedem o saldo, inclusive sob concorrência. O histórico permanece após alteração de alvo.
+
+## RN-08: Pagamentos em lote
+
+- Seleção explícita de até 50 faturas ou dívidas BORROWED, em aberto, na moeda da conta escolhida. Uma conta/data, pagamento integral e atomicidade total.
+- Os valores da prévia são conferidos sob bloqueio. Mudança, item já quitado ou falta de posse cancela tudo.
+- Uma chave UUID identifica a solicitação. Repetir a mesma chave/payload devolve os mesmos IDs; reutilizar com outro conteúdo é recusado. Após estorno, pagar novamente exige chave nova.
+
+## RN-09: Visão consolidada
+
+- Histórico de doze meses até o mês atual usa o fluxo de caixa confirmado: receitas, despesas de conta e pagamentos de fatura. As compras de cartão entram somente na distribuição por categoria, já existente.
+- Moeda-base e cotações históricas seguem os relatórios existentes. Cotação ausente marca os valores parciais; mês corrente é explicitamente identificado como em andamento.
+- Patrimônio atual = saldos de contas + empréstimos a receber − empréstimos a pagar − faturas abertas (inclusive parcelas futuras). Metas manuais não acrescentam ativos.
