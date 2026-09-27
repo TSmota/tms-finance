@@ -72,7 +72,7 @@ async function categoryRefs(userId: string): Promise<CategoryRef[]> {
  * continuam na cotação de hoje, porque perguntam sobre agora e não sobre um mês
  * encerrado.
  */
-function competencyFxDate(year: number, month: number, now: Date = new Date()): Date {
+export function competencyFxDate(year: number, month: number, now: Date = new Date()): Date {
   const lastDay = utcDate(year, month, lastDayOfMonth(year, month));
 
   return lastDay.getTime() > now.getTime() ? now : lastDay;

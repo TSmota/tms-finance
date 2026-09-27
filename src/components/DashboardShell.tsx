@@ -19,8 +19,11 @@ const groups = [
   { label: "Seu dinheiro", links: [
     { href: "/dashboard/accounts", label: "Contas", icon: Wallet },
     { href: "/dashboard/cards", label: "Cartões", icon: CreditCard },
+    { href: "/dashboard/transfers", label: "Transferências", icon: Repeat },
+    { href: "/dashboard/payments", label: "Pagamentos em lote", icon: Receipt },
     { href: "/dashboard/recurring", label: "Recorrentes", icon: Repeat },
     { href: "/dashboard/debts", label: "Dívidas", icon: HandCoins },
+    { href: "/dashboard/goals", label: "Metas", icon: Wallet },
   ] },
   { label: "Organização", links: [
     { href: "/dashboard/categories", label: "Categorias", icon: Tags },

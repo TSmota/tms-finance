@@ -14,6 +14,9 @@
 
 export type RevalidationTarget = readonly [path: string, type?: "page" | "layout"];
 
+const PAYMENTS: RevalidationTarget = ["/dashboard/payments"];
+const TRANSFERS: RevalidationTarget = ["/dashboard/transfers"];
+
 const DASHBOARD: RevalidationTarget = ["/dashboard"];
 const ACCOUNTS: RevalidationTarget = ["/dashboard/accounts"];
 const CARDS: RevalidationTarget = ["/dashboard/cards"];
@@ -26,20 +29,21 @@ const RECURRING: RevalidationTarget = ["/dashboard/recurring"];
 const TRANSACTIONS: RevalidationTarget = ["/dashboard/transactions"];
 
 export const REVALIDATION_TARGETS = {
-  accounts: [DASHBOARD, ACCOUNTS, TRANSACTIONS],
+  roadmap: [["/dashboard", "layout"]],
+  accounts: [PAYMENTS, TRANSFERS, DASHBOARD, ACCOUNTS, TRANSACTIONS],
   categories: [DASHBOARD, CATEGORIES, TRANSACTIONS],
-  creditCards: [DASHBOARD, CARDS, CARD_DETAIL, TRANSACTIONS],
-  cardPurchases: [DASHBOARD, CARDS, CARD_DETAIL, TRANSACTIONS],
-  invoices: [DASHBOARD, CARDS, CARD_DETAIL, ACCOUNTS, TRANSACTIONS],
+  creditCards: [PAYMENTS, TRANSFERS, DASHBOARD, CARDS, CARD_DETAIL, TRANSACTIONS],
+  cardPurchases: [PAYMENTS, TRANSFERS, DASHBOARD, CARDS, CARD_DETAIL, TRANSACTIONS],
+  invoices: [PAYMENTS, TRANSFERS, DASHBOARD, CARDS, CARD_DETAIL, ACCOUNTS, TRANSACTIONS],
   transactions: [DASHBOARD, TRANSACTIONS, ACCOUNTS],
-  debts: [DASHBOARD, DEBTS, DEBT_DETAIL, PEOPLE, ACCOUNTS, TRANSACTIONS, CARDS, CARD_DETAIL],
+  debts: [PAYMENTS, TRANSFERS, DASHBOARD, DEBTS, DEBT_DETAIL, PEOPLE, ACCOUNTS, TRANSACTIONS, CARDS, CARD_DETAIL],
   people: [DASHBOARD, PEOPLE, DEBTS],
-  recurring: [DASHBOARD, RECURRING, TRANSACTIONS, ACCOUNTS, CARDS, CARD_DETAIL],
+  recurring: [PAYMENTS, DASHBOARD, RECURRING, TRANSACTIONS, ACCOUNTS, CARDS, CARD_DETAIL],
   /**
    * Cadastros de base, para a remoção pelo agente: conta, categoria e cartão
    * saem por ferramentas distintas mas atingem as mesmas telas.
    */
-  setup: [DASHBOARD, ACCOUNTS, CARDS, CARD_DETAIL, CATEGORIES, TRANSACTIONS],
+  setup: [PAYMENTS, TRANSFERS, DASHBOARD, ACCOUNTS, CARDS, CARD_DETAIL, CATEGORIES, TRANSACTIONS],
   /**
    * A moeda base é lida por toda agregação: a troca invalida a subárvore
    * inteira, e não uma lista de telas.
