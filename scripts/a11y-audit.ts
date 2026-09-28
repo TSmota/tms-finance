@@ -10,6 +10,7 @@ import { join } from "node:path";
  *
  *   npm run dev            # em outro terminal
  *   npm run test:a11y
+ *   A11Y_MOBILE=1 npm run test:a11y
  */
 
 const BASE = process.env.A11Y_BASE_URL ?? "http://localhost:3000";
@@ -123,6 +124,7 @@ async function until<T>(passo: () => Promise<T | null>): Promise<T | null> {
 }
 
 interface Cdp {
+  send: (method: string, params?: Record<string, unknown>) => Promise<Record<string, unknown>>;
   evaluate: (expression: string) => Promise<unknown>;
   goto: (url: string) => Promise<void>;
   close: () => void;
@@ -210,7 +212,7 @@ async function connect(wsUrl: string): Promise<Cdp> {
     await new Promise((r) => setTimeout(r, 1200));
   };
 
-  return { evaluate, goto, close: () => ws.close() };
+  return { send, evaluate, goto, close: () => ws.close() };
 }
 
 const AXE_SOURCE = readFileSync("node_modules/axe-core/axe.min.js", "utf8");
@@ -397,6 +399,13 @@ async function main() {
   let falhas = 0;
 
   try {
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      width: process.env.A11Y_MOBILE ? 390 : 1440,
+      height: process.env.A11Y_MOBILE ? 844 : 1000,
+      deviceScaleFactor: 1,
+      mobile: Boolean(process.env.A11Y_MOBILE),
+    });
+
     // Sem sessão, todas as rotas redirecionam para /login e a auditoria mediria
     // a mesma tela em toda iteração — passando.
     await cdp.goto(`${BASE}/login`);
@@ -462,19 +471,46 @@ async function main() {
       }
     };
 
-    for (const rota of rotas) {
-      report(rota, await auditRoute(cdp, rota));
+    for (const [scheme, label] of [["light", "Claro"], ["dark", "Escuro"]] as const) {
+      // Usa o controle real: verifica também que a preferência sobrevive à navegação.
+      await cdp.evaluate(`document.querySelector('button[aria-label^="Aparência:"]').click()`);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      await cdp.evaluate(`(() => {
+        const item = Array.from(document.querySelectorAll('[role="menuitemradio"]')).find(
+          (element) => element.textContent.trim() === ${JSON.stringify(label)},
+        );
+        if (!item) { throw new Error('Opção de aparência ausente'); }
+        item.click();
+      })()`);
+      for (const rota of rotas) {
+        report(`${rota} [${label}]`, await auditRoute(cdp, rota));
+        const actual = await cdp.evaluate('document.documentElement.dataset.mantineColorScheme');
+        if (actual !== scheme) {
+          throw new Error(`A aparência ${scheme} não persistiu em ${rota}: ${actual}`);
+        }
+      }
+      for (const [rota, rotulo] of MODAL_ROUTES) {
+        report(`${rota} [${label}, ${rotulo}]`, await auditModal(cdp, rota, rotulo));
+        if (rota === "/dashboard/people") {
+          // Nome vazio é recusado: mede erros e placeholders sem gravar dados.
+          await cdp.evaluate(`document.querySelector('[role="dialog"] button[type="submit"]').click()`);
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          const invalid = await cdp.evaluate(`Boolean(document.querySelector('[role="dialog"] [aria-invalid="true"]'))`);
+          if (!invalid) {
+            throw new Error("O formulário vazio de pessoa não exibiu validação.");
+          }
+          report(`${rota} [${label}, formulário inválido]`, await runAxe(cdp));
+        }
+      }
+      // Fecha o último modal antes de alternar a aparência de novo.
+      await cdp.goto(`${BASE}/dashboard`);
     }
 
-    for (const [rota, rotulo] of MODAL_ROUTES) {
-      report(`${rota} [${rotulo}]`, await auditModal(cdp, rota, rotulo));
-    }
-
-    const medidas = rotas.length + MODAL_ROUTES.length;
+    const medidas = (rotas.length + MODAL_ROUTES.length + 1) * 2;
 
     console.log(
       falhas === 0
-        ? `\n${medidas} telas auditadas (${MODAL_ROUTES.length} com modal aberto), nenhuma violação.`
+        ? `\n${medidas} telas auditadas em claro e escuro (${(MODAL_ROUTES.length + 1) * 2} com modal aberto), nenhuma violação.`
         : `\n${falhas} violação(ões) em ${medidas} telas auditadas.`,
     );
   } finally {

@@ -529,9 +529,17 @@ O `<caption>` da tabela e os rótulos só-para-leitor usam `.visually-hidden` de
 o `InputClearButton` e o fechamento de `Notification` são configurados em
 [src/theme.ts](src/theme.ts), pois nem sempre existe JSX nosso para rotulá-los.
 
-**O modo escuro não está ligado.** O Mantine resolve `--button-color` inline no
-SSR para o esquema configurado; trocar apenas o atributo em runtime não o
-recalcula. Um alternador exige resolver esse comportamento antes.
+**A aparência oferece claro, escuro e sistema**, com preferência local ao
+navegador. `ColorSchemeScript` e `MantineProvider` usam `defaultColorScheme="auto"`
+para aplicar a preferência antes da hidratação. `ThemeControl` usa o gerenciador
+nativo do Mantine, incluindo persistência e sincronização entre abas.
+
+O Mantine resolve o texto de botões preenchidos inline a partir da paleta clara.
+`theme.variantColorResolver` usa variáveis CSS de contraste para cores da paleta;
+`themeVariables` calcula essas variáveis nos dois esquemas, inclusive no hover.
+Hex arbitrário de categoria mantém o `autoContrast` original. Assim a troca não
+remonta a árvore nem perde o estado dos formulários. `src/theme.test.ts` trava
+contraste nos dois esquemas e `test:a11y` visita ambos no navegador.
 
 ---
 

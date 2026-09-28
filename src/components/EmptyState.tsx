@@ -13,9 +13,9 @@ export function EmptyState(props: EmptyStateProps) {
   const { message, icon: Icon = Inbox, action } = props;
 
   return (
-    <Center py="xl">
+    <Center className="empty-state" py="xl">
       <Stack align="center" gap="xs">
-        <Icon size={40} strokeWidth={1.5} color="var(--mantine-color-dimmed)" aria-hidden />
+        <div className="empty-state-icon"><Icon size={28} strokeWidth={1.5} aria-hidden /></div>
         <Text c="dimmed" ta="center" maw={360}>
           {message}
         </Text>

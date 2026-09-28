@@ -10,7 +10,7 @@ import {
   Title,
 } from "@mantine/core";
 import type { ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChartNoAxesCombined, Wallet, ChevronRight } from "lucide-react";
 
 import { requireUser } from "@/lib/session";
 import { getAccountBalances } from "@/lib/accounts";
@@ -76,6 +76,8 @@ export default async function DashboardPage() {
         <GridCol span={{ base: 12, sm: 6, lg: 3 }}>
           <StatCard
             label="Patrimônio líquido"
+            featured
+            icon={<Wallet size={20} aria-hidden />}
             value={formatCurrency(balances.netWorth, user.baseCurrency)}
             note={balances.netWorthComplete ? undefined : partial}
             warn={!balances.netWorthComplete}
@@ -84,6 +86,7 @@ export default async function DashboardPage() {
         <GridCol span={{ base: 12, sm: 6, lg: 3 }}>
           <StatCard
             label="Saldo projetado"
+            icon={<ChartNoAxesCombined size={20} aria-hidden />}
             hint="Fim do mês, se tudo o que está previsto acontecer"
             value={formatCurrency(projection.projectedBalance, user.baseCurrency)}
             color={projection.projectedBalance < 0 ? "red" : undefined}
@@ -94,6 +97,7 @@ export default async function DashboardPage() {
         <GridCol span={{ base: 12, sm: 6, lg: 3 }}>
           <StatCard
             label="Receitas do mês"
+            icon={<ArrowDownLeft size={20} aria-hidden />}
             value={formatCurrency(summary.income, user.baseCurrency)}
             color="teal"
           />
@@ -101,6 +105,7 @@ export default async function DashboardPage() {
         <GridCol span={{ base: 12, sm: 6, lg: 3 }}>
           <StatCard
             label="Saídas de caixa do mês"
+            icon={<ArrowUpRight size={20} aria-hidden />}
             hint={
               summary.invoicePayments > 0
                 ? `Inclui ${formatCurrency(summary.invoicePayments, user.baseCurrency)} de fatura paga`
@@ -276,6 +281,8 @@ export default async function DashboardPage() {
 interface StatCardProps {
   label: string;
   value: string;
+  featured?: boolean;
+  icon?: ReactNode;
   /** Explicação do que o número significa. Metade dos cards precisa de uma. */
   hint?: string;
   color?: string;
@@ -287,22 +294,23 @@ interface StatCardProps {
 }
 
 function StatCard(props: StatCardProps) {
-  const { label, value, hint, color, note, warn, badge, action } = props;
+  const { label, value, hint, color, note, warn, badge, action, featured, icon } = props;
 
   return (
-    <Card withBorder radius="md" padding="lg" h="100%">
+    <Card className={`stat-card${featured ? " stat-card-featured" : ""}`} withBorder radius="md" padding="lg" h="100%">
       <Stack gap={0} h="100%">
         <Group justify="space-between" wrap="nowrap">
           <Text size="sm" c="dimmed">
             {label}
           </Text>
+          {icon && <span className="stat-icon">{icon}</span>}
           {badge && (
             <Badge variant="light" color="gray" size="sm" tt="none">
               {badge}
             </Badge>
           )}
         </Group>
-        <Text fw={700} size="xl" mt="xs" c={color}>
+        <Text className="stat-value" fw={700} size="xl" mt="md" c={color}>
           {value}
         </Text>
         {hint && (

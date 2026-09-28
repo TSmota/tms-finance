@@ -12,9 +12,9 @@ export function PageHeader(props: PageHeaderProps) {
   const { title, subtitle, action } = props;
 
   return (
-    <Group justify="space-between" align="flex-end" wrap="nowrap">
-      <Stack gap={2}>
-        <Title order={1} size="h2">{title}</Title>
+    <Group className="page-header" justify="space-between" align="center" gap="md">
+      <Stack gap={6} miw={0}>
+        <Title order={1} className="page-title">{title}</Title>
         {subtitle && (
           <Text size="sm" c="dimmed">
             {subtitle}
