@@ -1,14 +1,14 @@
 # Validação do roadmap financeiro
 
 Ambiente: Ubuntu 26.04 no WSL, Node 24.19.0, PostgreSQL local.
-Checkout: `/home/thiago_mota/codex/tms-finance`.
+Checkout: `/home/thiago_mota/dev/tms-finance`.
 Branch: `feat/financial-roadmap`.
 
 ## Verificações executadas
 
 - `npm run typecheck`: aprovado.
 - `npm run lint`: aprovado, sem avisos.
-- `npm test`: 750 testes aprovados em 48 arquivos.
+- `npm test`: 754 testes aprovados em 48 arquivos.
 - `npm run build`: aprovado, incluindo as três novas rotas.
 - `git diff --check`: aprovado.
 - Migration aplicada no banco local existente, sem reset; Prisma Client gerado.
@@ -24,9 +24,10 @@ Branch: `feat/financial-roadmap`.
 
 ## Validação de navegador
 
-Pendente. O servidor iniciou em `http://localhost:3000`, mas o navegador recusou acesso por uma preferência salva de permissão, inclusive após autorização textual do usuário. Nenhuma tentativa por navegador alternativo ou automação indireta foi feita.
-
-`npm run test:a11y` recebeu as novas rotas e modais, mas não foi executado enquanto o bloqueio de acesso ao navegador persistiu. Também não foram verificadas visualmente as telas em desktop/mobile nem os fluxos de formulário em runtime.
+- `npm run test:a11y`: 54 estados auditados em claro e escuro, 22 com modal aberto, sem violações WCAG 2.2 AA.
+- Chrome validado em 1440×900 e 390×844 nas rotas do painel, metas, transferências e pagamentos em lote.
+- Botões de ação completos e dentro do viewport, sem overflow horizontal; navegação e identidade visual da interface-base preservadas após o rebase.
+- Modais principais abriram nos dois viewports e os estados inválidos exibiram feedback; não houve erro de runtime, hidratação, rede ou resposta HTTP.
 
 ## Limites do escopo
 
