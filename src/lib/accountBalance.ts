@@ -137,7 +137,12 @@ export async function recomputeBalance(accountId: string): Promise<Money> {
     balanceDelta(row.type, row._sum.convertedAmount ?? 0),
   );
 
-  return sumMoney([account.initialBalance, ...movements]);
+  const [incoming, outgoing] = await Promise.all([
+    prisma.transfer.aggregate({ where: { destinationAccountId: accountId }, _sum: { amount: true } }),
+    prisma.transfer.aggregate({ where: { sourceAccountId: accountId }, _sum: { amount: true } }),
+  ]);
+  return sumMoney([account.initialBalance, ...movements, incoming._sum.amount ?? 0])
+    .minus(outgoing._sum.amount ?? 0);
 }
 
 /**

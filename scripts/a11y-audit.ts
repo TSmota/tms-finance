@@ -33,6 +33,9 @@ const ROUTES = [
   "/dashboard/people",
   "/dashboard/debts",
   "/dashboard/settings",
+  "/dashboard/goals",
+  "/dashboard/transfers",
+  "/dashboard/payments",
 ];
 
 /**
@@ -52,6 +55,9 @@ const DETAIL_ROUTES = 2;
  * já exige.
  */
 const MODAL_ROUTES: Array<[route: string, label: string]> = [
+  ["/dashboard/goals", "Nova meta"],
+  ["/dashboard/transfers", "Nova transferência"],
+  ["/dashboard/payments", "Pagar itens selecionados"],
   ["/dashboard/accounts", "Adicionar conta"],
   ["/dashboard/categories", "Adicionar categoria"],
   ["/dashboard/transactions", "Adicionar transação"],

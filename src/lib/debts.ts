@@ -164,11 +164,16 @@ export async function createDebt(userId: string, input: DebtInput): Promise<Debt
  * simultâneas leem o mesmo saldo e a última gravação vence, deixando a dívida
  * devendo dinheiro já pago.
  */
-export async function settleDebt(
+export async function settleDebt(userId: string, debtId: string, input: DebtSettlementInput): Promise<Transaction> {
+  const execute = await prepareDebtSettlement(userId, debtId, input);
+  return prisma.$transaction(execute);
+}
+
+export async function prepareDebtSettlement(
   userId: string,
   debtId: string,
   input: DebtSettlementInput,
-): Promise<Transaction> {
+): Promise<(tx: Tx) => Promise<Transaction>> {
   const debt = await requireDebt(userId, debtId);
 
   await assertCategoryOwned(userId, input.categoryId);
@@ -195,7 +200,7 @@ export async function settleDebt(
 
   const towardsDebt = convertMoney(input.amount, debtRate);
 
-  return prisma.$transaction(async (tx) => {
+  return async (tx) => {
     const locked = await lockDebt(tx, debtId);
     const remaining = money(locked.remainingAmount);
 
@@ -238,7 +243,7 @@ export async function settleDebt(
     await writeRemaining(tx, locked, remaining.minus(towardsDebt));
 
     return settlement;
-  });
+  };
 }
 
 /** Descrição padrão da amortização, quando o usuário não informa uma. */

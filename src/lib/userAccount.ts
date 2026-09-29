@@ -64,6 +64,9 @@ export async function exportUserData(userId: string): Promise<unknown> {
     debts,
     recurringExpenses,
     transactions,
+    transfers,
+    savingsGoals,
+    paymentBatches,
   ] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
@@ -77,6 +80,9 @@ export async function exportUserData(userId: string): Promise<unknown> {
     prisma.debt.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
     prisma.recurringExpense.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
     prisma.transaction.findMany({ where: { userId }, orderBy: { date: "asc" } }),
+    prisma.transfer.findMany({ where: { userId }, orderBy: { date: "asc" } }),
+    prisma.savingsGoal.findMany({ where: { userId }, include: { entries: true } }),
+    prisma.paymentBatch.findMany({ where: { userId } }),
   ]);
 
   if (!user) {
@@ -95,6 +101,9 @@ export async function exportUserData(userId: string): Promise<unknown> {
       debts,
       recurringExpenses,
       transactions,
+      transfers,
+      savingsGoals,
+      paymentBatches,
     }),
   );
 }

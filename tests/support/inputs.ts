@@ -142,3 +142,17 @@ export function recurringExpenseInput(
     ...overrides,
   };
 }
+
+
+export function transferInput(sourceAccountId: string, destinationAccountId: string, overrides: Partial<import("@/lib/validations").TransferInput> = {}): import("@/lib/validations").TransferInput {
+  return { sourceAccountId, destinationAccountId, amount: 100.01, date: "2026-08-15", description: "Reserva", ...overrides };
+}
+export function savingsGoalInput(overrides: Partial<import("@/lib/validations").SavingsGoalInput> = {}): import("@/lib/validations").SavingsGoalInput {
+  return { name: "Viagem", currency: "BRL", targetAmount: 100, dueDate: null, paused: false, ...overrides };
+}
+export function savingsEntryInput(overrides: Partial<import("@/lib/validations").SavingsEntryInput> = {}): import("@/lib/validations").SavingsEntryInput {
+  return { amount: 60.01, kind: "CONTRIBUTION", date: "2026-08-15", description: "Reserva", ...overrides };
+}
+export function batchPaymentInput(accountId: string, items: import("@/lib/validations").BatchPaymentInput["items"], overrides: Partial<import("@/lib/validations").BatchPaymentInput> = {}): import("@/lib/validations").BatchPaymentInput {
+  return { requestId: crypto.randomUUID(), accountId, items, date: "2026-08-20", ...overrides };
+}

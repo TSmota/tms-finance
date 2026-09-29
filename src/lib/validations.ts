@@ -399,3 +399,47 @@ export type ConfirmOccurrenceInput = z.infer<typeof confirmOccurrenceSchema>;
 export type PersonInput = z.infer<typeof personSchema>;
 export type DebtInput = z.infer<typeof debtSchema>;
 export type DebtSettlementInput = z.infer<typeof debtSettlementSchema>;
+
+
+export const transferSchema = z.object({
+  sourceAccountId: idSchema,
+  destinationAccountId: idSchema,
+  amount: positiveAmountSchema,
+  date: calendarDateSchema,
+  description: requiredText(TEXT_LIMITS.description, "Descrição é obrigatória"),
+}).refine((value) => value.sourceAccountId !== value.destinationAccountId, {
+  message: "Escolha duas contas diferentes", path: ["destinationAccountId"],
+});
+
+export const savingsGoalSchema = z.object({
+  name: requiredText(TEXT_LIMITS.name, "Nome é obrigatório"),
+  currency: currencySchema,
+  targetAmount: positiveAmountSchema,
+  dueDate: optionalCalendarDateSchema,
+  paused: z.boolean().default(false),
+});
+
+export const savingsEntrySchema = z.object({
+  amount: positiveAmountSchema,
+  kind: z.enum(["CONTRIBUTION", "WITHDRAWAL"]),
+  date: calendarDateSchema,
+  description: requiredText(TEXT_LIMITS.description, "Descrição é obrigatória"),
+});
+
+export const batchPaymentSchema = z.object({
+  requestId: idSchema,
+  accountId: idSchema,
+  date: calendarDateSchema,
+  items: z.array(z.object({
+    id: idSchema,
+    kind: z.enum(["INVOICE", "DEBT"]),
+    expectedAmount: positiveAmountSchema,
+  })).min(1, "Selecione pelo menos um pagamento").max(50, "Selecione no máximo 50 pagamentos"),
+}).refine((value) => new Set(value.items.map((item) => `${item.kind}:${item.id}`)).size === value.items.length, {
+  message: "Não repita pagamentos na seleção", path: ["items"],
+});
+
+export type TransferInput = z.infer<typeof transferSchema>;
+export type SavingsGoalInput = z.infer<typeof savingsGoalSchema>;
+export type SavingsEntryInput = z.infer<typeof savingsEntrySchema>;
+export type BatchPaymentInput = z.infer<typeof batchPaymentSchema>;
