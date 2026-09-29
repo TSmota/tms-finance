@@ -64,8 +64,8 @@ export function MonthlyCharts(props: MonthlyChartsProps) {
           ]}
           dataKey="label"
           series={[
-            { name: "Receitas", color: "teal.9" },
-            { name: "Saídas de caixa", color: "red.9" },
+            { name: "Receitas", color: "teal" },
+            { name: "Saídas de caixa", color: "red" },
           ]}
           withLegend
           barChartProps={{ accessibilityLayer: false }}

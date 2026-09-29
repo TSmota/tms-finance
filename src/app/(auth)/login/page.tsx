@@ -60,17 +60,19 @@ export default function LoginPage() {
   });
 
   return (
-    <Paper withBorder shadow="md" p="xl" radius="md" w={420} maw="100%">
-      <Title order={1} size="h2" ta="center" mb="lg">
-        TMS Finance
+    <Paper className="auth-card" withBorder p="xl" radius="lg" w={440} maw="100%">
+      <Title order={1} size="h2" mb="xs">
+        Que bom ter você aqui
       </Title>
+
+      <Text c="dimmed" size="sm" mb="xl">Entre para acompanhar sua vida financeira.</Text>
 
       <Group grow mb="md">
         <Button
           variant="default"
           onClick={() => signIn("google", { redirectTo: "/dashboard" })}
         >
-          Google
+          Continuar com Google
         </Button>
       </Group>
 
@@ -80,12 +82,16 @@ export default function LoginPage() {
         <Stack>
           <TextInput
             label="Email"
+            type="email"
+            autoComplete="email"
             placeholder="voce@exemplo.com"
             key={form.key("email")}
             {...form.getInputProps("email")}
           />
           <PasswordInput
             label="Senha"
+            autoComplete="current-password"
+            visibilityToggleButtonProps={{ "aria-label": "Mostrar ou ocultar senha" }}
             placeholder="Sua senha"
             key={form.key("password")}
             {...form.getInputProps("password")}

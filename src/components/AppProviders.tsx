@@ -18,7 +18,7 @@ import { SessionProvider } from "next-auth/react";
  */
 import "dayjs/locale/pt-br";
 
-import { theme } from "@/theme";
+import { theme, themeVariables } from "@/theme";
 
 /**
  * Providers de cliente da aplicação, reunidos num único módulo para manter o
@@ -27,7 +27,7 @@ import { theme } from "@/theme";
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <SessionProvider>
-      <MantineProvider theme={theme}>
+      <MantineProvider theme={theme} cssVariablesResolver={themeVariables} defaultColorScheme="auto">
         <DatesProvider settings={{ locale: "pt-br", firstDayOfWeek: 0 }}>
           <Notifications />
           <ModalsProvider>{children}</ModalsProvider>

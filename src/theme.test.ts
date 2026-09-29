@@ -1,7 +1,7 @@
-import { DEFAULT_THEME } from "@mantine/core";
+import { DEFAULT_THEME, mergeMantineTheme } from "@mantine/core";
 import { describe, expect, it } from "vitest";
 
-import { theme } from "./theme";
+import { theme, themeVariables } from "./theme";
 
 /**
  * Trava os tokens do tema, não as telas — para estas, `npm run test:a11y`.
@@ -13,6 +13,9 @@ const AA = 4.5;
 
 /** Luminância relativa, WCAG 2.x §relative-luminance. */
 function luminance(hex: string): number {
+  if (hex.length === 4) {
+    hex = `#${[...hex.slice(1)].map((digit) => digit + digit).join("")}`;
+  }
   const [r, g, b] = [1, 3, 5]
     .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
     .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
@@ -132,5 +135,32 @@ describe("contraste dos tokens do tema", () => {
     // `globals.css` remapeia `dimmed` de gray-6 para gray-7; gray-6 rende 3.32.
     expect(contrast(DEFAULT_THEME.colors.gray[6], WHITE)).toBeLessThan(AA);
     expect(contrast(DEFAULT_THEME.colors.gray[7], WHITE)).toBeGreaterThanOrEqual(AA);
+  });
+});
+
+describe("contraste ao alternar o esquema", () => {
+  const resolved = mergeMantineTheme(DEFAULT_THEME, theme);
+  const variables = themeVariables(resolved);
+  const shades = resolved.primaryShade as { light: number; dark: number };
+
+  for (const scheme of ["light", "dark"] as const) {
+    it(`texto de botões preenchidos acompanha o fundo ${scheme}, inclusive no hover`, () => {
+      for (const [name, colors] of Object.entries(resolved.colors)) {
+        for (const hover of [false, true]) {
+          const shade = Math.min(shades[scheme] + (hover ? 1 : 0), 9);
+          const ink = variables[scheme][`--app-${name}-${hover ? "hover-" : ""}contrast`];
+          expect.soft(contrast(ink, colors[shade]), `${scheme}: ${name}, hover=${hover}`).toBeGreaterThanOrEqual(AA);
+        }
+      }
+    });
+  }
+
+  it("o resolver usa variáveis para paletas e preserva autoContrast para hex de categorias", () => {
+    const resolver = resolved.variantColorResolver;
+    const filled = resolver({ theme: resolved, color: "teal", variant: "filled" });
+    expect(filled.color).toBe("var(--app-teal-contrast)");
+    expect(filled.hoverColor).toBe("var(--app-teal-hover-contrast)");
+    expect(resolver({ theme: resolved, color: "#ffffff", variant: "filled" }).color).toBe("var(--mantine-color-black)");
+    expect(resolver({ theme: resolved, color: "#000000", variant: "filled" }).color).toBe("var(--mantine-color-white)");
   });
 });

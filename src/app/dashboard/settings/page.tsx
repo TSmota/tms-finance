@@ -1,5 +1,7 @@
 import { Card, Stack, Text } from "@mantine/core";
 
+import { ThemeControl } from "@/components/ui/ThemeControl";
+
 import { requireUser } from "@/lib/session";
 import { BaseCurrencyForm } from "@/components/forms/BaseCurrencyForm";
 import { PasswordChangeForm } from "@/components/forms/PasswordChangeForm";
@@ -15,6 +17,12 @@ export default async function SettingsPage() {
         title="Configurações"
         subtitle="Preferências que valem para todas as telas"
       />
+
+      <Card withBorder radius="md" padding="lg">
+        <Text fw={600} mb="xs">Aparência</Text>
+        <Text size="sm" c="dimmed" mb="md">Escolha entre os temas claro e escuro. A preferência fica salva neste navegador.</Text>
+        <div><ThemeControl /></div>
+      </Card>
 
       <Card withBorder radius="md" padding="lg">
         <Text fw={600} mb="xs">

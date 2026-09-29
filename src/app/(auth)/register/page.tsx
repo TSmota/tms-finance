@@ -66,27 +66,34 @@ export default function RegisterPage() {
   });
 
   return (
-    <Paper withBorder shadow="md" p="xl" radius="md" w={420} maw="100%">
-      <Title order={1} size="h2" ta="center" mb="lg">
+    <Paper className="auth-card" withBorder p="xl" radius="lg" w={440} maw="100%">
+      <Title order={1} size="h2" mb="xs">
         Criar sua conta
       </Title>
+
+      <Text c="dimmed" size="sm" mb="xl">Comece a organizar seu dinheiro em um só lugar.</Text>
 
       <form onSubmit={handleSubmit}>
         <Stack>
           <TextInput
             label="Nome"
+            autoComplete="name"
             placeholder="Seu nome"
             key={form.key("name")}
             {...form.getInputProps("name")}
           />
           <TextInput
             label="Email"
+            type="email"
+            autoComplete="email"
             placeholder="voce@exemplo.com"
             key={form.key("email")}
             {...form.getInputProps("email")}
           />
           <PasswordInput
             label="Senha"
+            autoComplete="new-password"
+            visibilityToggleButtonProps={{ "aria-label": "Mostrar ou ocultar senha" }}
             description={PASSWORD_REQUIREMENT}
             key={form.key("password")}
             {...form.getInputProps("password")}

@@ -119,7 +119,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
   return (
     <>
       {/* `aria-label` em cada controle: a barra não comporta rótulo visível. */}
-      <Group mb="md" gap="sm" wrap="wrap" role="search" aria-label="Filtros de transações">
+      <Group className="transaction-filters" mb="md" gap="sm" wrap="wrap" role="search" aria-label="Filtros de transações">
         <TextInput
           placeholder="Buscar descrição"
           aria-label="Buscar por descrição"

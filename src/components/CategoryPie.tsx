@@ -55,7 +55,7 @@ export function CategoryPie(props: CategoryPieProps) {
   }));
 
   return (
-    <Group align="center" gap="lg" wrap="nowrap">
+    <Group className="category-chart" align="center" gap="lg">
       {withChart && (
         /*
           A legenda ao lado já traz os dados em texto. `aria-hidden` aqui seria
@@ -74,7 +74,7 @@ export function CategoryPie(props: CategoryPieProps) {
           pieProps={{ rootTabIndex: -1 }}
         />
       )}
-      <Stack gap={6} flex={1} miw={0}>
+      <Stack gap={10} className="category-legend" flex={1} miw={0}>
         {shown.map((slice, index) => (
           <Group key={`${slice.id ?? "none"}-${index}`} gap="xs" wrap="nowrap" justify="space-between">
             <Group gap={8} wrap="nowrap" miw={0}>
