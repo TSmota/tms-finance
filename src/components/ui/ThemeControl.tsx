@@ -1,19 +1,19 @@
 "use client";
 
-import { Button, Menu, useMantineColorScheme } from "@mantine/core";
-import { Check, Monitor, Moon, Sun } from "lucide-react";
+import { Button, Menu, useComputedColorScheme, useMantineColorScheme } from "@mantine/core";
+import { Check, Moon, Sun } from "lucide-react";
 import { useMounted } from "@mantine/hooks";
 
 const schemes = [
   { value: "light", label: "Claro", icon: Sun },
   { value: "dark", label: "Escuro", icon: Moon },
-  { value: "auto", label: "Sistema", icon: Monitor },
 ] as const;
 
 export function ThemeControl() {
-  const { colorScheme, setColorScheme } = useMantineColorScheme();
+  const { setColorScheme } = useMantineColorScheme();
+  const computedColorScheme = useComputedColorScheme("light");
   const mounted = useMounted();
-  const selected = schemes.find((scheme) => scheme.value === (mounted ? colorScheme : "auto"))!;
+  const selected = schemes.find((scheme) => scheme.value === (mounted ? computedColorScheme : "light"))!;
   const Icon = selected.icon;
 
   return (

@@ -20,7 +20,7 @@ export default async function SettingsPage() {
 
       <Card withBorder radius="md" padding="lg">
         <Text fw={600} mb="xs">Aparência</Text>
-        <Text size="sm" c="dimmed" mb="md">Escolha o tema claro, escuro ou acompanhe o sistema. A preferência fica salva neste navegador.</Text>
+        <Text size="sm" c="dimmed" mb="md">Escolha entre os temas claro e escuro. A preferência fica salva neste navegador.</Text>
         <div><ThemeControl /></div>
       </Card>
 
