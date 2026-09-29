@@ -14,19 +14,29 @@ async function lock(tx: Tx, userId: string, id: string): Promise<SavingsGoal> {
   return tx.savingsGoal.findUniqueOrThrow({ where: { id } });
 }
 
+function validateTargetAmount(value: SavingsGoalInput["targetAmount"]): string {
+  const targetAmount = toStorage(value);
+  if (!money(targetAmount).greaterThan(0)) {
+    throw new InvalidOperationError("O valor-alvo mínimo é um centavo");
+  }
+  return targetAmount;
+}
+
 export async function createSavingsGoal(userId: string, input: SavingsGoalInput): Promise<SavingsGoal> {
   const data = savingsGoalSchema.parse(input);
-  return prisma.savingsGoal.create({ data: { ...data, userId, targetAmount: toStorage(data.targetAmount), dueDate: data.dueDate ? parseCalendarDate(data.dueDate) : null } });
+  const targetAmount = validateTargetAmount(data.targetAmount);
+  return prisma.savingsGoal.create({ data: { ...data, userId, targetAmount, dueDate: data.dueDate ? parseCalendarDate(data.dueDate) : null } });
 }
 
 export async function updateSavingsGoal(userId: string, id: string, input: SavingsGoalInput): Promise<SavingsGoal> {
   const data = savingsGoalSchema.parse(input);
+  const targetAmount = validateTargetAmount(data.targetAmount);
   return prisma.$transaction(async (tx) => {
     const current = await lock(tx, userId, id);
     if (current.currency !== data.currency) {
       throw new InvalidOperationError("A moeda da meta não pode ser alterada");
     }
-    return tx.savingsGoal.update({ where: { id }, data: { ...data, targetAmount: toStorage(data.targetAmount), dueDate: data.dueDate ? parseCalendarDate(data.dueDate) : null } });
+    return tx.savingsGoal.update({ where: { id }, data: { ...data, targetAmount, dueDate: data.dueDate ? parseCalendarDate(data.dueDate) : null } });
   });
 }
 

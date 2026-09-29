@@ -1,6 +1,7 @@
 /** Progresso manual é a soma do histórico; retiradas concorrentes nunca deixam saldo negativo nem movem contas. */
 import { expect, it } from "vitest";
 import { prisma } from "@/lib/db";
+import { toStorage } from "@/lib/money";
 import { createSavingsGoal, updateSavingsGoal, addSavingsEntry, listSavingsGoals } from "@/lib/savingsGoals";
 import { makeUser, makeAccount } from "@tests/support/factories";
 import { savingsGoalInput, savingsEntryInput } from "@tests/support/inputs";
@@ -19,6 +20,22 @@ it("deriva conclusão, reabre ao mudar alvo e preserva o histórico", async () =
   expect((await listSavingsGoals(user.id))[0]).toMatchObject({ status: "ACTIVE", percentage: 50 });
   await expectBalance(account.id, "1000.00");
   expect(await prisma.transaction.count()).toBe(0);
+});
+
+it("rejeita valor-alvo que arredonda para zero", async () => {
+  const user = await makeUser();
+
+  await expect(
+    createSavingsGoal(user.id, savingsGoalInput({ targetAmount: 0.001 })),
+  ).rejects.toThrow("O valor-alvo mínimo é um centavo");
+
+  const goal = await createSavingsGoal(user.id, savingsGoalInput());
+  await expect(
+    updateSavingsGoal(user.id, goal.id, savingsGoalInput({ targetAmount: 0.001 })),
+  ).rejects.toThrow("O valor-alvo mínimo é um centavo");
+
+  const persisted = await prisma.savingsGoal.findUniqueOrThrow({ where: { id: goal.id } });
+  expect(toStorage(persisted.targetAmount)).toBe("100.00");
 });
 
 it("serializa retiradas e isola usuários e moeda", async () => {
