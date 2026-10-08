@@ -13,7 +13,6 @@ import type { ReactNode } from "react";
 import { ArrowDownLeft, ArrowUpRight, ChartNoAxesCombined, Wallet, ChevronRight } from "lucide-react";
 
 import { requireUser } from "@/lib/session";
-import { getAccountBalances } from "@/lib/accounts";
 import { listRecentTransactions } from "@/lib/transactions";
 import { getDebtsByCategory, getMonthSummary, getOpenInvoices } from "@/lib/reports";
 import { getBalanceProjection } from "@/lib/projection";
@@ -31,13 +30,15 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { TransactionsTable } from "@/components/TransactionsTable";
 
+import { getMonthlyHistory, getNetWorth } from "@/lib/dashboardHistory";
+import { DashboardHistory } from "@/components/DashboardHistory";
+
 export default async function DashboardPage() {
   const user = await requireUser();
   const { year, month } = currentCompetency();
 
-  const [balances, recent, summary, projection, openInvoices, debts, pending, options] =
+  const [recent, summary, projection, openInvoices, debts, pending, options, history, netWorth] =
     await Promise.all([
-      getAccountBalances(user.id, user.baseCurrency),
       listRecentTransactions(user.id),
       getMonthSummary(user.id, year, month, user.baseCurrency),
       getBalanceProjection(user.id, year, month, user.baseCurrency),
@@ -45,6 +46,8 @@ export default async function DashboardPage() {
       getDebtsByCategory(user.id, user.baseCurrency),
       listPendingOccurrences(user.id, year, month),
       loadFormOptions(user.id),
+      getMonthlyHistory(user.id, year, month, user.baseCurrency),
+      getNetWorth(user.id, user.baseCurrency),
     ]);
 
   const rows: TransactionRow[] = recent.map((transaction) =>
@@ -78,9 +81,10 @@ export default async function DashboardPage() {
             label="Patrimônio líquido"
             featured
             icon={<Wallet size={20} aria-hidden />}
-            value={formatCurrency(balances.netWorth, user.baseCurrency)}
-            note={balances.netWorthComplete ? undefined : partial}
-            warn={!balances.netWorthComplete}
+            hint="Contas + valores a receber − dívidas a pagar − faturas abertas"
+            value={formatCurrency(netWorth.amount, user.baseCurrency)}
+            note={netWorth.complete ? undefined : partial}
+            warn={!netWorth.complete}
           />
         </GridCol>
         <GridCol span={{ base: 12, sm: 6, lg: 3 }}>
@@ -118,6 +122,8 @@ export default async function DashboardPage() {
           />
         </GridCol>
       </Grid>
+
+      <DashboardHistory months={history} currency={user.baseCurrency} />
 
       {/* Linha 2: o que ainda vai sair, e para quem. */}
       <Grid>

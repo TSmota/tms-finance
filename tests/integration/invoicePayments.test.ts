@@ -202,6 +202,18 @@ describe("proteções", () => {
     ).resolves.toBe(1);
   });
 
+  it("recusa fatura paga antes de consultar o câmbio", async () => {
+    const { user, account, invoice } = await scenario({ cardCurrency: "USD", amount: 100 });
+
+    await payInvoice(user.id, invoice.id, { accountId: account.id, ...payment });
+    setFxAvailable(false);
+
+    await expect(
+      payInvoice(user.id, invoice.id, { accountId: account.id, ...payment }),
+    ).rejects.toThrow(InvalidOperationError);
+    await expectBalance(account.id, "460.00");
+  });
+
   it("dois pagamentos simultâneos debitam a conta uma única vez", async () => {
     // A recheca de status fora da transação não basta: sob READ COMMITTED as
     // duas leem OPEN e ambas debitam. Só o FOR UPDATE serializa.

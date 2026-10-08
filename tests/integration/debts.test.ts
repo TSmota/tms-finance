@@ -9,6 +9,7 @@ import {
   deleteSettlement,
   getDebtDetail,
   listDebts,
+  prepareDebtSettlement,
   settleDebt,
   updateDebt,
 } from "@/lib/debts";
@@ -424,6 +425,47 @@ describe("empréstimo recebido (BORROWED)", () => {
     });
 
     expect(settlement.convertedAmount.toFixed(2)).toBe("100.00");
+  });
+
+  it("herda a categoria atual quando a dívida muda após preparar a amortização", async () => {
+    const { user, account, category, person } = await scenario();
+    const updatedCategory = await makeCategory(user.id, { name: "Saúde" });
+    const debt = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        accountId: account.id,
+        type: "BORROWED",
+        amount: 100,
+      }),
+    );
+
+    const execute = await prepareDebtSettlement(
+      user.id,
+      debt.id,
+      debtSettlementInput({ accountId: account.id, amount: 25 }),
+    );
+    await updateDebt(
+      user.id,
+      debt.id,
+      debtInput({
+        personId: person.id,
+        categoryId: updatedCategory.id,
+        accountId: account.id,
+        type: "BORROWED",
+        amount: 100,
+      }),
+    );
+    const settlement = await prisma.$transaction(execute);
+
+    expect(settlement.categoryId).toBe(updatedCategory.id);
+    expect(await state(user.id, debt.id, account.id)).toMatchObject({
+      restante: "75.00",
+      status: "PARTIALLY_PAID",
+      saldo: "1075.00",
+      saldoRecalculado: "1075.00",
+    });
   });
 });
 

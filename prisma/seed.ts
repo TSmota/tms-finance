@@ -10,14 +10,13 @@ import bcrypt from "bcryptjs";
  * conferidas nos comentários; se mexer nos lançamentos, refaça a soma.
  */
 
-const environment = process.env.NODE_ENV ?? "development";
+const environment = process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development";
 
-if (environment !== "development" || process.env.VERCEL) {
-  console.log(
-    `Refusing to seed: NODE_ENV=${environment}` +
-      (process.env.VERCEL ? `, VERCEL_ENV=${process.env.VERCEL_ENV ?? "set"}` : ""),
-  );
-  process.exit(1);
+console.log(`Current environment: `, environment);
+
+if (environment !== "development" && environment !== "preview") {
+  console.log(`Refusing to seed in non-development/preview environment.`);
+  process.exit(0);
 }
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });

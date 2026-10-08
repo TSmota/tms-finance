@@ -164,11 +164,16 @@ export async function createDebt(userId: string, input: DebtInput): Promise<Debt
  * simultâneas leem o mesmo saldo e a última gravação vence, deixando a dívida
  * devendo dinheiro já pago.
  */
-export async function settleDebt(
+export async function settleDebt(userId: string, debtId: string, input: DebtSettlementInput): Promise<Transaction> {
+  const execute = await prepareDebtSettlement(userId, debtId, input);
+  return prisma.$transaction(execute);
+}
+
+export async function prepareDebtSettlement(
   userId: string,
   debtId: string,
   input: DebtSettlementInput,
-): Promise<Transaction> {
+): Promise<(tx: Tx) => Promise<Transaction>> {
   const debt = await requireDebt(userId, debtId);
 
   await assertCategoryOwned(userId, input.categoryId);
@@ -195,7 +200,7 @@ export async function settleDebt(
 
   const towardsDebt = convertMoney(input.amount, debtRate);
 
-  return prisma.$transaction(async (tx) => {
+  return async (tx) => {
     const locked = await lockDebt(tx, debtId);
     const remaining = money(locked.remainingAmount);
 
@@ -207,16 +212,16 @@ export async function settleDebt(
       // Recusar em vez de limitar ao restante: aceitar silenciosamente um valor
       // maior gravaria no fluxo de caixa um dinheiro que não se moveu.
       throw new InvalidOperationError(
-        `O valor abate mais do que o restante da dívida (${remaining.toFixed(2)} ${debt.currency})`,
+        `O valor abate mais do que o restante da dívida (${remaining.toFixed(2)} ${locked.currency})`,
       );
     }
 
     const settlement = await tx.transaction.create({
       data: {
         userId,
-        type: settlementType(debt.type),
+        type: settlementType(locked.type),
         status: "CONFIRMED",
-        description: input.description ?? defaultSettlementDescription(debt),
+        description: input.description ?? defaultSettlementDescription(locked),
         date,
         amount: toStorage(input.amount),
         currency: input.currency,
@@ -224,7 +229,7 @@ export async function settleDebt(
         convertedAmount: toStorage(convertMoney(input.amount, accountRate)),
         accountId: account.id,
         // Herda a categoria de origem quando o usuário não escolhe outra.
-        categoryId: input.categoryId ?? debt.categoryId,
+        categoryId: input.categoryId ?? locked.categoryId,
         debtId,
       },
     });
@@ -238,7 +243,7 @@ export async function settleDebt(
     await writeRemaining(tx, locked, remaining.minus(towardsDebt));
 
     return settlement;
-  });
+  };
 }
 
 /** Descrição padrão da amortização, quando o usuário não informa uma. */
@@ -512,10 +517,27 @@ export async function requireDebt(userId: string, debtId: string): Promise<Debt>
 async function lockDebt(
   tx: Tx,
   debtId: string,
-): Promise<{ id: string; originalAmount: Money; remainingAmount: Money }> {
+): Promise<{
+  id: string;
+  originalAmount: Money;
+  remainingAmount: Money;
+  type: Debt["type"];
+  currency: Debt["currency"];
+  categoryId: string;
+  description: string;
+}> {
   const rows = await tx.$queryRaw<
-    { id: string; original_amount: string; remaining_amount: string }[]
-  >`SELECT id, original_amount::text, remaining_amount::text
+    {
+      id: string;
+      original_amount: string;
+      remaining_amount: string;
+      type: Debt["type"];
+      currency: Debt["currency"];
+      category_id: string;
+      description: string;
+    }[]
+  >`SELECT id, original_amount::text, remaining_amount::text,
+      type, currency, category_id, description
       FROM finance.debts WHERE id = ${debtId}::uuid FOR UPDATE`;
 
   const row = rows[0];
@@ -528,6 +550,10 @@ async function lockDebt(
     id: row.id,
     originalAmount: money(row.original_amount),
     remainingAmount: money(row.remaining_amount),
+    type: row.type,
+    currency: row.currency,
+    categoryId: row.category_id,
+    description: row.description,
   };
 }
 

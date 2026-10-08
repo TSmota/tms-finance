@@ -48,11 +48,16 @@ async function lockInvoice(
   return row;
 }
 
-export async function payInvoice(
+export async function payInvoice(userId: string, invoiceId: string, input: InvoicePaymentInput): Promise<Transaction> {
+  const execute = await prepareInvoicePayment(userId, invoiceId, input);
+  return prisma.$transaction(execute);
+}
+
+export async function prepareInvoicePayment(
   userId: string,
   invoiceId: string,
   input: InvoicePaymentInput,
-): Promise<Transaction> {
+): Promise<(tx: Tx) => Promise<Transaction>> {
   const invoice = await requireInvoice(userId, invoiceId);
 
   if (invoice.status === "PAID") {
@@ -77,7 +82,7 @@ export async function payInvoice(
     manualRate: input.manualFxRate,
   });
 
-  return prisma.$transaction(async (tx) => {
+  return async (tx) => {
     const current = await lockInvoice(tx, invoiceId);
 
     if (current.status === "PAID") {
@@ -120,7 +125,7 @@ export async function payInvoice(
     });
 
     return payment;
-  });
+  };
 }
 
 /**

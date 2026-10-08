@@ -11,6 +11,9 @@
  */
 
 export const AGENT_SCOPES = [
+  "transfers:write",
+  "goals:write",
+  "payments:write",
   /** Toda leitura e agregação. Nenhuma escrita. */
   "finance:read",
   /** Criar, editar e apagar lançamento de conta. */

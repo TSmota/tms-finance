@@ -24,11 +24,15 @@ describe("baseline do schema", () => {
       "debts",
       "financial_accounts",
       "invoices",
+      "payment_batches",
       "people",
       "rate_limit_hits",
       "recurring_expenses",
+      "savings_entries",
+      "savings_goals",
       "sessions",
       "transactions",
+      "transfers",
       "users",
       "verification_tokens",
     ]);
@@ -65,11 +69,15 @@ describe("baseline do schema", () => {
       "recurring_expenses_due_day_check",
       "recurring_expenses_payment_target_check",
       "recurring_expenses_period_check",
+      "savings_entries_amount_check",
+      "savings_goals_target_check",
       "transactions_debt_card_expense_check",
       "transactions_exchange_rate_check",
       "transactions_installments_check",
       "transactions_payment_target_check",
       "transactions_positive_amounts_check",
+      "transfers_accounts_check",
+      "transfers_amount_check",
     ]);
   });
   it("registra o histórico de migrations em public, fora do schema finance", async () => {

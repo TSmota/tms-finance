@@ -119,6 +119,9 @@ model User {
   people            Person[]
   debts             Debt[]
   agentTokens       AgentToken[]
+  transfers         Transfer[]
+  savingsGoals      SavingsGoal[]
+  paymentBatches    PaymentBatch[]
 
   @@map("users")
   @@schema("finance")
@@ -190,6 +193,8 @@ model FinancialAccount {
   updatedAt      DateTime    @updatedAt @map("updated_at")
 
   user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  outgoingTransfers Transfer[] @relation("TransferSource")
+  incomingTransfers Transfer[] @relation("TransferDestination")
   transactions    Transaction[]
   recurring       RecurringExpense[]
   invoicesPaid    Invoice[]          @relation("InvoicePaymentAccount")
@@ -571,5 +576,67 @@ model RateLimitHit {
   /// Serve à contagem da janela e à poda, que filtram os três nesta ordem.
   @@index([scope, key, createdAt])
   @@map("rate_limit_hits")
+  @@schema("finance")
+}
+
+
+model Transfer {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  sourceAccountId String @map("source_account_id") @db.Uuid
+  destinationAccountId String @map("destination_account_id") @db.Uuid
+  amount Decimal @db.Decimal(12, 2)
+  currency Currency
+  date DateTime
+  description String @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceAccount FinancialAccount @relation("TransferSource", fields: [sourceAccountId], references: [id], onDelete: Restrict)
+  destinationAccount FinancialAccount @relation("TransferDestination", fields: [destinationAccountId], references: [id], onDelete: Restrict)
+  @@index([userId, date])
+  @@index([sourceAccountId])
+  @@index([destinationAccountId])
+  @@map("transfers")
+  @@schema("finance")
+}
+
+model SavingsGoal {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  name String @db.VarChar(120)
+  currency Currency
+  targetAmount Decimal @map("target_amount") @db.Decimal(12, 2)
+  dueDate DateTime? @map("due_date")
+  paused Boolean @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries SavingsEntry[]
+  @@index([userId])
+  @@map("savings_goals")
+  @@schema("finance")
+}
+
+model SavingsEntry {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  goalId String @map("goal_id") @db.Uuid
+  amount Decimal @db.Decimal(12, 2)
+  date DateTime
+  description String @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
+  goal SavingsGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  @@index([goalId, date])
+  @@map("savings_entries")
+  @@schema("finance")
+}
+
+model PaymentBatch {
+  id String @id @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  fingerprint String @db.VarChar(64)
+  transactionIds String[] @map("transaction_ids") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("payment_batches")
   @@schema("finance")
 }

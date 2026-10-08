@@ -84,10 +84,15 @@ export async function accountDeletionBlocker(
   userId: string,
   id: string,
 ): Promise<string | null> {
-  const [paidInvoices, debtMovements] = await Promise.all([
+  const [paidInvoices, debtMovements, transfers] = await Promise.all([
     prisma.invoice.count({ where: { userId, paymentAccountId: id, status: "PAID" } }),
     prisma.transaction.count({ where: { userId, accountId: id, debtId: { not: null } } }),
+    prisma.transfer.count({ where: { userId, OR: [{ sourceAccountId: id }, { destinationAccountId: id }] } }),
   ]);
+
+  if (transfers > 0) {
+    return "Esta conta tem transferências. Remova as transferências antes de remover a conta.";
+  }
 
   if (paidInvoices > 0) {
     return (
