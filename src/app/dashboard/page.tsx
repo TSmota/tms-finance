@@ -37,7 +37,7 @@ export default async function DashboardPage() {
   const user = await requireUser();
   const { year, month } = currentCompetency();
 
-  const [recent, summary, projection, openInvoices, debts, pending, options] =
+  const [recent, summary, projection, openInvoices, debts, pending, options, history, netWorth] =
     await Promise.all([
       listRecentTransactions(user.id),
       getMonthSummary(user.id, year, month, user.baseCurrency),
@@ -46,12 +46,9 @@ export default async function DashboardPage() {
       getDebtsByCategory(user.id, user.baseCurrency),
       listPendingOccurrences(user.id, year, month),
       loadFormOptions(user.id),
+      getMonthlyHistory(user.id, year, month, user.baseCurrency),
+      getNetWorth(user.id, user.baseCurrency),
     ]);
-
-  const [history, netWorth] = await Promise.all([
-    getMonthlyHistory(user.id, year, month, user.baseCurrency),
-    getNetWorth(user.id, user.baseCurrency),
-  ]);
 
   const rows: TransactionRow[] = recent.map((transaction) =>
     toTransactionRow(transaction, user.baseCurrency),

@@ -49,8 +49,11 @@ export async function addSavingsEntry(userId: string, id: string, input: Savings
     }
     const total = await tx.savingsEntry.aggregate({ where: { goalId: id }, _sum: { amount: true } });
     const value = money(toStorage(data.amount)).times(data.kind === "WITHDRAWAL" ? -1 : 1);
-    if (value.isZero() || money(total._sum.amount ?? 0).plus(value).isNegative()) {
-      throw new InvalidOperationError("A retirada não pode exceder o progresso e o valor mínimo é um centavo");
+    if (value.isZero()) {
+      throw new InvalidOperationError("O valor mínimo para uma movimentação é um centavo");
+    }
+    if (money(total._sum.amount ?? 0).plus(value).isNegative()) {
+      throw new InvalidOperationError("A retirada não pode exceder o progresso da meta");
     }
     return tx.savingsEntry.create({ data: { goalId: id, amount: toStorage(value), date: parseCalendarDate(data.date), description: data.description } });
   });

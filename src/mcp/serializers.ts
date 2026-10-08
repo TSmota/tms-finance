@@ -389,11 +389,11 @@ export function deletionImpactDto(impact: DeletionImpact) {
 
 
 export function transferDto(row: import("@prisma/client").Transfer) {
-  return { id: row.id, sourceAccountId: row.sourceAccountId, destinationAccountId: row.destinationAccountId, amount: row.amount.toFixed(2), currency: row.currency, date: day(row.date), description: row.description };
+  return { id: row.id, source_account_id: row.sourceAccountId, destination_account_id: row.destinationAccountId, amount: row.amount.toFixed(2), currency: row.currency, date: day(row.date), description: row.description };
 }
 
 export function savingsGoalDto(row: import("@/lib/savingsGoals").SavingsGoalView) {
-  return { id: row.id, name: row.name, currency: row.currency, targetAmount: row.targetAmount, dueDate: row.dueDate, paused: row.paused, status: row.status, progress: row.progress, percentage: row.percentage, entries: row.entries.map((entry) => ({ id: entry.id, amount: entry.amount, date: entry.date, description: entry.description })) };
+  return { id: row.id, name: row.name, currency: row.currency, target_amount: row.targetAmount, due_date: row.dueDate, paused: row.paused, status: row.status, progress: row.progress, percentage: row.percentage, entries: row.entries.map((entry) => ({ id: entry.id, amount: entry.amount, date: entry.date, description: entry.description })) };
 }
 
 export function payableDto(row: import("@/lib/batchPayments").PayableItem) {

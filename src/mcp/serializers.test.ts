@@ -214,6 +214,40 @@ const samples: Array<[string, unknown]> = [
 ];
 
 describe("projeções para o agente", () => {
+  it("mantém campos snake_case nos DTOs da roadmap", () => {
+    const transfer = dto.transferDto({
+      id: "transfer-1",
+      sourceAccountId: "source-1",
+      destinationAccountId: "destination-1",
+      amount: { toFixed: () => "12.34" },
+      currency: BRL,
+      date: new Date("2026-08-15T00:00:00Z"),
+      description: "Reserva",
+    } as never);
+    const goal = dto.savingsGoalDto({
+      id: "goal-1",
+      name: "Viagem",
+      currency: BRL,
+      targetAmount: "100.00",
+      dueDate: "2026-12-01",
+      paused: false,
+      status: "ACTIVE",
+      progress: "0.00",
+      percentage: 0,
+      entries: [],
+    });
+
+    expect(transfer).toMatchObject({
+      source_account_id: "source-1",
+      destination_account_id: "destination-1",
+    });
+    expect(transfer).not.toHaveProperty("sourceAccountId");
+    expect(transfer).not.toHaveProperty("destinationAccountId");
+    expect(goal).toMatchObject({ target_amount: "100.00", due_date: "2026-12-01" });
+    expect(goal).not.toHaveProperty("targetAmount");
+    expect(goal).not.toHaveProperty("dueDate");
+  });
+
   for (const [name, payload] of samples) {
     it(`${name}: não vaza identificador de usuário nem credencial`, () => {
       assertNoLeaks(payload);

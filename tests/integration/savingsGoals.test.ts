@@ -38,6 +38,19 @@ it("rejeita valor-alvo que arredonda para zero", async () => {
   expect(toStorage(persisted.targetAmount)).toBe("100.00");
 });
 
+it("explica separadamente aporte subcentavo e retirada acima do progresso", async () => {
+  const user = await makeUser();
+  const goal = await createSavingsGoal(user.id, savingsGoalInput());
+
+  await expect(
+    addSavingsEntry(user.id, goal.id, savingsEntryInput({ amount: 0.001 })),
+  ).rejects.toThrow("O valor mínimo para uma movimentação é um centavo");
+  await expect(
+    addSavingsEntry(user.id, goal.id, savingsEntryInput({ amount: 1, kind: "WITHDRAWAL" })),
+  ).rejects.toThrow("A retirada não pode exceder o progresso da meta");
+  expect(await prisma.savingsEntry.count({ where: { goalId: goal.id } })).toBe(0);
+});
+
 it("serializa retiradas e isola usuários e moeda", async () => {
   const user = await makeUser();
   const other = await makeUser();

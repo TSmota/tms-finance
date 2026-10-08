@@ -32,13 +32,17 @@ it("recusa conta alheia, mesma conta, moeda diferente e valor subcentavo sem efe
   const user = await makeUser();
   const other = await makeUser();
   const source = await makeAccount(user.id, { initialBalance: "1000.00" });
+  const destination = await makeAccount(user.id);
   const foreign = await makeAccount(other.id);
   const usd = await makeAccount(user.id, { currency: "USD" });
-  for (const input of [transferInput(source.id, foreign.id), transferInput(source.id, source.id), transferInput(source.id, usd.id), transferInput(source.id, foreign.id, { amount: 0.001 })]) {
+  for (const input of [transferInput(source.id, foreign.id), transferInput(source.id, source.id), transferInput(source.id, usd.id)]) {
     await expect(createTransfer(user.id, input)).rejects.toThrow();
   }
+  await expect(createTransfer(user.id, transferInput(source.id, destination.id, { amount: 0.001 })))
+    .rejects.toThrow("O valor mínimo é um centavo");
   expect(await prisma.transfer.count()).toBe(0);
   await expectBalance(source.id, "1000.00");
+  await expectBalance(destination.id, "0.00");
   await expectBalance(foreign.id, "0.00");
   await expectBalance(usd.id, "0.00");
 });

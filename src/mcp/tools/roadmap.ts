@@ -64,7 +64,7 @@ export function registerRoadmapTools(server: McpServer): void {
   });
   defineTool(server, "pay_batch", {
     title: "Pagar lote", description: "Paga até 50 faturas/dívidas BORROWED na moeda da conta. Atomicidade total; expectedAmount deve vir da prévia. Reutilize requestId em retries do mesmo payload; após estorno, uma nova operação exige nova chave.",
-    schema: batchPaymentSchema, run: (agent, input) => payments.payBatch(agent.userId, input), serialize: (ids) => ({ transactionIds: ids }),
+    schema: batchPaymentSchema, run: (agent, input) => payments.payBatch(agent.userId, input), serialize: (ids) => ({ transaction_ids: ids }),
     affected: (ids) => ids, revalidates: "roadmap",
   });
 }
