@@ -60,6 +60,14 @@ export async function prepareInvoicePayment(
 ): Promise<(tx: Tx) => Promise<Transaction>> {
   const invoice = await requireInvoice(userId, invoiceId);
 
+  if (invoice.status === "PAID") {
+    throw new InvalidOperationError("Esta fatura já foi paga");
+  }
+
+  if (!isPositive(money(invoice.totalAmount))) {
+    throw new InvalidOperationError("Não há valor a pagar nesta fatura");
+  }
+
   const account = await requireAccount(userId, input.accountId);
 
   const date = parseCalendarDate(input.date);
