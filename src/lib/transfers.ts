@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { applyToBalance, type Tx } from "@/lib/accountBalance";
 import { requireAccount } from "@/lib/ownership";
 import { InvalidOperationError, NotFoundError } from "@/lib/errors";
-import { money, toStorage } from "@/lib/money";
+import { isPositive, money, toStorage } from "@/lib/money";
 import { parseCalendarDate } from "@/lib/dates";
 import { transferSchema, type TransferInput } from "@/lib/validations";
 
@@ -14,7 +14,7 @@ async function prepare(userId: string, input: TransferInput): Promise<TransferIn
   if (source.currency !== destination.currency) {
     throw new InvalidOperationError("Transferências exigem contas da mesma moeda");
   }
-  if (!money(toStorage(input.amount)).isPositive()) {
+  if (!isPositive(toStorage(input.amount))) {
     throw new InvalidOperationError("O valor mínimo é um centavo");
   }
   return { ...input, currency: source.currency };

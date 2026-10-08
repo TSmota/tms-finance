@@ -38,21 +38,34 @@ export async function payBatch(userId: string, input: BatchPaymentInput): Promis
   }
   const account = await requireAccount(userId, input.accountId);
   const prepared: { item: BatchPaymentInput["items"][number]; lockOrder: string; execute: Awaited<ReturnType<typeof prepareInvoicePayment>> }[] = [];
-  for (const item of items) {
-    const row = item.kind === "INVOICE" ? await requireInvoice(userId, item.id) : await requireDebt(userId, item.id);
-    if (row.currency !== account.currency || ("type" in row && row.type !== "BORROWED")) {
-      throw new InvalidOperationError("Selecione apenas faturas e dívidas a pagar na moeda da conta");
+  try {
+    for (const item of items) {
+      const row = item.kind === "INVOICE" ? await requireInvoice(userId, item.id) : await requireDebt(userId, item.id);
+      if (row.currency !== account.currency || ("type" in row && row.type !== "BORROWED")) {
+        throw new InvalidOperationError("Selecione apenas faturas e dívidas a pagar na moeda da conta");
+      }
+      const execute = item.kind === "INVOICE"
+        ? await prepareInvoicePayment(userId, item.id, { accountId: account.id, date: input.date })
+        : await prepareDebtSettlement(userId, item.id, {
+            accountId: account.id, date: input.date, amount: item.expectedAmount, currency: account.currency,
+            categoryId: null, description: null,
+          });
+      const lockOrder = "year" in row
+        ? `1:${row.year}:${String(row.month).padStart(2, "0")}:${row.id}`
+        : `0:${row.id}`;
+      prepared.push({ item, execute, lockOrder });
     }
-    const execute = item.kind === "INVOICE"
-      ? await prepareInvoicePayment(userId, item.id, { accountId: account.id, date: input.date })
-      : await prepareDebtSettlement(userId, item.id, {
-          accountId: account.id, date: input.date, amount: item.expectedAmount, currency: account.currency,
-          categoryId: null, description: null,
-        });
-    const lockOrder = "year" in row
-      ? `1:${row.year}:${String(row.month).padStart(2, "0")}:${row.id}`
-      : `0:${row.id}`;
-    prepared.push({ item, execute, lockOrder });
+  } catch (error) {
+    // Um retry pode encontrar a fatura já paga porque o primeiro lote acabou
+    // de confirmar enquanto este preparava as taxas fora da transação.
+    const completed = await prisma.paymentBatch.findUnique({ where: { id: input.requestId } });
+    if (completed?.userId === userId && completed.transactionIds.length > 0) {
+      if (completed.fingerprint !== fingerprint) {
+        throw new InvalidOperationError("Esta chave já foi usada por outro lote");
+      }
+      return completed.transactionIds;
+    }
+    throw error;
   }
   prepared.sort((a, b) => a.lockOrder.localeCompare(b.lockOrder));
   return prisma.$transaction(async (tx) => {
