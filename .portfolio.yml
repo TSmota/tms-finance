@@ -1,0 +1,43 @@
+portfolio:
+  id: tms-finance
+  order: 4
+  status: completed
+  technologies:
+    - Next.js
+    - React
+    - TypeScript
+    - PostgreSQL
+    - Prisma
+    - Mantine
+    - NextAuth
+    - Zod
+    - Vitest
+    - MCP
+  images:
+    - name: tms-finance-home.png
+      source: docs/screenshots/home.png
+    - name: tms-finance-transactions.png
+      source: docs/screenshots/transactions.png
+    - name: tms-finance-accounts.png
+      source: docs/screenshots/contas.png
+    - name: tms-finance-login.png
+      source: docs/screenshots/login.png
+  i18n:
+    en:
+      name: TMS Finance
+      description: >-
+        A full-featured personal finance management application with
+        multi-currency accounts, credit card statement tracking with
+        installment support, recurring expense projections, peer-to-peer
+        debt tracking, internal transfers, savings goals, batch payments,
+        a consolidated dashboard, and an AI agent surface via Model Context
+        Protocol (MCP).
+    pt:
+      name: TMS Finance
+      description: >-
+        Uma aplicação completa de gestão financeira pessoal com contas e
+        carteiras multi-moeda, controle de faturas de cartão de crédito com
+        parcelamento, projeção de gastos recorrentes, controle de
+        empréstimos entre pessoas, transferências internas, metas de
+        economia, pagamentos em lote, dashboard consolidado e superfície
+        de agente IA via Model Context Protocol (MCP).
