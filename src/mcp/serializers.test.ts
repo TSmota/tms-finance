@@ -211,9 +211,65 @@ const samples: Array<[string, unknown]> = [
     ),
   ],
   ["categories", dto.categoriesDto([{ id: "c1", name: "Mercado", color: "#fff", icon: null, subcategories: [{ id: "c2", name: "Feira", color: null, icon: null }] }])],
+  [
+    "transfer",
+    dto.transferDto({
+      id: "transfer-1",
+      userId: "u1",
+      sourceAccountId: "s1",
+      destinationAccountId: "d1",
+      amount: { toFixed: () => "12.34" },
+      currency: BRL,
+      date: new Date("2026-08-15T00:00:00Z"),
+      description: "Reserva",
+    } as never),
+  ],
+  [
+    "savingsGoal",
+    dto.savingsGoalDto({
+      id: "goal-1",
+      name: "Viagem",
+      currency: BRL,
+      targetAmount: "100.00",
+      dueDate: "2026-12-01",
+      paused: false,
+      status: "ACTIVE",
+      progress: "50.00",
+      percentage: 50,
+      entries: [{ id: "e1", amount: "50.00", date: "2026-08-15", description: "Aporte" }],
+    }),
+  ],
+  [
+    "payable",
+    dto.payableDto({
+      id: "pay-1",
+      kind: "INVOICE",
+      description: "Fatura Nubank",
+      amount: "350.00",
+      currency: BRL,
+    }),
+  ],
+  [
+    "history",
+    dto.historyDto(
+      [{ label: "08/2026", income: 5000, expenses: 3200, net: 1800, complete: true }],
+      BRL,
+    ),
+  ],
+  ["netWorth", dto.netWorthDto({ amount: 15432.1, complete: true }, BRL)],
 ];
 
 describe("projeções para o agente", () => {
+  it("entrega competência de histórico no formato YYYY-MM preservando label", () => {
+    const payload = dto.historyDto(
+      [{ label: "08/2026", income: 5000, expenses: 3200, net: 1800, complete: true }],
+      BRL,
+    );
+
+    expect(payload.months[0].month).toBe("2026-08");
+    expect(payload.months[0].label).toBe("08/2026");
+  });
+
   it("mantém campos snake_case nos DTOs da roadmap", () => {
     const transfer = dto.transferDto({
       id: "transfer-1",
@@ -247,6 +303,7 @@ describe("projeções para o agente", () => {
     expect(goal).not.toHaveProperty("targetAmount");
     expect(goal).not.toHaveProperty("dueDate");
   });
+
 
   for (const [name, payload] of samples) {
     it(`${name}: não vaza identificador de usuário nem credencial`, () => {
