@@ -887,8 +887,14 @@ Token opaco de 256 bits guardado **só** como HMAC-SHA256 com o pepper de
   Categoria e pessoa entraram porque a assimetria era pior que o risco: o agente
   já podia **apagar** as duas, e não podia criá-las — `create_debt` exigia um
   `personId` sem origem alcançável.
+- `transfers:write`, `goals:write` e `payments:write` cobrem as operações da
+  roadmap: transferências entre contas da mesma moeda, metas de economia com
+  progresso manual (sem afetar saldo de conta) e pagamentos atômicos em lote
+  (`pay_batch`, idempotente por `requestId`). Suas mutações revalidam o layout
+  de `/dashboard` (`roadmap`).
 
 `/api/agent/mcp` **não** entra no matcher de [src/proxy.ts](src/proxy.ts), que
+
 cobre só `/dashboard/:path*`. A autenticação é bearer token, e a doc do Next 16
 não trata proxy como autorização. Interceptar o endpoint produziria redirect
 para `/login` em vez de 401.
