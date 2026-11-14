@@ -6,14 +6,14 @@ import { listCategoryTree } from "@/lib/categories";
 import { listCreditCards } from "@/lib/creditCards";
 import { getDebtDetail, listDebts } from "@/lib/debts";
 import { DELETION_TARGETS, describeDeletionImpact } from "@/lib/deletionImpact";
-import { listCardInvoices, listInvoiceItems } from "@/lib/invoices";
-import { getPeopleOverview } from "@/lib/people";
+import { getInvoice, listCardInvoices, listInvoiceItems } from "@/lib/invoices";
+import { getPeopleOverview, listPeople } from "@/lib/people";
 import { getBalanceProjection } from "@/lib/projection";
 import { listPendingOccurrences, listRecurringExpenses } from "@/lib/recurring";
 import { getDebtsByCategory, getMonthSummary, getOpenInvoices } from "@/lib/reports";
-import { listMonthTransactions, listRecentTransactions } from "@/lib/transactions";
+import { getTransaction, listMonthTransactions, listRecentTransactions } from "@/lib/transactions";
 import { DEBT_TYPE_CODES } from "@/lib/debtTypes";
-import { competencyArgs, idArg, noArgs, toCompetency } from "@/mcp/args";
+import { competencyArgs, idArg, idArgs, noArgs, toCompetency } from "@/mcp/args";
 import { defineTool } from "@/mcp/define";
 import * as dto from "@/mcp/serializers";
 
@@ -145,6 +145,15 @@ export function registerReadTools(server: McpServer): void {
     serialize: (result) => dto.transactionsDto(result),
   });
 
+  defineTool(server, "get_transaction", {
+    title: "Detalhe de lançamento",
+    description:
+      "Obtém os detalhes completos de uma transação específica pelo seu ID.",
+    schema: idArgs,
+    run: (agent, input) => getTransaction(agent.userId, input.id),
+    serialize: (result) => dto.transactionDto(result),
+  });
+
   defineTool(server, "list_credit_cards", {
     title: "Cartões de crédito",
     description:
@@ -164,6 +173,15 @@ export function registerReadTools(server: McpServer): void {
     schema: cardIdArgs,
     run: (agent, input) => listCardInvoices(agent.userId, input.credit_card_id),
     serialize: (result) => dto.invoicesDto(result),
+  });
+
+  defineTool(server, "get_invoice", {
+    title: "Detalhe de fatura",
+    description:
+      "Obtém os detalhes consolidados de uma fatura de cartão pelo seu ID.",
+    schema: idArgs,
+    run: (agent, input) => getInvoice(agent.userId, input.id),
+    serialize: (result) => dto.invoiceDto(result),
   });
 
   defineTool(server, "list_invoice_items", {
@@ -196,6 +214,15 @@ export function registerReadTools(server: McpServer): void {
     schema: debtIdArgs,
     run: (agent, input) => getDebtDetail(agent.userId, input.debt_id),
     serialize: (result) => dto.debtDetailDto(result),
+  });
+
+  defineTool(server, "list_people", {
+    title: "Listar pessoas",
+    description:
+      "Lista todas as pessoas cadastradas para acompanhamento de dívidas e empréstimos pessoais.",
+    schema: noArgs,
+    run: (agent) => listPeople(agent.userId),
+    serialize: (result) => dto.peopleListDto(result),
   });
 
   defineTool(server, "get_people_overview", {

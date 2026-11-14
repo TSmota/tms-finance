@@ -2,9 +2,11 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
 import {
+  accountSchema,
   cardPurchaseSchema,
   categorySchema,
   confirmOccurrenceSchema,
+  creditCardSchema,
   debtSchema,
   debtSettlementSchema,
   invoicePaymentSchema,
@@ -12,7 +14,9 @@ import {
   recurringExpenseSchema,
   transactionSchema,
 } from "@/lib/validations";
+import * as accounts from "@/lib/accounts";
 import * as transactions from "@/lib/transactions";
+import * as creditCards from "@/lib/creditCards";
 import * as cardPurchases from "@/lib/cardPurchases";
 import * as invoicePayments from "@/lib/invoicePayments";
 import * as debts from "@/lib/debts";
@@ -48,6 +52,8 @@ const HIERARCHY_NOTE =
 const idOnlyArgs = z.object({ id: idArg });
 const invoiceIdArgs = z.object({ invoice_id: idArg });
 
+const updateAccountArgs = z.object({ id: idArg, data: accountSchema });
+const updateCreditCardArgs = z.object({ id: idArg, data: creditCardSchema });
 const updateTransactionArgs = z.object({ id: idArg, data: transactionSchema });
 const updateCardPurchaseArgs = z.object({ id: idArg, data: cardPurchaseSchema });
 const payInvoiceArgs = z.object({ invoice_id: idArg, data: invoicePaymentSchema });
@@ -102,8 +108,30 @@ export function registerWriteTools(server: McpServer): void {
   });
 
   // -------------------------------------------------------------
-  // Compras no cartão — cards:write
+  // Cartões e compras no cartão — cards:write
   // -------------------------------------------------------------
+
+  defineTool(server, "create_credit_card", {
+    title: "Criar cartão de crédito",
+    description:
+      "Cadastra um cartão de crédito definindo nome, instituição, dias de fechamento e vencimento, moeda, limite e conta padrão de pagamento.",
+    schema: creditCardSchema,
+    run: (agent, input) => creditCards.createCreditCard(agent.userId, input),
+    serialize: (row) => ({ id: row.id }),
+    affected: (row) => [row.id],
+    revalidates: "creditCards",
+  });
+
+  defineTool(server, "update_credit_card", {
+    title: "Editar cartão de crédito",
+    description:
+      "Atualiza os dados de um cartão de crédito (nome, limite, dias de fechamento/vencimento e conta padrão). A moeda é imutável.",
+    schema: updateCreditCardArgs,
+    run: (agent, input) => creditCards.updateCreditCard(agent.userId, input.id, input.data),
+    serialize: (row) => ({ id: row.id }),
+    affected: (row) => [row.id],
+    revalidates: "creditCards",
+  });
 
   defineTool(server, "create_card_purchase", {
     title: "Lançar compra no cartão",
@@ -328,6 +356,29 @@ export function registerWriteTools(server: McpServer): void {
   // -------------------------------------------------------------
   // Cadastros de base — setup:write
   // -------------------------------------------------------------
+
+  defineTool(server, "create_account", {
+    title: "Criar conta bancária",
+    description:
+      "Cadastra uma conta bancária ou carteira definindo nome, tipo, instituição, moeda e saldo inicial.",
+    schema: accountSchema,
+    run: (agent, input) => accounts.createAccount(agent.userId, input),
+    serialize: (row) => ({ id: row.id }),
+    affected: (row) => [row.id],
+    revalidates: "accounts",
+  });
+
+  defineTool(server, "update_account", {
+    title: "Editar conta bancária",
+    description:
+      "Atualiza os dados de uma conta. A moeda é imutável. Alterar o saldo inicial " +
+      "desloca o saldo atual pela mesma diferença.",
+    schema: updateAccountArgs,
+    run: (agent, input) => accounts.updateAccount(agent.userId, input.id, input.data),
+    serialize: (row) => ({ id: row.id }),
+    affected: (row) => [row.id],
+    revalidates: "accounts",
+  });
 
   defineTool(server, "create_category", {
     title: "Criar categoria",

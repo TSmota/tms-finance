@@ -247,6 +247,23 @@ export async function listCardInvoices(
   return invoices.map(toSummary);
 }
 
+/** Obtém os detalhes consolidados de uma fatura específica. */
+export async function getInvoice(
+  userId: string,
+  id: string,
+): Promise<InvoiceSummary> {
+  const invoice = await prisma.invoice.findFirst({
+    where: { id, userId },
+    include: { _count: { select: { transactions: { where: INVOICE_ITEMS_WHERE } } } },
+  });
+
+  if (!invoice) {
+    throw new NotFoundError("Fatura não encontrada");
+  }
+
+  return toSummary(invoice);
+}
+
 export interface InvoiceItem {
   id: string;
   description: string;

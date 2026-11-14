@@ -325,3 +325,20 @@ export async function listRecentTransactions(
 
   return transactions.map(toListItem);
 }
+
+/** Detalhes de um lançamento específico. */
+export async function getTransaction(
+  userId: string,
+  id: string,
+): Promise<TransactionListItem> {
+  const transaction = await prisma.transaction.findFirst({
+    where: { id, userId },
+    include: listInclude,
+  });
+
+  if (!transaction) {
+    throw new NotFoundError("Lançamento não encontrado");
+  }
+
+  return toListItem(transaction);
+}

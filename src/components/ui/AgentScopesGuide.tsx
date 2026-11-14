@@ -7,12 +7,14 @@ export function AgentScopesGuide() {
   const readTools = [
     "list_accounts",
     "list_transactions",
+    "get_transaction",
     "get_month_summary",
     "get_balance_projection",
     "get_net_worth",
     "get_monthly_history",
     "list_credit_cards",
     "list_card_invoices",
+    "get_invoice",
     "list_invoice_items",
     "get_open_invoices",
     "list_transfers",
@@ -20,6 +22,8 @@ export function AgentScopesGuide() {
     "list_payables",
     "list_debts",
     "get_debt_detail",
+    "get_debts_by_category",
+    "list_people",
     "get_people_overview",
     "list_recurring",
     "list_pending_occurrences",
@@ -34,6 +38,8 @@ export function AgentScopesGuide() {
   ];
 
   const cardTools = [
+    "create_credit_card",
+    "update_credit_card",
     "create_card_purchase",
     "update_card_purchase",
     "delete_card_purchase",
@@ -43,28 +49,58 @@ export function AgentScopesGuide() {
 
   const transferGoalTools = [
     "create_transfer",
+    "update_transfer",
     "delete_transfer",
     "create_savings_goal",
     "update_savings_goal",
-    "create_savings_entry",
+    "add_savings_entry",
   ];
 
   const debtTools = [
     "create_debt",
     "update_debt",
-    "delete_debt",
-    "amortize_debt",
+    "settle_debt",
+    "delete_settlement",
   ];
 
-  const batchTools = ["execute_batch_payment"];
+  const recurringTools = [
+    "create_recurring",
+    "update_recurring",
+    "delete_recurring",
+    "set_recurring_active",
+    "confirm_pending",
+    "materialize_recurring",
+  ];
+
+  const setupTools = [
+    "create_account",
+    "update_account",
+    "create_category",
+    "update_category",
+    "create_person",
+    "update_person",
+  ];
+
+  const batchTools = ["pay_batch"];
 
   const destructiveTools = [
     "delete_account",
     "delete_credit_card",
-    "delete_category",
     "delete_person",
-    "delete_recurring_rule",
+    "delete_category",
+    "delete_debt",
   ];
+
+  const totalTools =
+    readTools.length +
+    transactionTools.length +
+    cardTools.length +
+    transferGoalTools.length +
+    debtTools.length +
+    recurringTools.length +
+    setupTools.length +
+    batchTools.length +
+    destructiveTools.length;
 
   const renderToolBadges = (tools: string[]) => (
     <Group gap={6} wrap="wrap" mt={6}>
@@ -104,7 +140,7 @@ export function AgentScopesGuide() {
               Inventário de Ferramentas por Escopo
             </Text>
             <Text size="xs" c="dimmed">
-              Mapeamento estrito das 38 ferramentas do protocolo MCP e suas restrições operacionais
+              Mapeamento estrito das {totalTools} ferramentas do protocolo MCP e suas restrições operacionais
             </Text>
           </div>
         </Group>
@@ -123,7 +159,7 @@ export function AgentScopesGuide() {
             </Accordion.Control>
             <Accordion.Panel>
               <Text size="xs" c="dimmed" mb="xs">
-                Permite ao agente consultar saldos, relatórios, projeções e cadastros, sem permissão de alteração:
+                Permite ao agente consultar saldos, relatórios, projeções, transações e cadastros, sem permissão de alteração:
               </Text>
               {renderToolBadges(readTools)}
             </Accordion.Panel>
@@ -161,9 +197,28 @@ export function AgentScopesGuide() {
             </Accordion.Control>
             <Accordion.Panel>
               <Text size="xs" c="dimmed" mb="xs">
-                Lançar compras à vista ou parceladas e registrar quitação de faturas de cartão:
+                Criar/editar cartões, lançar compras à vista ou parceladas e registrar quitação de faturas:
               </Text>
               {renderToolBadges(cardTools)}
+            </Accordion.Panel>
+          </Accordion.Item>
+
+          <Accordion.Item value="setup">
+            <Accordion.Control>
+              <Group gap="xs">
+                <Badge color="teal" variant="light">
+                  setup:write
+                </Badge>
+                <Text size="sm" fw={600}>
+                  Cadastros de base ({setupTools.length} ferramentas)
+                </Text>
+              </Group>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Text size="xs" c="dimmed" mb="xs">
+                Criar e editar contas bancárias, categorias e pessoas de contato:
+              </Text>
+              {renderToolBadges(setupTools)}
             </Accordion.Panel>
           </Accordion.Item>
 
@@ -190,7 +245,7 @@ export function AgentScopesGuide() {
             <Accordion.Control>
               <Group gap="xs">
                 <Badge color="teal" variant="light">
-                  debts:write & debts:amortize
+                  debts:write
                 </Badge>
                 <Text size="sm" fw={600}>
                   Dívidas e amortizações ({debtTools.length} ferramentas)
@@ -205,11 +260,30 @@ export function AgentScopesGuide() {
             </Accordion.Panel>
           </Accordion.Item>
 
+          <Accordion.Item value="recurring">
+            <Accordion.Control>
+              <Group gap="xs">
+                <Badge color="teal" variant="light">
+                  recurring:write
+                </Badge>
+                <Text size="sm" fw={600}>
+                  Recorrências e materialização ({recurringTools.length} ferramentas)
+                </Text>
+              </Group>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Text size="xs" c="dimmed" mb="xs">
+                Gerenciar gastos recorrentes, confirmar pendências e materializar ocorrências do mês:
+              </Text>
+              {renderToolBadges(recurringTools)}
+            </Accordion.Panel>
+          </Accordion.Item>
+
           <Accordion.Item value="batch">
             <Accordion.Control>
               <Group gap="xs">
                 <Badge color="teal" variant="light">
-                  batch_payments:write
+                  payments:write
                 </Badge>
                 <Text size="sm" fw={600}>
                   Pagamentos em lote ({batchTools.length} ferramenta)
