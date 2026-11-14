@@ -28,7 +28,7 @@ export function McpEndpointCard() {
 
   const endpointUrl = `${origin}/api/agent/mcp`;
 
-  const claudeDesktopSnippet = JSON.stringify(
+  const mcpConfigSnippet = JSON.stringify(
     {
       mcpServers: {
         "tms-finance": {
@@ -38,40 +38,6 @@ export function McpEndpointCard() {
           },
         },
       },
-    },
-    null,
-    2,
-  );
-
-  const cursorSnippet = JSON.stringify(
-    {
-      mcpServers: {
-        "tms-finance": {
-          url: endpointUrl,
-          headers: {
-            Authorization: "Bearer <SEU_TOKEN_AQUI>",
-          },
-        },
-      },
-    },
-    null,
-    2,
-  );
-
-  const antigravitySnippet = JSON.stringify(
-    {
-      mcpServers: {
-        "tms-finance": {
-          command: "curl",
-          args: [
-            "-s",
-            "-X", "POST",
-            endpointUrl,
-            "-H", "Authorization: Bearer <SEU_TOKEN_AQUI>",
-            "-H", "Content-Type: application/json"
-          ]
-        }
-      }
     },
     null,
     2,
@@ -150,16 +116,16 @@ export function McpEndpointCard() {
           </Group>
         </Box>
 
-        <Tabs defaultValue="claude" keepMounted={false}>
+        <Tabs defaultValue="gemini" keepMounted={false}>
           <Tabs.List>
-            <Tabs.Tab value="claude" leftSection={<Bot size={14} color="var(--mantine-color-orange-6)" aria-hidden />}>
-              Claude Desktop
+            <Tabs.Tab value="gemini" leftSection={<Sparkles size={14} color="var(--mantine-color-grape-6)" aria-hidden />}>
+              Gemini CLI / Antigravity
             </Tabs.Tab>
             <Tabs.Tab value="cursor" leftSection={<Code2 size={14} color="var(--mantine-color-blue-6)" aria-hidden />}>
               Cursor (.cursor/mcp.json)
             </Tabs.Tab>
-            <Tabs.Tab value="antigravity" leftSection={<Sparkles size={14} color="var(--mantine-color-grape-6)" aria-hidden />}>
-              Antigravity / Gemini CLI
+            <Tabs.Tab value="claude" leftSection={<Bot size={14} color="var(--mantine-color-orange-6)" aria-hidden />}>
+              Claude Desktop
             </Tabs.Tab>
             <Tabs.Tab value="curl" leftSection={<Terminal size={14} color="var(--mantine-color-teal-6)" aria-hidden />}>
               cURL / Shell
@@ -169,15 +135,15 @@ export function McpEndpointCard() {
             </Tabs.Tab>
           </Tabs.List>
 
-          <Tabs.Panel value="claude" pt="xs">
+          <Tabs.Panel value="gemini" pt="xs">
             <Stack gap="xs">
               <Text size="xs" c="dimmed">
-                No seu <code>claude_desktop_config.json</code> (macOS: <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>):
+                No arquivo de configuração global do Gemini CLI / Antigravity (<code>~/.gemini/config/mcp_config.json</code>) ou no escopo do projeto (<code>.gemini/mcp_config.json</code>):
               </Text>
               <pre
                 tabIndex={0}
                 role="region"
-                aria-label="Snippet de configuração para Claude Desktop"
+                aria-label="Snippet de configuração para Gemini CLI e Antigravity"
                 style={{
                   margin: 0,
                   padding: "12px",
@@ -189,10 +155,10 @@ export function McpEndpointCard() {
                   overflowX: "auto",
                 }}
               >
-                {claudeDesktopSnippet}
+                {mcpConfigSnippet}
               </pre>
               <Group justify="flex-end">
-                <CopyButton value={claudeDesktopSnippet} timeout={2500}>
+                <CopyButton value={mcpConfigSnippet} timeout={2500}>
                   {({ copied, copy }) => (
                     <Button
                       variant="subtle"
@@ -212,7 +178,7 @@ export function McpEndpointCard() {
           <Tabs.Panel value="cursor" pt="xs">
             <Stack gap="xs">
               <Text size="xs" c="dimmed">
-                No arquivo <code>.cursor/mcp.json</code> da raiz do seu repositório:
+                No arquivo <code>.cursor/mcp.json</code> da raiz do seu repositório ou globalmente em <code>~/.cursor/mcp.json</code> (<em>Cursor Settings &gt; Features &gt; MCP</em>):
               </Text>
               <pre
                 tabIndex={0}
@@ -229,10 +195,10 @@ export function McpEndpointCard() {
                   overflowX: "auto",
                 }}
               >
-                {cursorSnippet}
+                {mcpConfigSnippet}
               </pre>
               <Group justify="flex-end">
-                <CopyButton value={cursorSnippet} timeout={2500}>
+                <CopyButton value={mcpConfigSnippet} timeout={2500}>
                   {({ copied, copy }) => (
                     <Button
                       variant="subtle"
@@ -249,15 +215,18 @@ export function McpEndpointCard() {
             </Stack>
           </Tabs.Panel>
 
-          <Tabs.Panel value="antigravity" pt="xs">
+          <Tabs.Panel value="claude" pt="xs">
             <Stack gap="xs">
               <Text size="xs" c="dimmed">
-                No arquivo de configuração MCP do Antigravity (<code>~/.gemini/antigravity/mcp_config.json</code>):
+                No seu arquivo <code>claude_desktop_config.json</code>:
+                <br />• <strong>macOS:</strong> <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>
+                <br />• <strong>Windows:</strong> <code>%APPDATA%\Claude\claude_desktop_config.json</code>
+                <br />• <strong>Linux:</strong> <code>~/.config/Claude/claude_desktop_config.json</code>
               </Text>
               <pre
                 tabIndex={0}
                 role="region"
-                aria-label="Snippet de configuração para Antigravity"
+                aria-label="Snippet de configuração para Claude Desktop"
                 style={{
                   margin: 0,
                   padding: "12px",
@@ -269,10 +238,10 @@ export function McpEndpointCard() {
                   overflowX: "auto",
                 }}
               >
-                {antigravitySnippet}
+                {mcpConfigSnippet}
               </pre>
               <Group justify="flex-end">
-                <CopyButton value={antigravitySnippet} timeout={2500}>
+                <CopyButton value={mcpConfigSnippet} timeout={2500}>
                   {({ copied, copy }) => (
                     <Button
                       variant="subtle"

@@ -125,7 +125,7 @@ export function McpFlowVisual() {
                 • Claude Desktop
               </text>
               <text x="20" y="78" fill="var(--mantine-color-dimmed)" fontSize="11">
-                • Cursor & Antigravity
+                • Cursor & Gemini CLI
               </text>
               <text x="20" y="96" fill="var(--mantine-color-dimmed)" fontSize="11">
                 • OpenCode & CLI
