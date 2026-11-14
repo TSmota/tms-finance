@@ -36,18 +36,23 @@ export default async function AccountsPage() {
         action={<AddAccountButton baseCurrency={user.baseCurrency} />}
       />
 
-      <Card withBorder radius="md" padding="lg">
-        <Text size="sm" c="dimmed">
-          Patrimônio líquido total
-        </Text>
-        <Text fw={700} size="xl" mt="xs">
-          {formatCurrency(netWorth, user.baseCurrency)}
-        </Text>
-        {!netWorthComplete && (
-          <Text size="xs" c="orange" mt={4}>
-            Não inclui contas com cotação indisponível para {user.baseCurrency}.
-          </Text>
-        )}
+      <Card className="stat-card stat-card-featured" withBorder radius="md" padding="lg">
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <div>
+            <Text size="sm" c="dimmed" fw={550}>
+              Patrimônio líquido total em contas
+            </Text>
+            <Text fw={700} size="xl" className="stat-value" mt="xs">
+              {formatCurrency(netWorth, user.baseCurrency)}
+            </Text>
+            {!netWorthComplete && (
+              <Text size="xs" c="orange" mt={4}>
+                Não inclui contas com cotação indisponível para {user.baseCurrency}.
+              </Text>
+            )}
+          </div>
+          <span className="stat-icon"><Landmark size={20} aria-hidden /></span>
+        </Group>
       </Card>
 
       {accounts.length === 0 ? (
@@ -73,14 +78,14 @@ export default async function AccountsPage() {
             <Grid>
               {items.map((account) => (
                 <GridCol key={account.id} span={{ base: 12, sm: 6, md: 4 }}>
-                  <Card withBorder radius="md" padding="lg" h="100%">
+                  <Card className="stat-card" withBorder radius="md" padding="lg" h="100%">
                     <Group justify="space-between" mb="xs" wrap="nowrap">
                       <Text fw={600}>{account.name}</Text>
                       <Badge variant="light" color="gray" size="sm" tt="none" fw={500}>
                         {ACCOUNT_TYPE_LABELS[account.type] ?? account.type}
                       </Badge>
                     </Group>
-                    <Text fw={700} size="lg">
+                    <Text fw={700} size="lg" className="stat-value">
                       {formatCurrency(account.balance, account.currency)}
                     </Text>
                     {account.currency !== user.baseCurrency &&

@@ -9,7 +9,7 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { ChevronRight, Landmark } from "lucide-react";
+import { ChevronRight, CreditCard as CreditCardIcon, Landmark } from "lucide-react";
 
 import { requireUser } from "@/lib/session";
 import { listCreditCards } from "@/lib/creditCards";
@@ -75,7 +75,16 @@ export default async function CardsPage() {
 
       {cards.length === 0 ? (
         <Card withBorder radius="md" padding="lg">
-          <EmptyState message="Nenhum cartão ainda. Adicione um cartão para começar a acompanhar suas faturas." />
+          <EmptyState
+            icon={CreditCardIcon}
+            message="Nenhum cartão ainda. Adicione um cartão para começar a acompanhar suas faturas."
+            action={
+              <AddCreditCardButton
+                accounts={accountOptions}
+                baseCurrency={user.baseCurrency}
+              />
+            }
+          />
         </Card>
       ) : (
         groups.map(({ institution, items }) => (
@@ -101,18 +110,21 @@ export default async function CardsPage() {
 
                 return (
                   <GridCol key={card.id} span={{ base: 12, md: 6 }}>
-                    <Card withBorder radius="md" padding="lg" h="100%">
-                      <Group justify="space-between" mb="xs" wrap="nowrap">
-                        <Text fw={600}>{card.name}</Text>
-                        <Badge variant="light" color="gray" size="sm" tt="none" fw={500}>
+                    <Card className="credit-card-panel" padding="lg" h="100%">
+                      <Group justify="space-between" mb="sm" wrap="nowrap">
+                        <Group gap="xs" wrap="nowrap">
+                          <span className="credit-card-chip" aria-hidden />
+                          <Text fw={650} size="md">{card.name}</Text>
+                        </Group>
+                        <Badge variant="light" color="teal" size="sm" tt="none" fw={500}>
                           Fecha dia {card.closingDay} · vence dia {card.dueDay}
                         </Badge>
                       </Group>
 
-                      <Text size="sm" c="dimmed">
-                        Em aberto
+                      <Text size="xs" c="dimmed" tt="uppercase" fw={600} style={{ letterSpacing: "0.05em" }}>
+                        Fatura em aberto
                       </Text>
-                      <Text fw={700} size="lg">
+                      <Text fw={750} size="xl" className="stat-value" mt={2}>
                         {formatCurrency(card.usedLimit, card.currency)}
                       </Text>
 

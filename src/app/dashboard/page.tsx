@@ -305,18 +305,20 @@ function StatCard(props: StatCardProps) {
   return (
     <Card className={`stat-card${featured ? " stat-card-featured" : ""}`} withBorder radius="md" padding="lg" h="100%">
       <Stack gap={0} h="100%">
-        <Group justify="space-between" wrap="nowrap">
-          <Text size="sm" c="dimmed">
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <Text size="sm" c="dimmed" fw={550}>
             {label}
           </Text>
-          {icon && <span className="stat-icon">{icon}</span>}
-          {badge && (
-            <Badge variant="light" color="gray" size="sm" tt="none">
-              {badge}
-            </Badge>
-          )}
+          <Group gap="xs" wrap="nowrap">
+            {badge && (
+              <Badge variant="light" color="gray" size="sm" tt="none">
+                {badge}
+              </Badge>
+            )}
+            {icon && <span className="stat-icon">{icon}</span>}
+          </Group>
         </Group>
-        <Text className="stat-value" fw={700} size="xl" mt="md" c={color}>
+        <Text className="stat-value" fw={700} size="xl" mt="sm" c={color}>
           {value}
         </Text>
         {hint && (

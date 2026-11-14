@@ -170,6 +170,10 @@ body {
   border-radius: 9px;
   margin-bottom: 4px;
   padding: 10px 12px;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+.app-nav-link:hover:not([data-active]) {
+  transform: translateX(2px);
 }
 .app-nav-link .mantine-NavLink-label {
   font-size: 14px;
@@ -218,12 +222,17 @@ body {
   background: var(--app-surface);
   border-color: var(--app-border);
   box-shadow: var(--app-shadow);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .mantine-Title-root {
   letter-spacing: -0.035em;
 }
 .stat-card {
   min-height: 165px;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 6%);
 }
 .stat-card-featured {
   background: var(--app-hero);
@@ -306,6 +315,45 @@ body {
 }
 .mantine-Button-root {
   font-weight: 600;
+  transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.12s ease;
+}
+.mantine-Button-root:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.mantine-Button-root:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.credit-card-panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: var(--app-surface);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.credit-card-panel:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 8%);
+  border-color: var(--app-accent-ink);
+}
+.credit-card-chip {
+  width: 30px;
+  height: 22px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #d4af37 0%, #aa820a 100%);
+  display: inline-block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mantine-Button-root,
+  .mantine-Card-root,
+  .stat-card,
+  .app-nav-link,
+  .credit-card-panel {
+    transition: none !important;
+    transform: none !important;
+  }
 }
 
 .auth-layout {
