@@ -1,4 +1,6 @@
-import { Card, Stack, Text } from "@mantine/core";
+import Link from "next/link";
+import { Button, Card, Group, Stack, Text } from "@mantine/core";
+import { Bot } from "lucide-react";
 
 import { ThemeControl } from "@/components/ui/ThemeControl";
 
@@ -45,6 +47,26 @@ export default async function SettingsPage() {
         </Text>
 
         <PasswordChangeForm />
+      </Card>
+
+      <Card withBorder radius="md" padding="lg">
+        <Text fw={600} mb="xs">
+          Agentes de IA e Conexão MCP
+        </Text>
+        <Text size="sm" c="dimmed" mb="md">
+          Conecte seus assistentes de IA (Claude Desktop, Cursor, Antigravity, OpenCode) para consultar e operar suas finanças com segurança via Model Context Protocol.
+        </Text>
+
+        <Group>
+          <Button
+            component={Link}
+            href="/dashboard/agents"
+            variant="light"
+            leftSection={<Bot size={16} aria-hidden />}
+          >
+            Gerenciar conexões MCP
+          </Button>
+        </Group>
       </Card>
 
       <Card withBorder radius="md" padding="lg">

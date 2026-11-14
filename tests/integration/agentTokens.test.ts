@@ -9,6 +9,7 @@ import {
   revokeAgentToken,
   verifyAgentToken,
 } from "@/lib/agentTokens";
+import { listAgentAuditLogs, recordAgentCall } from "@/lib/agentAudit";
 import { makeUser } from "@tests/support/factories";
 
 /**
@@ -243,5 +244,95 @@ describe("revogação e listagem", () => {
 
     expect(listed).toHaveLength(1);
     expect(listed[0].label).toBe("do dono");
+  });
+});
+
+describe("auditoria de agente (listAgentAuditLogs)", () => {
+  it("lista o histórico de chamadas do usuário com os detalhes do token", async () => {
+    const user = await makeUser();
+    const token = await mintAgentToken(user.id, { label: "hermes-audit", scopes: ALL_SCOPES });
+
+    await recordAgentCall({
+      tokenId: token.id,
+      userId: user.id,
+      tool: "list_transactions",
+      verdict: "OK",
+      args: { limit: 10 },
+      durationMs: 42,
+    });
+
+    await recordAgentCall({
+      tokenId: token.id,
+      userId: user.id,
+      tool: "create_transaction",
+      verdict: "FORBIDDEN_SCOPE",
+      args: {},
+      durationMs: 15,
+      errorCode: "INSUFFICIENT_SCOPE",
+    });
+
+    const logs = await listAgentAuditLogs(user.id);
+
+    expect(logs).toHaveLength(2);
+    // Mais recente primeiro
+    expect(logs[0].tool).toBe("create_transaction");
+    expect(logs[0].verdict).toBe("FORBIDDEN_SCOPE");
+    expect(logs[0].tokenLabel).toBe("hermes-audit");
+    expect(logs[0].tokenHint).toBe(token.tokenHint);
+    expect(logs[0].durationMs).toBe(15);
+    expect(logs[0].errorCode).toBe("INSUFFICIENT_SCOPE");
+
+    expect(logs[1].tool).toBe("list_transactions");
+    expect(logs[1].verdict).toBe("OK");
+  });
+
+  it("isola registros por usuário", async () => {
+    const user1 = await makeUser({ email: "u1@test.local" });
+    const user2 = await makeUser({ email: "u2@test.local" });
+
+    await recordAgentCall({
+      tokenId: null,
+      userId: user1.id,
+      tool: "get_month_summary",
+      verdict: "OK",
+      args: {},
+      durationMs: 10,
+    });
+
+    await recordAgentCall({
+      tokenId: null,
+      userId: user2.id,
+      tool: "list_accounts",
+      verdict: "OK",
+      args: {},
+      durationMs: 12,
+    });
+
+    const logs1 = await listAgentAuditLogs(user1.id);
+    const logs2 = await listAgentAuditLogs(user2.id);
+
+    expect(logs1).toHaveLength(1);
+    expect(logs1[0].tool).toBe("get_month_summary");
+
+    expect(logs2).toHaveLength(1);
+    expect(logs2[0].tool).toBe("list_accounts");
+  });
+
+  it("respeita o limite especificado", async () => {
+    const user = await makeUser();
+
+    for (let i = 0; i < 5; i += 1) {
+      await recordAgentCall({
+        tokenId: null,
+        userId: user.id,
+        tool: `tool_${i}`,
+        verdict: "OK",
+        args: {},
+        durationMs: i * 10,
+      });
+    }
+
+    const logs = await listAgentAuditLogs(user.id, { limit: 3 });
+    expect(logs).toHaveLength(3);
   });
 });

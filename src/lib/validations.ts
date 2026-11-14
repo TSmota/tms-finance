@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { ACCOUNT_TYPE_CODES } from "@/lib/accountTypes";
+import { AGENT_SCOPES } from "@/lib/agentScopes";
 import { DEBT_TYPE_CODES } from "@/lib/debtTypes";
 import { MAX_INSTALLMENTS } from "@/lib/limits";
 import { CURRENCIES } from "@/lib/currency";
@@ -443,3 +444,17 @@ export type TransferInput = z.infer<typeof transferSchema>;
 export type SavingsGoalInput = z.infer<typeof savingsGoalSchema>;
 export type SavingsEntryInput = z.infer<typeof savingsEntrySchema>;
 export type BatchPaymentInput = z.infer<typeof batchPaymentSchema>;
+
+export const agentTokenMintSchema = z.object({
+  label: requiredText(TEXT_LIMITS.name, "Rótulo é obrigatório"),
+  scopes: z.array(z.enum(AGENT_SCOPES)).min(1, "Selecione pelo menos um escopo"),
+  expiresInDays: z.coerce
+    .number()
+    .int("O prazo deve ser um número inteiro de dias")
+    .positive("O prazo de expiração deve ser positivo")
+    .max(3650, "O prazo máximo é de 10 anos")
+    .nullable()
+    .optional(),
+});
+
+export type AgentTokenMintInput = z.infer<typeof agentTokenMintSchema>;

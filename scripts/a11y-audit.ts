@@ -36,6 +36,7 @@ const ROUTES = [
   "/dashboard/goals",
   "/dashboard/transfers",
   "/dashboard/payments",
+  "/dashboard/agents",
 ];
 
 /**
@@ -65,6 +66,7 @@ const MODAL_ROUTES: Array<[route: string, label: string]> = [
   ["/dashboard/people", "Nova pessoa"],
   ["/dashboard/debts", "Nova dívida"],
   ["/dashboard/recurring", "Nova recorrência"],
+  ["/dashboard/agents", "Nova conexão"],
 ];
 
 /**

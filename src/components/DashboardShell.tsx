@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { AppShell, Burger, Group, NavLink, ScrollArea, Text, Menu, Avatar, UnstyledButton } from "@mantine/core";
 import { useDisclosure, useHotkeys, useMediaQuery } from "@mantine/hooks";
-import { LayoutDashboard, Receipt, CreditCard, Repeat, Wallet, Tags, Users, HandCoins, Settings, LogOut, ChevronDown } from "lucide-react";
+import { LayoutDashboard, Receipt, CreditCard, Repeat, Wallet, Tags, Users, HandCoins, Settings, LogOut, ChevronDown, Bot } from "lucide-react";
 
 import { Brand } from "@/components/ui/Brand";
 import { ThemeControl } from "@/components/ui/ThemeControl";
@@ -28,6 +28,7 @@ const groups = [
   { label: "Organização", links: [
     { href: "/dashboard/categories", label: "Categorias", icon: Tags },
     { href: "/dashboard/people", label: "Pessoas", icon: Users },
+    { href: "/dashboard/agents", label: "Agentes MCP", icon: Bot },
     { href: "/dashboard/settings", label: "Configurações", icon: Settings },
   ] },
 ];
