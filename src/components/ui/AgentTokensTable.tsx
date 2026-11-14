@@ -77,7 +77,17 @@ export function AgentTokensTable(props: AgentTokensTableProps) {
   }
 
   return (
-    <Card withBorder radius="md" padding="lg">
+    <Card
+      withBorder
+      radius="md"
+      padding="lg"
+      style={{
+        transition: "transform 180ms ease, box-shadow 180ms ease",
+        "&:hover": {
+          transform: "translateY(-2px)",
+        },
+      }}
+    >
       <Stack gap="md">
         <Group justify="space-between" align="center">
           <div>

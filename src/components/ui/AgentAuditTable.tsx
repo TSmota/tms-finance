@@ -10,6 +10,7 @@ import {
   Stack,
   Table,
   Text,
+  ThemeIcon,
 } from "@mantine/core";
 import { Activity, Eye } from "lucide-react";
 
@@ -73,17 +74,29 @@ export function AgentAuditTable(props: AgentAuditTableProps) {
 
   return (
     <>
-      <Card withBorder radius="md" padding="lg">
+      <Card
+        withBorder
+        radius="md"
+        padding="lg"
+        style={{
+          transition: "transform 180ms ease, box-shadow 180ms ease",
+          "&:hover": {
+            transform: "translateY(-2px)",
+          },
+        }}
+      >
         <Stack gap="md">
-          <Group justify="space-between" align="center">
-            <Group gap="xs">
-              <Activity size={18} color="var(--mantine-color-teal-6)" aria-hidden />
+          <Group justify="space-between" align="center" wrap="wrap">
+            <Group gap="sm" align="center">
+              <ThemeIcon size={38} radius="md" variant="light" color="teal">
+                <Activity size={20} aria-hidden />
+              </ThemeIcon>
               <div>
-                <Text fw={600} size="md">
+                <Text fw={700} size="md">
                   Atividades e Auditoria MCP
                 </Text>
-                <Text size="sm" c="dimmed">
-                  Registro completo de chamadas, verificação de escopos e resposta das ferramentas
+                <Text size="xs" c="dimmed">
+                  Registro em tempo real de chamadas, verificação de escopos e resposta das ferramentas
                 </Text>
               </div>
             </Group>

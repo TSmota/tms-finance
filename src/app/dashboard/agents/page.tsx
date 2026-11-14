@@ -5,6 +5,8 @@ import { listAgentTokens } from "@/lib/agentTokens";
 import { listAgentAuditLogs } from "@/lib/agentAudit";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { MintAgentTokenButton } from "@/components/forms/MintAgentTokenButton";
+import { McpStatsGrid } from "@/components/ui/McpStatsGrid";
+import { McpFlowVisual } from "@/components/ui/McpFlowVisual";
 import { McpEndpointCard } from "@/components/ui/McpEndpointCard";
 import { AgentTokensTable } from "@/components/ui/AgentTokensTable";
 import { AgentAuditTable } from "@/components/ui/AgentAuditTable";
@@ -26,9 +28,13 @@ export default async function AgentsPage() {
     <Stack gap="lg">
       <PageHeader
         title="Conexões MCP dos Agentes"
-        subtitle="Gerencie tokens de acesso e monitore a integração dos seus agentes de IA com o TMS Finance via Model Context Protocol"
+        subtitle="Gateway de integração segura para agentes de IA operarem o livro-razão financeiro via Model Context Protocol."
         action={<MintAgentTokenButton />}
       />
+
+      <McpStatsGrid tokens={tokens} logs={auditLogs} />
+
+      <McpFlowVisual />
 
       <McpEndpointCard />
 
