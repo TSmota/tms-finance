@@ -259,9 +259,9 @@ export function TransactionsTable(props: TransactionsTableProps) {
                                 ? "teal"
                                 : "red"
                           }
-                          fw={500}
+                          fw={600}
                         >
-                          {transaction.type === "INCOME" ? "+" : "-"}
+                          {transaction.type === "INCOME" ? "+ " : "- "}
                           {formatCurrency(transaction.convertedAmount, transaction.accountCurrency)}
                         </Text>
                         {isConverted && (

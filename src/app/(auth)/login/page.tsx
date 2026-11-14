@@ -62,10 +62,10 @@ export default function LoginPage() {
   return (
     <Paper className="auth-card" withBorder p="xl" radius="lg" w={440} maw="100%">
       <Title order={1} size="h2" mb="xs">
-        Que bom ter você aqui
+        Acessar sua conta
       </Title>
 
-      <Text c="dimmed" size="sm" mb="xl">Entre para acompanhar sua vida financeira.</Text>
+      <Text c="dimmed" size="sm" mb="xl">Informe suas credenciais para acessar o painel.</Text>
 
       <Group grow mb="md">
         <Button

@@ -71,7 +71,7 @@ export default function RegisterPage() {
         Criar sua conta
       </Title>
 
-      <Text c="dimmed" size="sm" mb="xl">Comece a organizar seu dinheiro em um só lugar.</Text>
+      <Text c="dimmed" size="sm" mb="xl">Configure sua base financeira pessoal em poucos passos.</Text>
 
       <form onSubmit={handleSubmit}>
         <Stack>

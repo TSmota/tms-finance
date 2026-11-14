@@ -9,18 +9,21 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <header className="auth-header"><Brand /><ThemeControl /></header>
       <main className="auth-main">
         <section className="auth-intro" aria-label="Sobre o TMS Finance">
-          <span className="eyebrow">SUAS FINANÇAS, COM CLAREZA</span>
-          <h2>Seu dinheiro.<br />Uma visão completa.</h2>
-          <p>Contas, cartões e planos em um só lugar. Mais organização para decidir seus próximos passos.</p>
+          <span className="eyebrow">GESTÃO FINANCEIRA PESSOAL</span>
+          <h2>Controle financeiro com rigor contábil.</h2>
+          <p>
+            Gestão multimoeda, acompanhamento ciclo a ciclo de faturas de cartão e
+            projeção precisa do seu fluxo de caixa.
+          </p>
           <div className="auth-features">
-            <span><Wallet size={20} aria-hidden /> Acompanhe suas contas</span>
-            <span><CreditCard size={20} aria-hidden /> Organize cartões e faturas</span>
-            <span><ChartNoAxesCombined size={20} aria-hidden /> Planeje o que vem pela frente</span>
+            <span><Wallet size={20} aria-hidden /> Saldos multimoeda com conversão diária</span>
+            <span><CreditCard size={20} aria-hidden /> Ciclos de fatura, limites e parcelamentos</span>
+            <span><ChartNoAxesCombined size={20} aria-hidden /> Projeção de saldo futuro e conciliação real</span>
           </div>
         </section>
         <div className="auth-form">{children}</div>
       </main>
-      <footer className="auth-footer">TMS Finance · Organização para o seu dia a dia.</footer>
+      <footer className="auth-footer">TMS Finance · Sistema pessoal de conciliação e fluxo de caixa.</footer>
     </div>
   );
 }
