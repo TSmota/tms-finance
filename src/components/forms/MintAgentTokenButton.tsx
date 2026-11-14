@@ -305,10 +305,10 @@ export function MintAgentTokenButton() {
 
             <div>
               <Text size="sm" fw={600} mb={4}>
-                Configuração para clientes MCP (Claude Desktop, Cursor, Antigravity, OpenCode)
+                Configuração para clientes MCP (Gemini CLI / Antigravity, Cursor, Claude Desktop)
               </Text>
               <Text size="xs" c="dimmed" mb="xs">
-                Copie o trecho abaixo e cole no arquivo de configuração do seu cliente MCP:
+                Copie o trecho abaixo e cole no arquivo de configuração do seu cliente MCP (ex: <code>~/.gemini/config/mcp_config.json</code> ou <code>.cursor/mcp.json</code>):
               </Text>
               <Stack gap="xs">
                 <pre
