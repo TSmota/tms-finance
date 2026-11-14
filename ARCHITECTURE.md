@@ -875,12 +875,13 @@ Token opaco de 256 bits guardado **só** como HMAC-SHA256 com o pepper de
   acrescenta segurança útil. O pepper protege um dump sem acesso ao ambiente.
 - Emissão por `npm run agent:token` — o valor em claro existe uma vez, no
   stdout; não há tela que o persista no navegador.
-- `setup:write` cobre os cadastros de base **sem moeda**: criar e editar
-  categoria e pessoa. O recorte é esse porque criar conta ou cartão fixa a
-  moeda, que é imutável depois (Multi-moeda) — errar ali não se corrige
-  editando, então `create_account` e `create_credit_card` continuam fora.
+- `setup:write` cobre cadastros de base (contas, categorias e pessoas).
+  `create_account` e `update_account` respeitam a invariante multi-moeda: a
+  moeda da conta é imutável após a criação para proteger a consistência do
+  histórico de lançamentos (`convertedAmount`). O mesmo vale para
+  `create_credit_card` e `update_credit_card` sob `cards:write`.
 
-  `set_base_currency` também não existe: embora a moeda base seja mutável,
+  `set_base_currency` continua fora: embora a moeda base seja mutável,
   trocá-la reexpressa todos os relatórios. Essa decisão fica na tela de
   configurações, onde a consequência está visível.
 

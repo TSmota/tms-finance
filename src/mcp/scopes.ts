@@ -19,11 +19,14 @@ export const READ_TOOLS = [
   "get_balance_projection",
   "list_accounts",
   "list_transactions",
+  "get_transaction",
   "list_credit_cards",
   "list_card_invoices",
+  "get_invoice",
   "list_invoice_items",
   "list_debts",
   "get_debt_detail",
+  "list_people",
   "get_people_overview",
   "list_recurring",
   "list_pending_occurrences",
@@ -43,6 +46,8 @@ export const WRITE_TOOLS = {
   update_transaction: "transactions:write",
   delete_transaction: "transactions:write",
 
+  create_credit_card: "cards:write",
+  update_credit_card: "cards:write",
   create_card_purchase: "cards:write",
   update_card_purchase: "cards:write",
   delete_card_purchase: "cards:write",
@@ -63,9 +68,11 @@ export const WRITE_TOOLS = {
   materialize_recurring: "recurring:write",
 
   /**
-   * Cadastros de base. Conta e cartão ficam de fora deste bloco porque criá-los
-   * fixa a moeda, que é imutável depois; categoria e pessoa não têm moeda.
+   * Cadastros de base (contas, categorias e pessoas).
    */
+  create_account: "setup:write",
+  update_account: "setup:write",
+
   create_category: "setup:write",
   update_category: "setup:write",
 

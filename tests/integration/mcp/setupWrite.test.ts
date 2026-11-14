@@ -181,6 +181,54 @@ describe("create_person e update_person", () => {
   });
 });
 
+describe("create_account e update_account", () => {
+  it("cadastra a conta com saldo inicial e permite atualização de nome e saldo", async () => {
+    const { user, ctx } = await setupAgent();
+
+    const created = readResult(
+      await call(
+        "create_account",
+        {
+          name: "Nubank",
+          type: "CHECKING",
+          institution: "Nubank",
+          currency: "BRL",
+          initialBalance: 500,
+        },
+        ctx,
+      ),
+    );
+
+    expect(created.ok).toBe(true);
+
+    const account = await prisma.financialAccount.findFirstOrThrow({ where: { userId: user.id } });
+    expect(account.name).toBe("Nubank");
+    expect(account.currentBalance.toString()).toBe("500");
+
+    const updated = readResult(
+      await call(
+        "update_account",
+        {
+          id: account.id,
+          data: {
+            name: "Nubank Principal",
+            type: "CHECKING",
+            institution: "Nu",
+            currency: "BRL",
+            initialBalance: 600,
+          },
+        },
+        ctx,
+      ),
+    );
+
+    expect(updated.ok).toBe(true);
+    const reloaded = await prisma.financialAccount.findUniqueOrThrow({ where: { id: account.id } });
+    expect(reloaded.name).toBe("Nubank Principal");
+    expect(reloaded.currentBalance.toString()).toBe("600");
+  });
+});
+
 describe("escopo setup:write", () => {
   it("recusa token só de leitura, sem escrever nada, e audita a recusa", async () => {
     const user = await makeUser();
@@ -191,11 +239,23 @@ describe("escopo setup:write", () => {
       ["update_category", { id: (await makeCategory(user.id)).id, data: { name: "X" } }],
       ["create_person", { name: "Proibida" }],
       ["update_person", { id: (await makePerson(user.id)).id, data: { name: "X" } }],
+      [
+        "create_account",
+        { name: "Proibida", type: "CHECKING", currency: "BRL", initialBalance: 100 },
+      ],
+      [
+        "update_account",
+        {
+          id: (await makeAccount(user.id)).id,
+          data: { name: "X", type: "CHECKING", currency: "BRL", initialBalance: 100 },
+        },
+      ],
     ] as const;
 
     const before = {
       categories: await prisma.category.count({ where: { userId: user.id } }),
       people: await prisma.person.count({ where: { userId: user.id } }),
+      accounts: await prisma.financialAccount.count({ where: { userId: user.id } }),
     };
 
     for (const [tool, args] of attempts) {
@@ -211,6 +271,7 @@ describe("escopo setup:write", () => {
 
     expect(await prisma.category.count({ where: { userId: user.id } })).toBe(before.categories);
     expect(await prisma.person.count({ where: { userId: user.id } })).toBe(before.people);
+    expect(await prisma.financialAccount.count({ where: { userId: user.id } })).toBe(before.accounts);
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

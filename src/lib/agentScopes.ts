@@ -18,7 +18,7 @@ export const AGENT_SCOPES = [
   "finance:read",
   /** Criar, editar e apagar lançamento de conta. */
   "transactions:write",
-  /** Compra no cartão, inclusive parcelada. */
+  /** Cartões de crédito e compras no cartão, inclusive parceladas. */
   "cards:write",
   /** Pagar e desfazer pagamento de fatura. */
   "invoices:pay",
@@ -27,10 +27,7 @@ export const AGENT_SCOPES = [
   /** Recorrentes, materialização e confirmação de pendência. */
   "recurring:write",
   /**
-   * Criar e editar categoria e pessoa — os cadastros de base sem moeda.
-   *
-   * Conta e cartão continuam fora: criá-los fixa a moeda, que é imutável
-   * depois. É decisão de configuração, não de operação.
+   * Cadastros de base: contas bancárias, categorias e pessoas de contato.
    */
   "setup:write",
   /**

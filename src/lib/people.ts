@@ -18,6 +18,14 @@ import type { PersonInput } from "@/lib/validations";
  * dívida por dívida. Faltando cotação, sai marcada como parcial.
  */
 
+export async function listPeople(userId: string): Promise<Person[]> {
+  const people = await prisma.person.findMany({
+    where: { userId },
+  });
+
+  return people.sort(byName);
+}
+
 export async function createPerson(userId: string, input: PersonInput): Promise<Person> {
   return prisma.person.create({
     data: { userId, name: input.name, notes: input.notes },

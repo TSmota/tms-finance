@@ -1,4 +1,4 @@
-import type { Currency } from "@prisma/client";
+import type { Currency, Person } from "@prisma/client";
 
 import { formatCurrency } from "@/lib/currency";
 import { toCalendarDate, type CalendarDate } from "@/lib/dates";
@@ -147,8 +147,8 @@ export function accountsDto(
   };
 }
 
-export function transactionsDto(rows: TransactionListItem[]) {
-  return rows.map((row) => ({
+export function transactionDto(row: TransactionListItem) {
+  return {
     id: row.id,
     description: row.description,
     type: row.type,
@@ -166,7 +166,11 @@ export function transactionsDto(rows: TransactionListItem[]) {
     is_estimated: row.isEstimated,
     /** Preenchido = `delete_settlement` ou `undo_invoice_payment`, não esta linha. */
     managed_by: row.managedBy,
-  }));
+  };
+}
+
+export function transactionsDto(rows: TransactionListItem[]) {
+  return rows.map(transactionDto);
 }
 
 export function creditCardsDto(cards: CreditCardSummary[]) {
@@ -188,8 +192,8 @@ export function creditCardsDto(cards: CreditCardSummary[]) {
   }));
 }
 
-export function invoicesDto(invoices: InvoiceSummary[]) {
-  return invoices.map((invoice) => ({
+export function invoiceDto(invoice: InvoiceSummary) {
+  return {
     id: invoice.id,
     /** Competência da fatura: pode ser o mês seguinte ao da compra. */
     competency: `${invoice.year}-${String(invoice.month).padStart(2, "0")}`,
@@ -200,7 +204,11 @@ export function invoicesDto(invoices: InvoiceSummary[]) {
     total: amount(invoice.total),
     item_count: invoice.itemCount,
     paid_at: optionalDay(invoice.paidAt),
-  }));
+  };
+}
+
+export function invoicesDto(invoices: InvoiceSummary[]) {
+  return invoices.map(invoiceDto);
 }
 
 export function invoiceItemsDto(items: InvoiceItem[]) {
@@ -312,6 +320,15 @@ export function peopleOverviewDto(overview: PeopleOverview, currency: Currency) 
     total_net: total(overview.totalNet, currency),
     people: overview.people.map((person) => personDto(person, currency)),
   };
+}
+
+export function peopleListDto(people: Person[]) {
+  return people.map((person) => ({
+    id: person.id,
+    name: person.name,
+    notes: person.notes,
+    created_at: day(person.createdAt),
+  }));
 }
 
 export function recurringDto(rows: RecurringListItem[]) {
