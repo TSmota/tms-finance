@@ -27,6 +27,7 @@ const DEBT_DETAIL: RevalidationTarget = ["/dashboard/debts/[id]", "page"];
 const PEOPLE: RevalidationTarget = ["/dashboard/people"];
 const RECURRING: RevalidationTarget = ["/dashboard/recurring"];
 const TRANSACTIONS: RevalidationTarget = ["/dashboard/transactions"];
+const AGENTS: RevalidationTarget = ["/dashboard/agents"];
 
 export const REVALIDATION_TARGETS = {
   roadmap: [["/dashboard", "layout"]],
@@ -49,6 +50,10 @@ export const REVALIDATION_TARGETS = {
    * inteira, e não uma lista de telas.
    */
   settings: [["/dashboard", "layout"]],
+  /**
+   * Emissão e revogação de tokens de agente e gerenciamento da conexão MCP.
+   */
+  agents: [AGENTS],
 } as const satisfies Record<string, readonly RevalidationTarget[]>;
 
 export type RevalidationDomain = keyof typeof REVALIDATION_TARGETS;

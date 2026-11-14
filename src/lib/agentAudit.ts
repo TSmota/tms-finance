@@ -89,3 +89,67 @@ export async function pruneAgentAudit(now: Date = new Date()): Promise<number> {
 
   return count;
 }
+
+export interface AgentAuditLogSummary {
+  id: string;
+  tokenId: string | null;
+  tokenLabel: string | null;
+  tokenHint: string | null;
+  tool: string;
+  verdict: AgentVerdict;
+  args: Prisma.JsonValue;
+  affectedIds: string[];
+  errorCode: string | null;
+  durationMs: number;
+  ip: string | null;
+  createdAt: Date;
+}
+
+export async function listAgentAuditLogs(
+  userId: string,
+  options?: { limit?: number; tokenId?: string },
+): Promise<AgentAuditLogSummary[]> {
+  const limit = options?.limit ?? 50;
+
+  const rows = await prisma.agentAuditLog.findMany({
+    where: {
+      userId,
+      ...(options?.tokenId ? { tokenId: options.tokenId } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      tokenId: true,
+      tool: true,
+      verdict: true,
+      args: true,
+      affectedIds: true,
+      errorCode: true,
+      durationMs: true,
+      ip: true,
+      createdAt: true,
+      token: {
+        select: {
+          label: true,
+          tokenHint: true,
+        },
+      },
+    },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    tokenId: row.tokenId,
+    tokenLabel: row.token?.label ?? null,
+    tokenHint: row.token?.tokenHint ?? null,
+    tool: row.tool,
+    verdict: row.verdict as AgentVerdict,
+    args: row.args,
+    affectedIds: row.affectedIds,
+    errorCode: row.errorCode,
+    durationMs: row.durationMs,
+    ip: row.ip,
+    createdAt: row.createdAt,
+  }));
+}

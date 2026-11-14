@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import {
   accountSchema,
+  agentTokenMintSchema,
   cardPurchaseSchema,
   categorySchema,
   confirmOccurrenceSchema,
@@ -317,6 +318,37 @@ const CASES: SchemaCase[] = [
           manualDebtFxRate: -1,
         },
         field: "manualDebtFxRate",
+      },
+    ],
+  },
+  {
+    name: "agentTokenMintSchema",
+    schema: agentTokenMintSchema,
+    valid: {
+      label: "Hermes",
+      scopes: ["finance:read", "transactions:write"],
+      expiresInDays: 90,
+    },
+    invalid: [
+      {
+        why: "rótulo vazio",
+        input: { label: "", scopes: ["finance:read"] },
+        field: "label",
+      },
+      {
+        why: "sem escopo",
+        input: { label: "Hermes", scopes: [] },
+        field: "scopes",
+      },
+      {
+        why: "escopo desconhecido",
+        input: { label: "Hermes", scopes: ["inventado:write"] },
+        field: "scopes.0",
+      },
+      {
+        why: "prazo negativo",
+        input: { label: "Hermes", scopes: ["finance:read"], expiresInDays: -5 },
+        field: "expiresInDays",
       },
     ],
   },
