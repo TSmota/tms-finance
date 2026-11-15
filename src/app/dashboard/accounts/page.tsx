@@ -40,7 +40,7 @@ export default async function AccountsPage() {
         <Group justify="space-between" align="flex-start" wrap="nowrap">
           <div>
             <Text size="sm" c="dimmed" fw={550}>
-              Patrimônio líquido total em contas
+              Saldo total em contas
             </Text>
             <Text fw={700} size="xl" className="stat-value" mt="xs">
               {formatCurrency(netWorth, user.baseCurrency)}
