@@ -30,14 +30,14 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { TransactionsTable } from "@/components/TransactionsTable";
 
-import { getMonthlyHistory, getNetWorth } from "@/lib/dashboardHistory";
+import { getMonthlyHistory } from "@/lib/dashboardHistory";
 import { DashboardHistory } from "@/components/DashboardHistory";
 
 export default async function DashboardPage() {
   const user = await requireUser();
   const { year, month } = currentCompetency();
 
-  const [recent, summary, projection, openInvoices, debts, pending, options, history, netWorth] =
+  const [recent, summary, projection, openInvoices, debts, pending, options, history] =
     await Promise.all([
       listRecentTransactions(user.id),
       getMonthSummary(user.id, year, month, user.baseCurrency),
@@ -47,7 +47,6 @@ export default async function DashboardPage() {
       listPendingOccurrences(user.id, year, month),
       loadFormOptions(user.id),
       getMonthlyHistory(user.id, year, month, user.baseCurrency),
-      getNetWorth(user.id, user.baseCurrency),
     ]);
 
   const rows: TransactionRow[] = recent.map((transaction) =>
@@ -78,20 +77,20 @@ export default async function DashboardPage() {
       <Grid>
         <GridCol span={{ base: 12, sm: 6, lg: 3 }}>
           <StatCard
-            label="Patrimônio líquido"
+            label="Saldo em contas"
             featured
             icon={<Wallet size={20} aria-hidden />}
-            hint="Contas + valores a receber − dívidas a pagar − faturas abertas"
-            value={formatCurrency(netWorth.amount, user.baseCurrency)}
-            note={netWorth.complete ? undefined : partial}
-            warn={!netWorth.complete}
+            hint="Disponível em contas correntes, carteiras e reservas"
+            value={formatCurrency(projection.currentBalance, user.baseCurrency)}
+            note={projection.complete ? undefined : partial}
+            warn={!projection.complete}
           />
         </GridCol>
         <GridCol span={{ base: 12, sm: 6, lg: 3 }}>
           <StatCard
             label="Saldo projetado"
             icon={<ChartNoAxesCombined size={20} aria-hidden />}
-            hint="Fim do mês, se tudo o que está previsto acontecer"
+            hint="Previsão para o fim do mês (contas + entradas − saídas e faturas)"
             value={formatCurrency(projection.projectedBalance, user.baseCurrency)}
             color={projection.projectedBalance < 0 ? "red" : undefined}
             note={projection.complete ? undefined : partial}
