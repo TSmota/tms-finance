@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Button, Card, Group, Stack, Text } from "@mantine/core";
 import { Bot } from "lucide-react";
 
-import { ThemeControl } from "@/components/ui/ThemeControl";
+import { AppearanceSetting } from "@/components/ui/AppearanceSetting";
 
 import { requireUser } from "@/lib/session";
 import { BaseCurrencyForm } from "@/components/forms/BaseCurrencyForm";
@@ -22,8 +22,8 @@ export default async function SettingsPage() {
 
       <Card withBorder radius="md" padding="lg">
         <Text fw={600} mb="xs">Aparência</Text>
-        <Text size="sm" c="dimmed" mb="md">Escolha entre os temas claro e escuro. A preferência fica salva neste navegador.</Text>
-        <div><ThemeControl /></div>
+        <Text size="sm" c="dimmed" mb="md">Escolha entre os temas claro, escuro ou sincronizado com o sistema operacional. A preferência fica salva neste navegador.</Text>
+        <div><AppearanceSetting /></div>
       </Card>
 
       <Card withBorder radius="md" padding="lg">
@@ -35,7 +35,7 @@ export default async function SettingsPage() {
           somar tudo num total só, os relatórios convertem para esta moeda.
         </Text>
 
-        <BaseCurrencyForm current={user.baseCurrency} />
+        <BaseCurrencyForm current={user.baseCurrency ?? "BRL"} />
       </Card>
 
       <Card withBorder radius="md" padding="lg">

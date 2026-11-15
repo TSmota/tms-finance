@@ -1,43 +1,16 @@
-import {
-  Alert,
-  Badge,
-  Card,
-  Grid,
-  GridCol,
-  Group,
-  Progress,
-  Stack,
-  Text,
-  Title,
-  Tooltip,
-} from "@mantine/core";
-import { ArrowDownLeft, ArrowUpRight, ChevronRight, TriangleAlert } from "lucide-react";
+import { Alert, Card, Group, Stack } from "@mantine/core";
+import { TriangleAlert } from "lucide-react";
 
 import { requireUser } from "@/lib/session";
-import { listDebts, type DebtListItem } from "@/lib/debts";
+import { listDebts } from "@/lib/debts";
 import { listPersonOptions } from "@/lib/people";
 import { listCreditCardOptions } from "@/lib/creditCards";
 import { loadFormOptions } from "@/lib/formOptions";
-import { formatCurrency, type CurrencyCode } from "@/lib/currency";
-import {
-  DEBT_STATUS_COLORS,
-  DEBT_STATUS_LABELS,
-  DEBT_TYPE_CODES,
-  DEBT_TYPE_POSITION,
-  type DebtTypeCode,
-} from "@/lib/debtTypes";
-import { formatDay } from "@/lib/dates";
 import { AddDebtButton } from "@/components/forms/AddDebtButton";
-import { EditDebtButton } from "@/components/forms/EditDebtButton";
-import { deleteDebt } from "@/actions/debts";
-import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
-import { SettleDebtButton } from "@/components/forms/SettleDebtButton";
 import { LinkButton } from "@/components/ui/AppLink";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { toDebtFormValues } from "@/components/forms/debtFormValues";
-import { CategoryBadge } from "@/components/ui/CategoryBadge";
-import type { CardOption } from "@/lib/options";
+import { DebtsExplorer } from "@/components/ui/DebtsExplorer";
 
 interface DebtsPageProps {
   /** `?person=<uuid>` filtra por pessoa, vindo da tela de pessoas. */
@@ -113,170 +86,15 @@ export default async function DebtsPage({ searchParams }: DebtsPageProps) {
           />
         </Card>
       ) : (
-        DEBT_TYPE_CODES.map((type) => {
-          const items = debts.filter((debt) => debt.type === type);
-
-          if (items.length === 0) {
-            return null;
-          }
-
-          return (
-            <Stack key={type} gap="xs">
-              <Group gap="xs">
-                <TypeIcon type={type} />
-                <Title order={2} size="h5" c="dimmed">
-                  {DEBT_TYPE_POSITION[type]}
-                </Title>
-                <Badge variant="light" color="gray" size="sm">
-                  {items.length}
-                </Badge>
-              </Group>
-
-              <Grid>
-                {items.map((debt) => (
-                  <GridCol key={debt.id} span={{ base: 12, md: 6 }}>
-                    <DebtCard
-                      debt={debt}
-                      people={people}
-                      categories={options.categories}
-                      accounts={options.accounts}
-                      cards={cards}
-                    />
-                  </GridCol>
-                ))}
-              </Grid>
-            </Stack>
-          );
-        })
+        <DebtsExplorer
+          debts={debts}
+          people={people}
+          categories={options.categories}
+          accounts={options.accounts}
+          cards={cards}
+          initialPersonId={personId}
+        />
       )}
     </Stack>
-  );
-}
-
-function TypeIcon({ type }: { type: DebtTypeCode }) {
-  const color = "var(--mantine-color-dimmed)";
-
-  return type === "LENT" ? (
-    <ArrowUpRight size={16} color={color} />
-  ) : (
-    <ArrowDownLeft size={16} color={color} />
-  );
-}
-
-interface DebtCardProps {
-  debt: DebtListItem;
-  people: Array<{ value: string; label: string }>;
-  categories: Array<{ value: string; label: string }>;
-  accounts: Array<{ value: string; label: string; currency: CurrencyCode }>;
-  cards: CardOption[];
-}
-
-function DebtCard({ debt, people, categories, accounts, cards }: DebtCardProps) {
-  const progress =
-    debt.originalAmount > 0 ? (debt.settledAmount / debt.originalAmount) * 100 : 0;
-
-  return (
-    <Card withBorder radius="md" padding="lg" h="100%">
-      <Group justify="space-between" mb="xs" wrap="nowrap">
-        <Stack gap={0}>
-          <Text fw={600}>{debt.personName}</Text>
-          <Text size="sm" c="dimmed">
-            {debt.description}
-          </Text>
-        </Stack>
-        <Badge color={DEBT_STATUS_COLORS[debt.status]} variant="light" size="sm">
-          {DEBT_STATUS_LABELS[debt.status]}
-        </Badge>
-      </Group>
-
-      <Group gap="xs" mb="sm">
-        <CategoryBadge name={debt.categoryName} color={debt.categoryColor} />
-        {debt.originCardName && (
-          <Text size="sm" c="dimmed">
-            {debt.originCardName}
-            {debt.originInstallments > 1 && ` · ${debt.originInstallments}x`}
-          </Text>
-        )}
-        {debt.dueDate && (
-          <Text size="xs" c="dimmed">
-            vence {formatDay(debt.dueDate)}
-          </Text>
-        )}
-      </Group>
-
-      <Text size="sm" c="dimmed">
-        Restante
-      </Text>
-      <Text fw={700} size="lg">
-        {formatCurrency(debt.remainingAmount, debt.currency)}
-      </Text>
-
-      <Progress
-        value={progress}
-        color={debt.status === "PAID" ? "teal" : "blue"}
-        mt="sm"
-        mb={4}
-        aria-label={`Quitação de ${debt.personName}`}
-      />
-      <Text size="xs" c="dimmed">
-        {formatCurrency(debt.settledAmount, debt.currency)} de{" "}
-        {formatCurrency(debt.originalAmount, debt.currency)}
-        {debt.settlementCount > 0 &&
-          ` · ${debt.settlementCount} ${debt.settlementCount === 1 ? "movimentação" : "movimentações"}`}
-      </Text>
-
-      <Group justify="space-between" mt="md" wrap="nowrap">
-        <Group gap="xs" wrap="nowrap">
-          <LinkButton
-            href={`/dashboard/debts/${debt.id}`}
-            rightSection={<ChevronRight size={14} />}
-          >
-            Histórico
-          </LinkButton>
-          {debt.status !== "PAID" && (
-            <SettleDebtButton
-              debtId={debt.id}
-              type={debt.type}
-              remainingAmount={debt.remainingAmount}
-              currency={debt.currency}
-              accounts={accounts}
-              categories={categories}
-              defaultCategoryId={debt.categoryId}
-              defaultAccountId={debt.originAccountId}
-            />
-          )}
-        </Group>
-        <Group gap={4} wrap="nowrap">
-          <EditDebtButton
-            id={debt.id}
-            values={toDebtFormValues(debt, accounts)}
-            people={people}
-            categories={categories}
-            accounts={accounts}
-            cards={cards}
-            type={debt.type}
-            currency={debt.currency}
-            originLocked={debt.originLocked}
-          />
-          <Tooltip
-            label={debt.originLocked ? "A origem desta dívida está em uma fatura paga" : undefined}
-            disabled={!debt.originLocked}
-          >
-            <span>
-              <DeleteEntityButton
-                id={debt.id}
-                title="Remover dívida"
-                successMessage="Dívida removida"
-                question={`Remover "${debt.description}" devolve os saldos das contas ao que eram. Tem certeza?`}
-                action={deleteDebt}
-                impactTarget="debt"
-                blocked={debt.originLocked}
-                disabled={debt.originLocked}
-              />
-            </span>
-          </Tooltip>
-        </Group>
-      </Group>
-    </Card>
   );
 }

@@ -12,6 +12,7 @@ import {
   type CSSVariablesResolver,
   DEFAULT_THEME,
   InputClearButton,
+  InputWrapper,
   Modal,
   Notification,
   type MantineColorsTuple,
@@ -62,6 +63,14 @@ export const theme = createTheme({
     ActionIcon: ActionIcon.extend({ defaultProps: { size: 36 } }),
     Card: Card.extend({ defaultProps: { radius: 'md' } }),
     Table: Table.extend({ defaultProps: { verticalSpacing: 'sm', horizontalSpacing: 'md' } }),
+    // Alinha horizontalmente inputs lado a lado: a descrição fica abaixo do input,
+    // evitando desnível quando um campo tem texto de ajuda e o vizinho não tem.
+    InputWrapper: InputWrapper.extend({
+      defaultProps: {
+        inputWrapperOrder: ['label', 'input', 'description', 'error'],
+      },
+    }),
+
     // No tema, não em `FormModal`: os modais de confirmação nascem do `modals` manager.
     Modal: Modal.extend({
       defaultProps: { closeButtonProps: { 'aria-label': 'Fechar' } },
