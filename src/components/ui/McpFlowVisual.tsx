@@ -52,7 +52,7 @@ export function McpFlowVisual() {
           }}
         >
           <svg
-            viewBox="0 0 880 200"
+            viewBox="0 0 940 200"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
             style={{ width: "100%", height: "auto", display: "block" }}
@@ -86,30 +86,30 @@ export function McpFlowVisual() {
 
             {/* Base connection lines */}
             <path
-              d="M 180 100 L 260 100"
+              d="M 200 100 L 260 100"
               stroke="var(--mantine-color-default-border)"
               strokeWidth="2"
             />
             <path
-              d="M 440 100 L 520 100"
+              d="M 440 100 L 500 100"
               stroke="var(--mantine-color-default-border)"
               strokeWidth="2"
             />
             <path
-              d="M 700 100 L 760 100"
+              d="M 680 100 L 740 100"
               stroke="var(--mantine-color-default-border)"
               strokeWidth="2"
             />
 
             {/* Pulsing signal lines */}
-            <path d="M 180 100 L 260 100" className="flow-pulse" />
-            <path d="M 440 100 L 520 100" className="flow-pulse" style={{ animationDelay: "0.8s" }} />
-            <path d="M 700 100 L 760 100" className="flow-pulse" style={{ animationDelay: "1.6s" }} />
+            <path d="M 200 100 L 260 100" className="flow-pulse" />
+            <path d="M 440 100 L 500 100" className="flow-pulse" style={{ animationDelay: "0.8s" }} />
+            <path d="M 680 100 L 740 100" className="flow-pulse" style={{ animationDelay: "1.6s" }} />
 
             {/* Step 1: Clients */}
-            <g transform="translate(10, 35)">
+            <g transform="translate(20, 35)">
               <rect
-                width="170"
+                width="180"
                 height="130"
                 rx="8"
                 fill="var(--mantine-color-body)"
@@ -165,7 +165,7 @@ export function McpFlowVisual() {
             </g>
 
             {/* Step 3: Engine */}
-            <g transform="translate(520, 35)">
+            <g transform="translate(500, 35)">
               <rect
                 width="180"
                 height="130"
@@ -194,28 +194,31 @@ export function McpFlowVisual() {
             </g>
 
             {/* Step 4: Ledger & Audit */}
-            <g transform="translate(760, 35)">
+            <g transform="translate(740, 35)">
               <rect
-                width="110"
+                width="180"
                 height="130"
                 rx="8"
                 fill="var(--mantine-color-body)"
                 stroke="var(--mantine-color-default-border)"
                 strokeWidth="1.5"
               />
-              <circle cx="24" cy="28" r="12" fill="var(--mantine-color-grape-light)" />
-              <text x="24" y="32" textAnchor="middle" fill="var(--mantine-color-grape-filled)" fontSize="11" fontWeight="700">DB</text>
-              <text x="44" y="32" fill="var(--mantine-color-text)" fontSize="12" fontWeight="700">
-                Postgres
+              <circle cx="28" cy="28" r="12" fill="var(--mantine-color-grape-light)" />
+              <text x="28" y="32" textAnchor="middle" fill="var(--mantine-color-grape-filled)" fontSize="11" fontWeight="700">DB</text>
+              <text x="48" y="32" fill="var(--mantine-color-text)" fontSize="13" fontWeight="700">
+                Banco Postgres
               </text>
-              <text x="14" y="65" fill="var(--mantine-color-dimmed)" fontSize="10">
-                Livro-Razão
+              <text x="20" y="60" fill="var(--mantine-color-dimmed)" fontSize="11">
+                • Livro-Razão Atômico
               </text>
-              <text x="14" y="85" fill="var(--mantine-color-dimmed)" fontSize="10">
-                Auditoria 90d
+              <text x="20" y="78" fill="var(--mantine-color-dimmed)" fontSize="11">
+                • Auditoria Imutável (90d)
               </text>
-              <text x="14" y="118" fill="var(--mantine-color-teal-6)" fontSize="10" fontWeight="600">
-                AuditLog
+              <text x="20" y="96" fill="var(--mantine-color-dimmed)" fontSize="11">
+                • Transações ACID
+              </text>
+              <text x="20" y="118" fill="var(--mantine-color-teal-6)" fontSize="10" fontWeight="600">
+                AuditLog & Eventos
               </text>
             </g>
           </svg>

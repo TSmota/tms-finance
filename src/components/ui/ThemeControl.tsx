@@ -13,7 +13,7 @@ export function ThemeControl() {
   const { setColorScheme } = useMantineColorScheme();
   const computedColorScheme = useComputedColorScheme("light");
   const mounted = useMounted();
-  const selected = schemes.find((scheme) => scheme.value === (mounted ? computedColorScheme : "light"))!;
+  const selected = schemes.find((scheme) => scheme.value === (mounted ? computedColorScheme : "light")) ?? schemes[0];
   const Icon = selected.icon;
 
   return (

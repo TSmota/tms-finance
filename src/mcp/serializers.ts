@@ -298,6 +298,13 @@ function personDto(person: PersonPosition, currency: Currency) {
     /** `receivable − payable`: positivo = a pessoa deve ao usuário. */
     net: amount(person.net),
     open_debts: person.openDebts,
+    paid_debts: person.paidDebts,
+    total_debts: person.totalDebts,
+    original_receivable: amount(person.originalReceivable),
+    settled_receivable: amount(person.settledReceivable),
+    original_payable: amount(person.originalPayable),
+    settled_payable: amount(person.settledPayable),
+    currencies: person.currencies,
     complete: person.complete,
     currency,
   };

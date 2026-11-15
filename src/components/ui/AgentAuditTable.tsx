@@ -7,6 +7,8 @@ import {
   Card,
   Group,
   Modal,
+  Pagination,
+  Select,
   Stack,
   Table,
   Text,
@@ -53,6 +55,31 @@ function getVerdictBadge(verdict: string) {
 export function AgentAuditTable(props: AgentAuditTableProps) {
   const { logs } = props;
   const [selectedLog, setSelectedLog] = useState<AgentAuditLogSummary | null>(null);
+  const [page, setPage] = useState(1);
+  const [verdictFilter, setVerdictFilter] = useState<string>("ALL");
+  const pageSize = 10;
+
+  const filteredLogs = logs.filter((log) => {
+    if (verdictFilter === "ALL") {
+      return true;
+    }
+    if (verdictFilter === "OK") {
+      return log.verdict === "OK";
+    }
+    if (verdictFilter === "CONFIRM") {
+      return log.verdict === "CONFIRM_REQUIRED";
+    }
+    if (verdictFilter === "ERRORS") {
+      return log.verdict !== "OK" && log.verdict !== "CONFIRM_REQUIRED";
+    }
+    return true;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedLogs = filteredLogs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const startItem = filteredLogs.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(currentPage * pageSize, filteredLogs.length);
 
   if (logs.length === 0) {
     return (
@@ -86,7 +113,7 @@ export function AgentAuditTable(props: AgentAuditTableProps) {
         }}
       >
         <Stack gap="md">
-          <Group justify="space-between" align="center" wrap="wrap">
+          <Group justify="space-between" align="center" wrap="wrap" gap="sm">
             <Group gap="sm" align="center">
               <ThemeIcon size={38} radius="md" variant="light" color="teal">
                 <Activity size={20} aria-hidden />
@@ -100,9 +127,27 @@ export function AgentAuditTable(props: AgentAuditTableProps) {
                 </Text>
               </div>
             </Group>
-            <Badge variant="light" color="gray">
-              {logs.length} {logs.length === 1 ? "registro recente" : "registros recentes"}
-            </Badge>
+            <Group gap="xs" wrap="wrap">
+              <Select
+                size="xs"
+                value={verdictFilter}
+                onChange={(val) => {
+                  setVerdictFilter(val ?? "ALL");
+                  setPage(1);
+                }}
+                data={[
+                  { value: "ALL", label: `Todos (${logs.length})` },
+                  { value: "OK", label: "Apenas OK" },
+                  { value: "CONFIRM", label: "Confirmações" },
+                  { value: "ERRORS", label: "Erros / Bloqueios" },
+                ]}
+                w={160}
+                aria-label="Filtrar por veredito"
+              />
+              <Badge variant="light" color="gray">
+                {filteredLogs.length} {filteredLogs.length === 1 ? "registro" : "registros"}
+              </Badge>
+            </Group>
           </Group>
 
           <Table.ScrollContainer
@@ -129,7 +174,7 @@ export function AgentAuditTable(props: AgentAuditTableProps) {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {logs.map((log) => (
+                {paginatedLogs.map((log) => (
                   <Table.Tr key={log.id}>
                     <Table.Td>
                       <Text size="xs" style={{ whiteSpace: "nowrap" }}>
@@ -181,6 +226,28 @@ export function AgentAuditTable(props: AgentAuditTableProps) {
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>
+
+          {filteredLogs.length === 0 ? (
+            <Text size="sm" c="dimmed" ta="center" py="md">
+              Nenhum registro encontrado para o filtro selecionado.
+            </Text>
+          ) : (
+            <Group justify="space-between" align="center" mt="xs" wrap="wrap" gap="sm">
+              <Text size="xs" c="dimmed">
+                Mostrando {startItem}–{endItem} de {filteredLogs.length} registros (10 por página)
+              </Text>
+              {totalPages > 1 && (
+                <Pagination
+                  total={totalPages}
+                  value={currentPage}
+                  onChange={setPage}
+                  size="sm"
+                  color="teal"
+                  aria-label="Paginação do histórico de auditoria MCP"
+                />
+              )}
+            </Group>
+          )}
         </Stack>
       </Card>
 

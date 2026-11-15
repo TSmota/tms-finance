@@ -21,10 +21,19 @@ interface LinkButtonProps {
   variant?: string;
   rightSection?: ReactNode;
   leftSection?: ReactNode;
+  "aria-label"?: string;
 }
 
 export function LinkButton(props: LinkButtonProps) {
-  const { href, children, size = "xs", variant = "light", rightSection, leftSection } = props;
+  const {
+    href,
+    children,
+    size = "xs",
+    variant = "light",
+    rightSection,
+    leftSection,
+    "aria-label": ariaLabel,
+  } = props;
 
   return (
     <Button
@@ -34,6 +43,7 @@ export function LinkButton(props: LinkButtonProps) {
       variant={variant}
       rightSection={rightSection}
       leftSection={leftSection}
+      aria-label={ariaLabel}
     >
       {children}
     </Button>

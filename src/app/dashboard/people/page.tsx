@@ -102,67 +102,140 @@ export default async function PeoplePage() {
         {overview.people.length === 0 ? (
           <EmptyState message="Nenhuma pessoa ainda. Cadastre quem participa dos seus empréstimos." />
         ) : (
-          <TableScrollContainer minWidth={720}>
-            <Table highlightOnHover>
+          <TableScrollContainer minWidth={840}>
+            <Table highlightOnHover verticalSpacing="sm">
               <TableThead>
                 <TableTr>
                   <TableTh>Pessoa</TableTh>
-                  <TableTh ta="right">A receber</TableTh>
-                  <TableTh ta="right">A pagar</TableTh>
-                  <TableTh ta="right">Posição</TableTh>
-                  <TableTh>Dívidas</TableTh>
-                  <TableTh w={80} />
+                  <TableTh ta="right">Saldo a receber</TableTh>
+                  <TableTh ta="right">Saldo a pagar</TableTh>
+                  <TableTh ta="right">Posição líquida</TableTh>
+                  <TableTh>Situação / Dívidas</TableTh>
+                  <TableTh w={90} ta="right">
+                    Ações
+                  </TableTh>
                 </TableTr>
               </TableThead>
               <TableTbody>
                 {overview.people.map((person) => {
                   const personDebts = debts.filter((debt) => debt.personId === person.id);
+                  const foreignCurrencies = person.currencies.filter(
+                    (currency) => currency !== user.baseCurrency,
+                  );
 
                   return (
                     <TableTr key={person.id}>
                       <TableTd>
-                        <Stack gap={0}>
-                          <Text size="sm" fw={500}>
-                            {person.name}
-                          </Text>
+                        <Stack gap={2}>
+                          <Group gap="xs" wrap="nowrap">
+                            <Text size="sm" fw={600}>
+                              {person.name}
+                            </Text>
+                            {foreignCurrencies.map((currency) => (
+                              <Badge key={currency} size="xs" variant="outline" color="gray">
+                                {currency}
+                              </Badge>
+                            ))}
+                          </Group>
                           {person.notes && (
-                            <Text size="xs" c="dimmed">
+                            <Text size="xs" c="dimmed" lineClamp={2}>
                               {person.notes}
                             </Text>
                           )}
                         </Stack>
                       </TableTd>
                       <TableTd ta="right">
-                        <Text size="sm" c={person.receivable > 0 ? "teal" : "dimmed"}>
+                        <Text
+                          size="sm"
+                          fw={person.receivable > 0 ? 600 : 400}
+                          c={person.receivable > 0 ? "teal" : "dimmed"}
+                        >
                           {formatCurrency(person.receivable, user.baseCurrency)}
                         </Text>
+                        {person.settledReceivable > 0 && (
+                          <Text size="xs" c="dimmed">
+                            {person.receivable === 0
+                              ? `Quitado (${formatCurrency(person.settledReceivable, user.baseCurrency)})`
+                              : `Quitado: ${formatCurrency(person.settledReceivable, user.baseCurrency)}`}
+                          </Text>
+                        )}
                       </TableTd>
                       <TableTd ta="right">
-                        <Text size="sm" c={person.payable > 0 ? "red" : "dimmed"}>
+                        <Text
+                          size="sm"
+                          fw={person.payable > 0 ? 600 : 400}
+                          c={person.payable > 0 ? "red" : "dimmed"}
+                        >
                           {formatCurrency(person.payable, user.baseCurrency)}
                         </Text>
+                        {person.settledPayable > 0 && (
+                          <Text size="xs" c="dimmed">
+                            {person.payable === 0
+                              ? `Quitado (${formatCurrency(person.settledPayable, user.baseCurrency)})`
+                              : `Quitado: ${formatCurrency(person.settledPayable, user.baseCurrency)}`}
+                          </Text>
+                        )}
                       </TableTd>
                       <TableTd ta="right">
-                        <Text size="sm" fw={600} c={person.net < 0 ? "red" : undefined}>
-                          {formatCurrency(person.net, user.baseCurrency)}
-                        </Text>
+                        {person.net > 0 ? (
+                          <>
+                            <Text size="sm" fw={700} c="teal">
+                              +{formatCurrency(person.net, user.baseCurrency)}
+                            </Text>
+                            <Text size="xs" c="teal">
+                              Você recebe
+                            </Text>
+                          </>
+                        ) : person.net < 0 ? (
+                          <>
+                            <Text size="sm" fw={700} c="red">
+                              -{formatCurrency(Math.abs(person.net), user.baseCurrency)}
+                            </Text>
+                            <Text size="xs" c="red">
+                              Você paga
+                            </Text>
+                          </>
+                        ) : (
+                          <>
+                            <Text size="sm" c="dimmed">
+                              {formatCurrency(0, user.baseCurrency)}
+                            </Text>
+                            <Text size="xs" c="dimmed">
+                              {person.totalDebts > 0 ? "Quitado" : "Sem pendências"}
+                            </Text>
+                          </>
+                        )}
                         {!person.complete && (
-                          <Text size="xs" c="orange">
-                            parcial
-                          </Text>
+                          <Badge size="xs" color="orange" variant="light" mt={2}>
+                            Câmbio parcial
+                          </Badge>
                         )}
                       </TableTd>
                       <TableTd>
                         <Group gap="xs" wrap="nowrap">
-                          <Badge
-                            variant="light"
-                            color={person.openDebts > 0 ? "orange" : "gray"}
-                            size="sm"
-                          >
-                            {person.openDebts} em aberto
-                          </Badge>
+                          {person.totalDebts === 0 ? (
+                            <Badge variant="subtle" color="gray" size="sm">
+                              Sem dívidas
+                            </Badge>
+                          ) : person.openDebts === 0 ? (
+                            <Badge variant="light" color="teal" size="sm">
+                              Todas quitadas ({person.paidDebts})
+                            </Badge>
+                          ) : (
+                            <Badge variant="light" color="orange" size="sm">
+                              {person.openDebts} em aberto
+                              {person.paidDebts > 0
+                                ? ` (${person.paidDebts} quitada${person.paidDebts > 1 ? "s" : ""})`
+                                : ""}
+                            </Badge>
+                          )}
                           {personDebts.length > 0 && (
-                            <LinkButton href={`/dashboard/debts?person=${person.id}`}>
+                            <LinkButton
+                              href={`/dashboard/debts?person=${person.id}`}
+                              size="xs"
+                              variant="subtle"
+                              aria-label={`Ver dívidas de ${person.name}`}
+                            >
                               Ver
                             </LinkButton>
                           )}

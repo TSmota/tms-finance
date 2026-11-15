@@ -1244,6 +1244,49 @@ describe("posição por pessoa", () => {
     expect(overview.complete).toBe(true);
   });
 
+  it("detalha valores contratados, quitados e histórico de dívidas", async () => {
+    const { user, account, category, person } = await scenario();
+
+    const d1 = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        accountId: account.id,
+        amount: 300,
+      }),
+    );
+    await settleDebt(user.id, d1.id, debtSettlementInput({ accountId: account.id, amount: 100 }));
+
+    const d2 = await createDebt(
+      user.id,
+      debtInput({
+        personId: person.id,
+        categoryId: category.id,
+        accountId: account.id,
+        amount: 150,
+      }),
+    );
+    await settleDebt(user.id, d2.id, debtSettlementInput({ accountId: account.id, amount: 150 }));
+
+    const overview = await getPeopleOverview(user.id, "BRL");
+    const alice = overview.people.find((p) => p.id === person.id);
+
+    expect(alice).toBeDefined();
+    expect(alice).toMatchObject({
+      name: "Alice",
+      receivable: 200,
+      originalReceivable: 450,
+      settledReceivable: 250,
+      payable: 0,
+      originalPayable: 0,
+      settledPayable: 0,
+      openDebts: 1,
+      paidDebts: 1,
+      totalDebts: 2,
+    });
+  });
+
   it("dívida quitada sai da posição", async () => {
     const { user, account, category, person } = await scenario();
 

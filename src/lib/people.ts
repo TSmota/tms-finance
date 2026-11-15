@@ -85,14 +85,28 @@ export interface PersonPosition {
   id: string;
   name: string;
   notes: string | null;
-  /** A receber, na moeda base. */
+  /** A receber, na moeda base (saldo em aberto). */
   receivable: number;
-  /** A pagar, na moeda base. */
+  /** A pagar, na moeda base (saldo em aberto). */
   payable: number;
   /** `receivable − payable`: positivo = a pessoa deve ao usuário. */
   net: number;
   /** Dívidas ainda não quitadas. */
   openDebts: number;
+  /** Dívidas já quitadas. */
+  paidDebts: number;
+  /** Total de dívidas já registradas com a pessoa. */
+  totalDebts: number;
+  /** Moedas das dívidas desta pessoa. */
+  currencies: Currency[];
+  /** Total original contratado a receber (moeda base). */
+  originalReceivable: number;
+  /** Total já liquidado a receber (moeda base). */
+  settledReceivable: number;
+  /** Total original contratado a pagar (moeda base). */
+  originalPayable: number;
+  /** Total já liquidado a pagar (moeda base). */
+  settledPayable: number;
   /** `false` quando alguma dívida não pôde ser convertida para a moeda base. */
   complete: boolean;
 }
@@ -113,8 +127,15 @@ export async function getPeopleOverview(
   const [people, debts] = await Promise.all([
     prisma.person.findMany({ where: { userId } }),
     prisma.debt.findMany({
-      where: { userId, status: { not: "PAID" } },
-      select: { personId: true, type: true, remainingAmount: true, currency: true },
+      where: { userId },
+      select: {
+        personId: true,
+        type: true,
+        status: true,
+        originalAmount: true,
+        remainingAmount: true,
+        currency: true,
+      },
     }),
   ]);
 
@@ -126,7 +147,13 @@ export async function getPeopleOverview(
   interface Bucket {
     receivable: Money[];
     payable: Money[];
+    originalReceivable: Money[];
+    settledReceivable: Money[];
+    originalPayable: Money[];
+    settledPayable: Money[];
     openDebts: number;
+    paidDebts: number;
+    currencies: Set<Currency>;
     complete: boolean;
   }
 
@@ -138,7 +165,18 @@ export async function getPeopleOverview(
       return existing;
     }
 
-    const created: Bucket = { receivable: [], payable: [], openDebts: 0, complete: true };
+    const created: Bucket = {
+      receivable: [],
+      payable: [],
+      originalReceivable: [],
+      settledReceivable: [],
+      originalPayable: [],
+      settledPayable: [],
+      openDebts: 0,
+      paidDebts: 0,
+      currencies: new Set(),
+      complete: true,
+    };
     buckets.set(personId, created);
 
     return created;
@@ -148,7 +186,13 @@ export async function getPeopleOverview(
     const bucket = bucketFor(debt.personId);
     const rate = rates.get(debt.currency);
 
-    bucket.openDebts += 1;
+    bucket.currencies.add(debt.currency);
+
+    if (debt.status === "PAID") {
+      bucket.paidDebts += 1;
+    } else {
+      bucket.openDebts += 1;
+    }
 
     if (rate === undefined) {
       // Sem cotação: fica fora da posição, e a pessoa sai marcada como parcial.
@@ -156,12 +200,22 @@ export async function getPeopleOverview(
       continue;
     }
 
-    const value = money(debt.remainingAmount).times(rate);
+    const remaining = money(debt.remainingAmount).times(rate);
+    const original = money(debt.originalAmount).times(rate);
+    const settled = original.minus(remaining);
 
     if (debt.type === "LENT") {
-      bucket.receivable.push(value);
+      bucket.originalReceivable.push(original);
+      bucket.settledReceivable.push(settled);
+      if (debt.status !== "PAID") {
+        bucket.receivable.push(remaining);
+      }
     } else {
-      bucket.payable.push(value);
+      bucket.originalPayable.push(original);
+      bucket.settledPayable.push(settled);
+      if (debt.status !== "PAID") {
+        bucket.payable.push(remaining);
+      }
     }
   }
 
@@ -170,6 +224,10 @@ export async function getPeopleOverview(
       const bucket = buckets.get(person.id);
       const receivable = sumMoney(bucket?.receivable ?? []);
       const payable = sumMoney(bucket?.payable ?? []);
+      const originalReceivable = sumMoney(bucket?.originalReceivable ?? []);
+      const settledReceivable = sumMoney(bucket?.settledReceivable ?? []);
+      const originalPayable = sumMoney(bucket?.originalPayable ?? []);
+      const settledPayable = sumMoney(bucket?.settledPayable ?? []);
 
       return {
         id: person.id,
@@ -179,6 +237,13 @@ export async function getPeopleOverview(
         payable: payable.toNumber(),
         net: receivable.minus(payable).toNumber(),
         openDebts: bucket?.openDebts ?? 0,
+        paidDebts: bucket?.paidDebts ?? 0,
+        totalDebts: (bucket?.openDebts ?? 0) + (bucket?.paidDebts ?? 0),
+        currencies: Array.from(bucket?.currencies ?? []),
+        originalReceivable: originalReceivable.toNumber(),
+        settledReceivable: settledReceivable.toNumber(),
+        originalPayable: originalPayable.toNumber(),
+        settledPayable: settledPayable.toNumber(),
         complete: bucket?.complete ?? true,
       };
     })
