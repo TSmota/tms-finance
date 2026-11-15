@@ -2,6 +2,7 @@ portfolio:
   id: tms-finance
   order: 4
   status: completed
+  liveUrl: https://finance.thiagoms.dev
   technologies:
     - Next.js
     - React
@@ -13,11 +14,19 @@ portfolio:
     - Zod
     - Vitest
     - MCP
+    - Docker
+    - Recharts
   images:
     - name: tms-finance-home.png
       source: docs/screenshots/home.png
     - name: tms-finance-transactions.png
       source: docs/screenshots/transactions.png
+    - name: tms-finance-debts.png
+      source: docs/screenshots/debts.png
+    - name: tms-finance-agents.png
+      source: docs/screenshots/agents.png
+    - name: tms-finance-people.png
+      source: docs/screenshots/people.png
     - name: tms-finance-accounts.png
       source: docs/screenshots/contas.png
     - name: tms-finance-login.png
@@ -26,18 +35,20 @@ portfolio:
     en:
       name: TMS Finance
       description: >-
-        A full-featured personal finance management application with
-        multi-currency accounts, credit card statement tracking with
-        installment support, recurring expense projections, peer-to-peer
-        debt tracking, internal transfers, savings goals, batch payments,
-        a consolidated dashboard, and an AI agent surface via Model Context
+        A comprehensive personal finance management platform featuring
+        multi-currency accounts, credit card statement and installment tracking,
+        recurring expense projections, interactive peer-to-peer debt explorer,
+        internal transfers, savings goals, batch payments, full WCAG 2.2 AA
+        accessibility compliance, and an AI agent control plane with secure token
+        management, execution visualizer, and audit logging via Model Context
         Protocol (MCP).
     pt:
       name: TMS Finance
       description: >-
-        Uma aplicação completa de gestão financeira pessoal com contas e
-        carteiras multi-moeda, controle de faturas de cartão de crédito com
-        parcelamento, projeção de gastos recorrentes, controle de
-        empréstimos entre pessoas, transferências internas, metas de
-        economia, pagamentos em lote, dashboard consolidado e superfície
-        de agente IA via Model Context Protocol (MCP).
+        Uma plataforma completa de gestão financeira pessoal com contas
+        multi-moeda, controle de faturas e parcelamento de cartão de crédito,
+        projeção de despesas recorrentes, explorador interativo de empréstimos
+        entre pessoas, transferências internas, metas de economia, pagamentos
+        em lote, acessibilidade WCAG 2.2 AA e plano de controle para agentes de IA
+        com gestão de tokens seguros, visualizador de execução e auditoria via
+        Model Context Protocol (MCP).
