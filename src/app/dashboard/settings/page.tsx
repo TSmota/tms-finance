@@ -1,8 +1,8 @@
-import Link from "next/link";
-import { Button, Card, Group, Stack, Text } from "@mantine/core";
+import { Card, Group, Stack, Text } from "@mantine/core";
 import { Bot } from "lucide-react";
 
 import { AppearanceSetting } from "@/components/ui/AppearanceSetting";
+import { LinkButton } from "@/components/ui/AppLink";
 
 import { requireUser } from "@/lib/session";
 import { BaseCurrencyForm } from "@/components/forms/BaseCurrencyForm";
@@ -58,14 +58,14 @@ export default async function SettingsPage() {
         </Text>
 
         <Group>
-          <Button
-            component={Link}
+          <LinkButton
             href="/dashboard/agents"
             variant="light"
+            size="sm"
             leftSection={<Bot size={16} aria-hidden />}
           >
             Gerenciar conexões MCP
-          </Button>
+          </LinkButton>
         </Group>
       </Card>
 
