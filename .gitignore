@@ -45,5 +45,7 @@ next-env.d.ts
 # agents & local skills
 /.agents/
 /.taste-skill/
+/docs/superpowers/
+.superpowers/
 skills-lock.json
 
