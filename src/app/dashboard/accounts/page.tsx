@@ -1,5 +1,5 @@
 import { Badge, Card, Grid, GridCol, Group, Stack, Text, Title } from "@mantine/core";
-import { Landmark } from "lucide-react";
+import { ChevronRight, Landmark } from "lucide-react";
 
 import { requireUser } from "@/lib/session";
 import { getAccountBalances, listAccounts } from "@/lib/accounts";
@@ -12,6 +12,7 @@ import { deleteAccount } from "@/actions/accounts";
 import { DeleteEntityButton } from "@/components/forms/DeleteEntityButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { LinkButton } from "@/components/ui/AppLink";
 
 export default async function AccountsPage() {
   const user = await requireUser();
@@ -99,23 +100,31 @@ export default async function AccountsPage() {
                         </Text>
                       ))}
 
-                    <Group justify="flex-end" mt="md">
-                      <EditAccountButton
-                        id={account.id}
-                        name={account.name}
-                        type={account.type}
-                        institution={account.institution}
-                        currency={account.currency}
-                        initialBalance={initialBalanceById.get(account.id) ?? 0}
-                      />
-                      <DeleteEntityButton
-                        id={account.id}
-                        title="Remover conta"
-                        successMessage="Conta removida"
-                        question={`Tem certeza que deseja remover a conta ${account.name}?`}
-                        action={deleteAccount}
-                        impactTarget="account"
-                      />
+                    <Group justify="space-between" mt="md" wrap="nowrap">
+                      <LinkButton
+                        href={`/dashboard/accounts/${account.id}`}
+                        rightSection={<ChevronRight size={14} />}
+                      >
+                        Ver detalhes
+                      </LinkButton>
+                      <Group gap={4} wrap="nowrap">
+                        <EditAccountButton
+                          id={account.id}
+                          name={account.name}
+                          type={account.type}
+                          institution={account.institution}
+                          currency={account.currency}
+                          initialBalance={initialBalanceById.get(account.id) ?? 0}
+                        />
+                        <DeleteEntityButton
+                          id={account.id}
+                          title="Remover conta"
+                          successMessage="Conta removida"
+                          question={`Tem certeza que deseja remover a conta ${account.name}?`}
+                          action={deleteAccount}
+                          impactTarget="account"
+                        />
+                      </Group>
                     </Group>
                   </Card>
                 </GridCol>
