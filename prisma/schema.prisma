@@ -249,6 +249,8 @@ model CreditCard {
   creditLimit             Decimal? @map("credit_limit") @db.Decimal(12, 2)
   /// Conta sugerida ao pagar a fatura. Editável em cada pagamento.
   defaultPaymentAccountId String?  @map("default_payment_account_id") @db.Uuid
+  /// Pessoa padrão atribuída às compras deste cartão (ex: cartão adicional de terceiro).
+  defaultPersonId         String?  @map("default_person_id") @db.Uuid
   /// Dia do fechamento da fatura (1-31, com clamp no último dia do mês).
   closingDay              Int      @map("closing_day")
   /// Dia do vencimento (1-31). Se menor que closingDay, vence no mês seguinte.
@@ -259,12 +261,14 @@ model CreditCard {
 
   user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   defaultPaymentAccount FinancialAccount?  @relation("CardDefaultPaymentAccount", fields: [defaultPaymentAccountId], references: [id], onDelete: SetNull)
+  defaultPerson         Person?            @relation("CardDefaultPerson", fields: [defaultPersonId], references: [id], onDelete: SetNull)
   invoices              Invoice[]
   recurring             RecurringExpense[]
   transactions          Transaction[]
 
   @@index([userId])
   @@index([defaultPaymentAccountId])
+  @@index([defaultPersonId])
   @@map("credit_cards")
   @@schema("finance")
 }
@@ -354,8 +358,10 @@ model Person {
   notes     String?  @db.VarChar(1000)
   createdAt DateTime @default(now()) @map("created_at")
 
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  debts Debt[]
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  debts           Debt[]
+  defaultForCards CreditCard[]  @relation("CardDefaultPerson")
+  transactions    Transaction[]
 
   @@index([userId])
   @@map("people")
@@ -421,6 +427,8 @@ model Transaction {
   invoiceId          String? @map("invoice_id") @db.Uuid
   recurringExpenseId String? @map("recurring_expense_id") @db.Uuid
   debtId             String? @map("debt_id") @db.Uuid
+  /// Terceiro associado ao lançamento (compra reembolsável no cartão ou recebimento de quitação).
+  personId           String? @map("person_id") @db.Uuid
 
   // Controle de parcelamento.
   installmentNumber   Int?    @map("installment_number")
@@ -437,6 +445,7 @@ model Transaction {
   invoice          Invoice?          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   recurringExpense RecurringExpense? @relation(fields: [recurringExpenseId], references: [id], onDelete: SetNull)
   debt             Debt?             @relation(fields: [debtId], references: [id], onDelete: SetNull)
+  person           Person?           @relation(fields: [personId], references: [id], onDelete: SetNull)
 
   parent       Transaction?  @relation("TransactionInstallments", fields: [parentInstallmentId], references: [id], onDelete: SetNull)
   installments Transaction[] @relation("TransactionInstallments")
@@ -456,6 +465,7 @@ model Transaction {
   @@index([creditCardId])
   @@index([invoiceId])
   @@index([debtId])
+  @@index([personId])
   @@index([parentInstallmentId])
   @@map("transactions")
   @@schema("finance")

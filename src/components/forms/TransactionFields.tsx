@@ -17,6 +17,7 @@ import type { AccountOption, Option } from "@/lib/options";
 export type TransactionFormValues = {
   accountId: string;
   categoryId: string;
+  personId?: string | null;
   type: "INCOME" | "EXPENSE";
   amount: number;
   currency: string;
@@ -30,6 +31,7 @@ interface TransactionFieldsProps {
   form: UseFormReturnType<TransactionFormValues>;
   accounts: AccountOption[];
   categories: Option[];
+  people?: Option[];
   /** Mostra o campo de taxa manual quando o câmbio automático falhou. */
   showManualFx: boolean;
 }
@@ -41,7 +43,7 @@ interface TransactionFieldsProps {
  * duplicá-los faria as telas divergirem na primeira alteração.
  */
 export function TransactionFields(props: TransactionFieldsProps) {
-  const { form, accounts, categories, showManualFx } = props;
+  const { form, accounts, categories, people = [], showManualFx } = props;
 
   const accountId = useFormValue(form, "accountId");
   const transactionCurrency = useFormValue(form, "currency");
@@ -114,6 +116,18 @@ export function TransactionFields(props: TransactionFieldsProps) {
         key={form.key("categoryId")}
         {...form.getInputProps("categoryId")}
       />
+      {people.length > 0 && (
+        <Select
+          label="Pessoa (reembolso / terceiro)"
+          description="Opcional. Use em entradas para abater o saldo a receber desta pessoa."
+          placeholder="Nenhuma"
+          clearable
+          searchable
+          data={people}
+          key={form.key("personId")}
+          {...form.getInputProps("personId")}
+        />
+      )}
       <TextInput
         label="Descrição"
         key={form.key("description")}

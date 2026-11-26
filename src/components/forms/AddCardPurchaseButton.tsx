@@ -19,6 +19,7 @@ interface AddCardPurchaseButtonProps {
   /** Cartões com a moeda e o dia de fechamento. */
   cards: CardOption[];
   categories: Option[];
+  people?: Option[];
   /** Pré-seleciona um cartão quando o botão vive na página de um cartão só. */
   defaultCardId?: string;
   label?: string;
@@ -27,7 +28,7 @@ interface AddCardPurchaseButtonProps {
 }
 
 export function AddCardPurchaseButton(props: AddCardPurchaseButtonProps) {
-  const { cards, categories, defaultCardId, label = "Lançar compra", baseCurrency } = props;
+  const { cards, categories, people, defaultCardId, label = "Lançar compra", baseCurrency } = props;
 
   const { opened, open, close, loading, run } = useActionModal({
     successMessage: "Compra lançada na fatura",
@@ -39,6 +40,7 @@ export function AddCardPurchaseButton(props: AddCardPurchaseButtonProps) {
   const initialValues: CardPurchaseFormValues = {
     creditCardId: initialCard?.value ?? "",
     categoryId: "",
+    personId: initialCard?.defaultPersonId ?? "",
     description: "",
     amount: 0,
     currency: initialCard?.currency ?? baseCurrency,
@@ -89,6 +91,7 @@ export function AddCardPurchaseButton(props: AddCardPurchaseButtonProps) {
           form={form}
           cards={cards}
           categories={categories}
+          people={people}
           showManualFx={showManualFx}
         />
       </FormModal>

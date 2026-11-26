@@ -15,6 +15,7 @@ import { requireUser } from "@/lib/session";
 import { listCreditCards } from "@/lib/creditCards";
 import { listAccounts } from "@/lib/accounts";
 import { listCategoryOptions } from "@/lib/categories";
+import { listPersonOptions } from "@/lib/people";
 import { formatCurrency } from "@/lib/currency";
 import { groupByInstitution } from "@/lib/grouping";
 import { AddCreditCardButton } from "@/components/forms/AddCreditCardButton";
@@ -29,10 +30,11 @@ import { PageHeader } from "@/components/ui/PageHeader";
 export default async function CardsPage() {
   const user = await requireUser();
 
-  const [cards, accounts, categories] = await Promise.all([
+  const [cards, accounts, categories, people] = await Promise.all([
     listCreditCards(user.id),
     listAccounts(user.id),
     listCategoryOptions(user.id),
+    listPersonOptions(user.id),
   ]);
 
   const accountOptions = accounts.map((account) => ({
@@ -47,6 +49,7 @@ export default async function CardsPage() {
     currency: card.currency,
     closingDay: card.closingDay,
     dueDay: card.dueDay,
+    defaultPersonId: card.defaultPersonId,
   }));
 
   const groups = groupByInstitution(cards);
@@ -62,11 +65,13 @@ export default async function CardsPage() {
               <AddCardPurchaseButton
                 cards={cardOptions}
                 categories={categories}
+                people={people}
                 baseCurrency={user.baseCurrency}
               />
             )}
             <AddCreditCardButton
               accounts={accountOptions}
+              people={people}
               baseCurrency={user.baseCurrency}
             />
           </Group>
@@ -81,6 +86,7 @@ export default async function CardsPage() {
             action={
               <AddCreditCardButton
                 accounts={accountOptions}
+                people={people}
                 baseCurrency={user.baseCurrency}
               />
             }
@@ -165,6 +171,7 @@ export default async function CardsPage() {
                             id={card.id}
                             currency={card.currency}
                             accounts={accountOptions}
+                            people={people}
                             values={{
                               name: card.name,
                               institution: card.institution ?? "",
@@ -173,6 +180,7 @@ export default async function CardsPage() {
                               currency: card.currency,
                               creditLimit: card.creditLimit,
                               defaultPaymentAccountId: card.defaultPaymentAccountId ?? "",
+                              defaultPersonId: card.defaultPersonId ?? "",
                             }}
                           />
                           <DeleteEntityButton

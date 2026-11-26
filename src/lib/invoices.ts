@@ -275,6 +275,8 @@ export interface InvoiceItem {
   categoryId: string | null;
   categoryName: string | null;
   categoryColor: string | null;
+  personId: string | null;
+  personName: string | null;
   installmentNumber: number | null;
   totalInstallments: number | null;
   /** Preenchido quando o lançamento pertence a uma dívida. */
@@ -320,7 +322,10 @@ export async function listItemsByInvoice(
   const items = await prisma.transaction.findMany({
     where: { userId, invoiceId: { in: invoiceIds }, ...INVOICE_ITEMS_WHERE },
     orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-    include: { category: { select: { name: true, color: true } } },
+    include: {
+      category: { select: { name: true, color: true } },
+      person: { select: { name: true } },
+    },
   });
 
   const totalByAnchor = await groupTotals(
@@ -343,6 +348,8 @@ export async function listItemsByInvoice(
       categoryId: item.categoryId,
       categoryName: item.category?.name ?? null,
       categoryColor: item.category?.color ?? null,
+      personId: item.personId,
+      personName: item.person?.name ?? null,
       installmentNumber: item.installmentNumber,
       totalInstallments: item.totalInstallments,
       debtId: item.debtId,

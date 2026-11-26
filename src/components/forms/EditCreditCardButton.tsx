@@ -18,10 +18,11 @@ interface EditCreditCardButtonProps {
   values: CreditCardFormValues;
   currency: CurrencyCode;
   accounts: Option[];
+  people?: Option[];
 }
 
 export function EditCreditCardButton(props: EditCreditCardButtonProps) {
-  const { id, values, currency, accounts } = props;
+  const { id, values, currency, accounts, people } = props;
 
   const { opened, open, close, loading, run } = useActionModal({
     successMessage: "Cartão atualizado",
@@ -54,7 +55,12 @@ export function EditCreditCardButton(props: EditCreditCardButtonProps) {
         onSubmit={handleSubmit}
         loading={loading}
       >
-        <CreditCardFields form={form} accounts={accounts} lockedCurrency={currency} />
+        <CreditCardFields
+          form={form}
+          accounts={accounts}
+          people={people}
+          lockedCurrency={currency}
+        />
       </FormModal>
     </>
   );

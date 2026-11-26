@@ -162,6 +162,7 @@ export function transactionDto(row: TransactionListItem) {
     exchange_rate: row.exchangeRate.toFixed(4),
     account: row.accountId ? { id: row.accountId, name: row.accountName, currency: row.accountCurrency } : null,
     category: row.categoryId ? { id: row.categoryId, name: row.categoryName } : null,
+    person: row.personId ? { id: row.personId, name: row.personName } : null,
     /** Valor é estimativa e deve ser conferido ao confirmar. */
     is_estimated: row.isEstimated,
     /** Preenchido = `delete_settlement` ou `undo_invoice_payment`, não esta linha. */
@@ -188,6 +189,9 @@ export function creditCardsDto(cards: CreditCardSummary[]) {
     open_invoice_count: card.openInvoiceCount,
     default_payment_account: card.defaultPaymentAccountId
       ? { id: card.defaultPaymentAccountId, name: card.defaultPaymentAccountName }
+      : null,
+    default_person: card.defaultPersonId
+      ? { id: card.defaultPersonId, name: card.defaultPersonName }
       : null,
   }));
 }
@@ -221,6 +225,7 @@ export function invoiceItemsDto(items: InvoiceItem[]) {
     converted_amount: amount(item.convertedAmount),
     exchange_rate: item.exchangeRate.toFixed(4),
     category: item.categoryId ? { id: item.categoryId, name: item.categoryName } : null,
+    person: item.personId ? { id: item.personId, name: item.personName } : null,
     installment:
       item.installmentNumber === null
         ? null

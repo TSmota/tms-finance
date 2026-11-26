@@ -33,6 +33,8 @@ export interface TransactionRow {
   categoryId: string | null;
   categoryName: string | null;
   categoryColor: string | null;
+  personId: string | null;
+  personName: string | null;
   /** Recorrente de valor estimado: a confirmação pede conferência. */
   isEstimated: boolean;
   /** Preenchido = só de leitura aqui; editar exige desfazer os dois lados. */
@@ -61,6 +63,8 @@ export function toTransactionRow(
     categoryId: transaction.categoryId,
     categoryName: transaction.categoryName,
     categoryColor: transaction.categoryColor,
+    personId: transaction.personId,
+    personName: transaction.personName,
     isEstimated: transaction.isEstimated,
     managedBy: transaction.managedBy,
   };

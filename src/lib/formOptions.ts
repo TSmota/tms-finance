@@ -1,5 +1,6 @@
 import { listAccounts } from "@/lib/accounts";
 import { listCategoryOptions } from "@/lib/categories";
+import { listPersonOptions } from "@/lib/people";
 import type { AccountOption, Option } from "@/lib/options";
 
 /**
@@ -8,10 +9,11 @@ import type { AccountOption, Option } from "@/lib/options";
  */
 export async function loadFormOptions(
   userId: string,
-): Promise<{ accounts: AccountOption[]; categories: Option[] }> {
-  const [accounts, categories] = await Promise.all([
+): Promise<{ accounts: AccountOption[]; categories: Option[]; people: Option[] }> {
+  const [accounts, categories, people] = await Promise.all([
     listAccounts(userId),
     listCategoryOptions(userId),
+    listPersonOptions(userId),
   ]);
 
   return {
@@ -21,5 +23,6 @@ export async function loadFormOptions(
       currency: account.currency,
     })),
     categories,
+    people,
   };
 }

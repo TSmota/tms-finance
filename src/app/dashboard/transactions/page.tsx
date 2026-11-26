@@ -37,6 +37,7 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
     <AddTransactionButton
       accounts={options.accounts}
       categories={options.categories}
+      people={options.people}
       baseCurrency={user.baseCurrency}
     />
   );
@@ -106,6 +107,7 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
           transactions={rows}
           accounts={options.accounts}
           categories={options.categories}
+          people={options.people}
           emptyMessage="Nenhuma transação neste mês."
           emptyAction={options.accounts.length > 0 ? addButton : undefined}
         />

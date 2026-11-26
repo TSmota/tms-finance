@@ -11,7 +11,7 @@ import { getExchangeRate, FX_RATE_SCALE } from "@/lib/fxService";
 import { convertMoney, toStorage } from "@/lib/money";
 import { monthRange, parseCalendarDate } from "@/lib/dates";
 import { applyToBalance, balanceDelta, lockTransaction } from "@/lib/accountBalance";
-import { assertCategoryOwned, requireAccount } from "@/lib/ownership";
+import { assertCategoryOwned, assertPersonOwned, requireAccount } from "@/lib/ownership";
 import type { TransactionInput } from "@/lib/validations";
 
 /**
@@ -107,6 +107,9 @@ export async function createTransaction(
 ): Promise<Transaction> {
   const account = await requireAccount(userId, input.accountId);
   await assertCategoryOwned(userId, input.categoryId);
+  if (input.personId) {
+    await assertPersonOwned(userId, input.personId);
+  }
 
   const date = parseCalendarDate(input.date);
   const { exchangeRate, convertedAmount } = await resolveConversion({
@@ -131,6 +134,7 @@ export async function createTransaction(
         convertedAmount: toStorage(convertedAmount),
         accountId: account.id,
         categoryId: input.categoryId,
+        personId: input.personId ?? null,
       },
     });
 
@@ -149,6 +153,9 @@ export async function updateTransaction(
 
   const account = await requireAccount(userId, input.accountId);
   await assertCategoryOwned(userId, input.categoryId);
+  if (input.personId) {
+    await assertPersonOwned(userId, input.personId);
+  }
 
   const date = parseCalendarDate(input.date);
   const { exchangeRate, convertedAmount } = await resolveConversion({
@@ -192,6 +199,7 @@ export async function updateTransaction(
         convertedAmount: toStorage(convertedAmount),
         accountId: account.id,
         categoryId: input.categoryId,
+        personId: input.personId ?? null,
       },
     });
 
@@ -251,6 +259,8 @@ export interface TransactionListItem {
   categoryId: string | null;
   categoryName: string | null;
   categoryColor: string | null;
+  personId: string | null;
+  personName: string | null;
   /**
    * Recorrente de valor estimado: a confirmação da pendência deve pedir
    * conferência do valor real.
@@ -263,12 +273,14 @@ export interface TransactionListItem {
 const listInclude = {
   account: { select: { name: true, currency: true } },
   category: { select: { name: true, color: true } },
+  person: { select: { name: true } },
   recurringExpense: { select: { isEstimated: true } },
 } as const;
 
 type TransactionWithRelations = Transaction & {
   account: { name: string; currency: Currency } | null;
   category: { name: string; color: string | null } | null;
+  person: { name: string } | null;
   recurringExpense: { isEstimated: boolean } | null;
 };
 
@@ -289,6 +301,8 @@ function toListItem(transaction: TransactionWithRelations): TransactionListItem 
     categoryId: transaction.categoryId,
     categoryName: transaction.category?.name ?? null,
     categoryColor: transaction.category?.color ?? null,
+    personId: transaction.personId,
+    personName: transaction.person?.name ?? null,
     isEstimated: transaction.recurringExpense?.isEstimated ?? false,
     managedBy: managedBy(transaction),
   };

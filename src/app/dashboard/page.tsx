@@ -67,6 +67,7 @@ export default async function DashboardPage() {
             <AddTransactionButton
               accounts={options.accounts}
               categories={options.categories}
+              people={options.people}
               baseCurrency={user.baseCurrency}
             />
           )

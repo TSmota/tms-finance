@@ -16,6 +16,7 @@ import { describeTargetInvoices } from "./invoiceHint";
 export type CardPurchaseFormValues = {
   creditCardId: string;
   categoryId: string;
+  personId?: string | null;
   description: string;
   amount: number;
   currency: string;
@@ -29,6 +30,7 @@ interface CardPurchaseFieldsProps {
   /** Cartões com a moeda e o dia de fechamento, para sugerir moeda e fatura. */
   cards: CardOption[];
   categories: Option[];
+  people?: Option[];
   /** Mostra o campo de taxa manual quando o câmbio automático falhou. */
   showManualFx: boolean;
 }
@@ -40,7 +42,7 @@ interface CardPurchaseFieldsProps {
  * regra de divisão recebe, e o que o usuário tem em mãos.
  */
 export function CardPurchaseFields(props: CardPurchaseFieldsProps) {
-  const { form, cards, categories, showManualFx } = props;
+  const { form, cards, categories, people = [], showManualFx } = props;
 
   const creditCardId = useFormValue(form, "creditCardId");
   const currency = useFormValue(form, "currency");
@@ -72,11 +74,13 @@ export function CardPurchaseFields(props: CardPurchaseFieldsProps) {
         onChange={(value) => {
           form.getInputProps("creditCardId").onChange(value);
 
-          const currency = cards.find((card) => card.value === value)?.currency;
+          const selected = cards.find((card) => card.value === value);
 
-          if (currency) {
-            form.setFieldValue("currency", currency);
+          if (selected?.currency) {
+            form.setFieldValue("currency", selected.currency);
           }
+
+          form.setFieldValue("personId", selected?.defaultPersonId ?? "");
         }}
       />
       <TextInput
@@ -129,6 +133,18 @@ export function CardPurchaseFields(props: CardPurchaseFieldsProps) {
         key={form.key("categoryId")}
         {...form.getInputProps("categoryId")}
       />
+      {people.length > 0 && (
+        <Select
+          label="Pessoa (reembolsável)"
+          description="Opcional. Se preenchido, entra na fatura mas não no seu gasto pessoal."
+          placeholder="Pessoal (nenhuma)"
+          clearable
+          searchable
+          data={people}
+          key={form.key("personId")}
+          {...form.getInputProps("personId")}
+        />
+      )}
       {showManualFx && (
         <>
           <Alert color="yellow" icon={<TriangleAlert size={16} />} title="Taxa de câmbio manual">

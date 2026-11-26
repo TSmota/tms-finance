@@ -26,17 +26,19 @@ function empty(baseCurrency: CurrencyCode): CreditCardFormValues {
     currency: baseCurrency,
     creditLimit: null,
     defaultPaymentAccountId: "",
+    defaultPersonId: "",
   };
 }
 
 interface AddCreditCardButtonProps {
   accounts: Option[];
+  people?: Option[];
   /** Último recurso do campo de moeda: a moeda base do usuário. */
   baseCurrency: CurrencyCode;
 }
 
 export function AddCreditCardButton(props: AddCreditCardButtonProps) {
-  const { accounts, baseCurrency } = props;
+  const { accounts, people, baseCurrency } = props;
 
   const { opened, open, close, loading, run } = useActionModal({
     successMessage: "Cartão criado",
@@ -66,7 +68,7 @@ export function AddCreditCardButton(props: AddCreditCardButtonProps) {
         onSubmit={handleSubmit}
         loading={loading}
       >
-        <CreditCardFields form={form} accounts={accounts} />
+        <CreditCardFields form={form} accounts={accounts} people={people} />
       </FormModal>
     </>
   );

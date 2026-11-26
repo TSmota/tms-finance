@@ -9,8 +9,11 @@ import {
   updateCardPurchase,
 } from "@/lib/cardPurchases";
 import { createDebt } from "@/lib/debts";
+import { createCreditCard } from "@/lib/creditCards";
 import { listCardInvoices, listInvoiceItems } from "@/lib/invoices";
 import { payInvoice, undoInvoicePayment } from "@/lib/invoicePayments";
+import { deletePerson, getPeopleOverview } from "@/lib/people";
+import { createTransaction } from "@/lib/transactions";
 import {
   makeAccount,
   makeCategory,
@@ -979,5 +982,66 @@ describe("edição da compra", () => {
     expect(item!.groupTotal).toBe(100);
     expect(item!.installmentNumber).toBe(2);
     expect(item!.fromRecurring).toBe(false);
+  });
+
+  it("herda defaultPersonId do cartão e permite sobrescrever com null (pessoal)", async () => {
+    const user = await makeUser();
+    const pai = await makePerson(user.id, { name: "Pai" });
+    const account = await makeAccount(user.id, { initialBalance: "2000.00" });
+    const card = await createCreditCard(user.id, {
+      name: "Bradesco Pai",
+      institution: "Bradesco",
+      closingDay: 20,
+      dueDay: 10,
+      currency: "BRL",
+      creditLimit: null,
+      defaultPaymentAccountId: account.id,
+      defaultPersonId: pai.id,
+    });
+
+    // Omitindo personId: herda defaultPersonId do cartão.
+    const [inherited] = await createCardPurchase(
+      user.id,
+      cardPurchaseInput({ creditCardId: card.id, amount: 300, description: "Mercado Pai" }),
+    );
+    expect(inherited!.personId).toBe(pai.id);
+
+    // Passando personId: null explicitamente: compra pessoal mesmo em cartão de terceiro.
+    const [personal] = await createCardPurchase(
+      user.id,
+      cardPurchaseInput({
+        creditCardId: card.id,
+        amount: 100,
+        description: "Assinatura pessoal",
+        personId: null,
+      }),
+    );
+    expect(personal!.personId).toBeNull();
+
+    // Fatura soma as duas (400), mas o saldo a receber do Pai é só 300.
+    const [invoice] = await listCardInvoices(user.id, card.id);
+    expect(invoice!.total).toBe(400);
+
+    let overview = await getPeopleOverview(user.id, "BRL");
+    expect(overview.people[0]?.receivable).toBe(300);
+
+    // Reembolso direto em conta (INCOME com personId) abate o recebível.
+    await createTransaction(user.id, {
+      accountId: account.id,
+      categoryId: null,
+      personId: pai.id,
+      type: "INCOME",
+      amount: 120,
+      currency: "BRL",
+      date: "2026-08-15",
+      description: "PIX do Pai",
+      manualFxRate: null,
+    });
+
+    overview = await getPeopleOverview(user.id, "BRL");
+    expect(overview.people[0]?.receivable).toBe(180);
+
+    // Não permite apagar pessoa com lançamentos atribuídos.
+    await expect(deletePerson(user.id, pai.id)).rejects.toThrow(InvalidOperationError);
   });
 });

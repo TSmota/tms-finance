@@ -18,10 +18,11 @@ interface EditTransactionButtonProps {
   values: TransactionFormValues;
   accounts: AccountOption[];
   categories: Option[];
+  people?: Option[];
 }
 
 export function EditTransactionButton(props: EditTransactionButtonProps) {
-  const { id, values, accounts, categories } = props;
+  const { id, values, accounts, categories, people } = props;
 
   const { opened, open, close, loading, run } = useActionModal({
     successMessage: "Transação atualizada",
@@ -67,6 +68,7 @@ export function EditTransactionButton(props: EditTransactionButtonProps) {
           form={form}
           accounts={accounts}
           categories={categories}
+          people={people}
           showManualFx={showManualFx}
         />
       </FormModal>

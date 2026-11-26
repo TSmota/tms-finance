@@ -95,6 +95,8 @@ const transaction = {
   categoryId: "c1",
   categoryName: "Mercado",
   categoryColor: "#fff",
+  personId: null,
+  personName: null,
   isEstimated: false,
   managedBy: null,
 };
