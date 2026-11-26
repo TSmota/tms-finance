@@ -293,6 +293,8 @@ export async function getAccountDetail(
         where: {
           userId,
           accountId: id,
+          // Apenas movimentações efetivadas entram no extrato e nos totais do mês.
+          status: "CONFIRMED",
           date: { gte: start, lt: end },
         },
         include: {
@@ -355,15 +357,24 @@ export async function getAccountDetail(
     rate !== undefined ? money(account.currentBalance).times(rate).toNumber() : null;
 
   const statement: AccountStatementItem[] = [];
+  let totalIncome = money(0);
+  let totalExpense = money(0);
 
   for (const tx of transactions) {
+    const type = tx.type === "INCOME" ? "INCOME" : "EXPENSE";
+    if (type === "INCOME") {
+      totalIncome = totalIncome.plus(tx.convertedAmount);
+    } else {
+      totalExpense = totalExpense.plus(tx.convertedAmount);
+    }
+
     statement.push({
       id: tx.id,
       date: tx.date,
       description: tx.description,
       amount: Number(tx.convertedAmount),
       currency: account.currency,
-      type: tx.type === "INCOME" ? "INCOME" : "EXPENSE",
+      type,
       kind: "TRANSACTION",
       categoryName: tx.category?.name,
       categoryColor: tx.category?.color,
@@ -373,6 +384,7 @@ export async function getAccountDetail(
   }
 
   for (const tr of outgoingTransfers) {
+    totalExpense = totalExpense.plus(tr.amount);
     statement.push({
       id: tr.id,
       date: tr.date,
@@ -386,6 +398,7 @@ export async function getAccountDetail(
   }
 
   for (const tr of incomingTransfers) {
+    totalIncome = totalIncome.plus(tr.amount);
     statement.push({
       id: tr.id,
       date: tr.date,
@@ -399,17 +412,6 @@ export async function getAccountDetail(
   }
 
   statement.sort((a, b) => b.date.getTime() - a.date.getTime());
-
-  let totalIncome = money(0);
-  let totalExpense = money(0);
-
-  for (const item of statement) {
-    if (item.type === "INCOME") {
-      totalIncome = totalIncome.plus(item.amount);
-    } else {
-      totalExpense = totalExpense.plus(item.amount);
-    }
-  }
 
   const net = totalIncome.minus(totalExpense);
 

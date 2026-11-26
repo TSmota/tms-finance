@@ -254,6 +254,9 @@ export default async function AccountDetailPage({
                 {detail.statement.map((item) => {
                   const isIncome = item.type === "INCOME";
                   const isTransfer = item.kind === "TRANSFER_IN" || item.kind === "TRANSFER_OUT";
+                  const isManaged =
+                    item.kind === "TRANSACTION" &&
+                    Boolean(item.creditCardName || item.debtDescription);
 
                   return (
                     <TableTr key={item.id}>
@@ -305,19 +308,21 @@ export default async function AccountDetailPage({
                         </Text>
                       </TableTd>
                       <TableTd ta="center">
-                        <DeleteEntityButton
-                          id={item.id}
-                          title={isTransfer ? "Remover transferência" : "Remover transação"}
-                          successMessage={
-                            isTransfer ? "Transferência removida" : "Transação removida"
-                          }
-                          question={
-                            isTransfer
-                              ? `Remover a transferência "${item.description}"? Os saldos das contas envolvidas serão recalculados.`
-                              : `Remover "${item.description}"?`
-                          }
-                          action={isTransfer ? deleteTransfer : deleteTransaction}
-                        />
+                        {!isManaged && (
+                          <DeleteEntityButton
+                            id={item.id}
+                            title={isTransfer ? "Remover transferência" : "Remover transação"}
+                            successMessage={
+                              isTransfer ? "Transferência removida" : "Transação removida"
+                            }
+                            question={
+                              isTransfer
+                                ? `Remover a transferência "${item.description}"? Os saldos das contas envolvidas serão recalculados.`
+                                : `Remover "${item.description}"?`
+                            }
+                            action={isTransfer ? deleteTransfer : deleteTransaction}
+                          />
+                        )}
                       </TableTd>
                     </TableTr>
                   );
