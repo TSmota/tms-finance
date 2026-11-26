@@ -266,6 +266,11 @@ export async function getPeopleOverview(
 
     const bucket = bucketFor(tx.personId);
     const currency = tx.creditCard?.currency ?? tx.account?.currency;
+
+    if (currency) {
+      bucket.currencies.add(currency);
+    }
+
     const rate = currency ? rates.get(currency) : undefined;
 
     if (rate === undefined) {
@@ -277,17 +282,24 @@ export async function getPeopleOverview(
 
     if (tx.type === "EXPENSE") {
       bucket.receivable.push(value);
+      bucket.originalReceivable.push(value);
     } else {
       // Reembolso/pagamento recebido em conta reduz o saldo a receber da pessoa.
       bucket.receivable.push(value.negated());
+      bucket.settledReceivable.push(value);
     }
   }
 
   const positions = people
     .map((person) => {
       const bucket = buckets.get(person.id);
-      const receivable = sumMoney(bucket?.receivable ?? []);
-      const payable = sumMoney(bucket?.payable ?? []);
+      const rawReceivable = sumMoney(bucket?.receivable ?? []);
+      const rawPayable = sumMoney(bucket?.payable ?? []);
+      // Se o reembolso excedeu os gastos atribuídos, o excedente vira saldo a pagar.
+      const receivable = rawReceivable.isNegative() ? money(0) : rawReceivable;
+      const payable = rawReceivable.isNegative()
+        ? rawPayable.plus(rawReceivable.abs())
+        : rawPayable;
       const originalReceivable = sumMoney(bucket?.originalReceivable ?? []);
       const settledReceivable = sumMoney(bucket?.settledReceivable ?? []);
       const originalPayable = sumMoney(bucket?.originalPayable ?? []);

@@ -242,16 +242,21 @@ async function personImpact(userId: string, id: string): Promise<DeletionImpact>
     throw new NotFoundError("Pessoa não encontrada");
   }
 
-  const [debts, orphanedTransactions, oldest, blockedBy] = await Promise.all([
-    prisma.debt.count({ where: { userId, personId: id } }),
-    prisma.transaction.count({ where: { userId, debt: { personId: id } } }),
-    prisma.transaction.findFirst({
-      where: { userId, debt: { personId: id } },
-      orderBy: { date: "asc" },
-      select: { date: true },
-    }),
-    personDeletionBlocker(userId, id),
-  ]);
+  const [debts, orphanedTransactions, attributedTransactions, oldest, blockedBy] =
+    await Promise.all([
+      prisma.debt.count({ where: { userId, personId: id } }),
+      prisma.transaction.count({ where: { userId, debt: { personId: id } } }),
+      prisma.transaction.count({ where: { userId, personId: id, debtId: null } }),
+      prisma.transaction.findFirst({
+        where: {
+          userId,
+          OR: [{ debt: { personId: id } }, { personId: id, debtId: null }],
+        },
+        orderBy: { date: "asc" },
+        select: { date: true },
+      }),
+      personDeletionBlocker(userId, id),
+    ]);
 
   return {
     target: "person",
@@ -268,6 +273,12 @@ async function personImpact(userId: string, id: string): Promise<DeletionImpact>
         key: "transactions_orphaned",
         label: "lançamentos que continuam no fluxo de caixa, mas sem vínculo com a dívida",
         count: orphanedTransactions,
+        effect: "detach",
+      },
+      {
+        key: "attributed_transactions",
+        label: "lançamentos atribuídos diretamente a esta pessoa",
+        count: attributedTransactions,
         effect: "detach",
       },
     ]),

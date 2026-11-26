@@ -9,7 +9,7 @@ import {
   updateCardPurchase,
 } from "@/lib/cardPurchases";
 import { createDebt } from "@/lib/debts";
-import { createCreditCard } from "@/lib/creditCards";
+import { createCreditCard, updateCreditCard } from "@/lib/creditCards";
 import { listCardInvoices, listInvoiceItems } from "@/lib/invoices";
 import { payInvoice, undoInvoicePayment } from "@/lib/invoicePayments";
 import { deletePerson, getPeopleOverview } from "@/lib/people";
@@ -1043,5 +1043,37 @@ describe("edição da compra", () => {
 
     // Não permite apagar pessoa com lançamentos atribuídos.
     await expect(deletePerson(user.id, pai.id)).rejects.toThrow(InvalidOperationError);
+
+    // updateCreditCard altera defaultPersonId e updateCardPurchase preserva/sobrescreve personId.
+    const mae = await makePerson(user.id, { name: "Mãe" });
+    await updateCreditCard(user.id, card.id, {
+      name: "Bradesco Pai",
+      institution: "Bradesco",
+      closingDay: 20,
+      dueDay: 10,
+      currency: "BRL",
+      creditLimit: null,
+      defaultPaymentAccountId: account.id,
+      defaultPersonId: mae.id,
+    });
+
+    const updatedInherit = await updateCardPurchase(
+      user.id,
+      inherited!.id,
+      cardPurchaseInput({ creditCardId: card.id, amount: 300, description: "Mercado Mãe" }),
+    );
+    expect(updatedInherit[0]!.personId).toBe(mae.id);
+
+    const updatedPersonal = await updateCardPurchase(
+      user.id,
+      personal!.id,
+      cardPurchaseInput({
+        creditCardId: card.id,
+        amount: 100,
+        description: "Assinatura pessoal",
+        personId: null,
+      }),
+    );
+    expect(updatedPersonal[0]!.personId).toBeNull();
   });
 });
