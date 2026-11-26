@@ -738,4 +738,41 @@ describe("base não-BRL", () => {
     expect(summary.expenses).toBeCloseTo(50, 2);
     expect(summary.complete).toBe(false);
   });
+
+  it("exclui compras no cartão atribuídas a terceiros do gasto pessoal do mês", async () => {
+    const user = await makeUser();
+    const pai = await makePerson(user.id, { name: "Pai" });
+    const card = await makeCreditCard(user.id, { closingDay: 20, dueDay: 10 });
+    const lazer = await makeCategory(user.id, { name: "Lazer" });
+
+    await createCardPurchase(user.id, {
+      creditCardId: card.id,
+      categoryId: lazer.id,
+      description: "Compra minha",
+      amount: 100,
+      currency: "BRL",
+      date: "2026-08-05",
+      installments: 1,
+      manualFxRate: null,
+    });
+
+    await createCardPurchase(user.id, {
+      creditCardId: card.id,
+      categoryId: lazer.id,
+      personId: pai.id,
+      description: "Compra do Pai",
+      amount: 250,
+      currency: "BRL",
+      date: "2026-08-06",
+      installments: 1,
+      manualFxRate: null,
+    });
+
+    const summary = await getMonthSummary(user.id, YEAR, MONTH, "BRL");
+    expect(summary.cardSpending).toBe(100);
+    expect(summary.spendingTotal).toBe(100);
+
+    const [invoice] = await listCardInvoices(user.id, card.id);
+    expect(invoice!.total).toBe(350);
+  });
 });

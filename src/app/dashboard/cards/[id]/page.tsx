@@ -30,6 +30,7 @@ import {
 } from "@/lib/invoices";
 import { listAccounts } from "@/lib/accounts";
 import { listCategoryOptions } from "@/lib/categories";
+import { listPersonOptions } from "@/lib/people";
 import { formatCurrency } from "@/lib/currency";
 import { AddCardPurchaseButton } from "@/components/forms/AddCardPurchaseButton";
 import { EditCardPurchaseButton } from "@/components/forms/EditCardPurchaseButton";
@@ -80,6 +81,7 @@ function toPurchaseValues(item: InvoiceItem, creditCardId: string): CardPurchase
   return {
     creditCardId,
     categoryId: item.categoryId ?? "",
+    personId: item.personId ?? "",
     description: item.description,
     amount: item.groupTotal,
     currency: item.currency,
@@ -104,12 +106,13 @@ export default async function CardInvoicesPage({
     throw error;
   });
 
-  const [invoices, accounts, categories, cards] = await Promise.all([
+  const [invoices, accounts, categories, cards, people] = await Promise.all([
     listCardInvoices(user.id, card.id),
     listAccounts(user.id),
     listCategoryOptions(user.id),
     // Todos os cartões, e não só este: a edição permite mover a compra de cartão.
     listCreditCards(user.id),
+    listPersonOptions(user.id),
   ]);
 
   // Os itens de todas as faturas em duas consultas, e não duas por fatura.
@@ -130,6 +133,7 @@ export default async function CardInvoicesPage({
     currency: item.currency,
     closingDay: item.closingDay,
     dueDay: item.dueDay,
+    defaultPersonId: item.defaultPersonId,
   }));
 
   // A fatura corrente é a única acionável; o resto é histórico.
@@ -147,6 +151,7 @@ export default async function CardInvoicesPage({
           <AddCardPurchaseButton
             cards={cardOptions}
             categories={categories}
+            people={people}
             defaultCardId={card.id}
             baseCurrency={user.baseCurrency}
           />
@@ -161,6 +166,7 @@ export default async function CardInvoicesPage({
               <AddCardPurchaseButton
                 cards={cardOptions}
                 categories={categories}
+                people={people}
                 defaultCardId={card.id}
                 baseCurrency={user.baseCurrency}
               />
@@ -182,6 +188,7 @@ export default async function CardInvoicesPage({
                 cardId={card.id}
                 cardOptions={cardOptions}
                 categories={categories}
+                people={people}
               />
             </Card>
           ))}
@@ -223,6 +230,7 @@ export default async function CardInvoicesPage({
                         cardId={card.id}
                         cardOptions={cardOptions}
                         categories={categories}
+                        people={people}
                       />
                     </AccordionPanel>
                   </AccordionItem>
@@ -294,10 +302,11 @@ interface InvoiceItemsProps {
   cardId: string;
   cardOptions: CardOption[];
   categories: Option[];
+  people: Option[];
 }
 
 function InvoiceItems(props: InvoiceItemsProps) {
-  const { invoice, items, cardId, cardOptions, categories } = props;
+  const { invoice, items, cardId, cardOptions, categories, people } = props;
 
   if (items.length === 0) {
     return (
@@ -380,6 +389,7 @@ function InvoiceItems(props: InvoiceItemsProps) {
                         values={toPurchaseValues(item, cardId)}
                         cards={cardOptions}
                         categories={categories}
+                        people={people}
                         totalInstallments={item.totalInstallments}
                         fromRecurring={item.fromRecurring}
                       />

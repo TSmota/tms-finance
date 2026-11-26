@@ -32,4 +32,5 @@ export interface AccountOption extends Option {
 export interface CardOption extends AccountOption {
   closingDay: number;
   dueDay: number;
+  defaultPersonId?: string | null;
 }

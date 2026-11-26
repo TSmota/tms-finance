@@ -48,6 +48,12 @@ const optionalIdSchema = z
   .optional()
   .transform((value) => (value ? value : null));
 
+/** Preserva `undefined` (herda padrão do cartão) separado de `null` (explicitamente pessoal). */
+const inheritableIdSchema = z
+  .union([idSchema, z.literal(""), z.null()])
+  .optional()
+  .transform((value) => (value === undefined ? undefined : value ? value : null));
+
 const hexColorSchema = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/, "Cor inválida");
@@ -194,6 +200,7 @@ export const categorySchema = z.object({
 export const transactionSchema = z.object({
   accountId: idSchema,
   categoryId: optionalIdSchema,
+  personId: optionalIdSchema.optional(),
   type: z.enum(["INCOME", "EXPENSE"], { message: "Tipo inválido" }),
   amount: positiveAmountSchema,
   /** Moeda do lançamento; pode diferir da moeda da conta. */
@@ -230,11 +237,13 @@ export const creditCardSchema = z.object({
     .optional()
     .transform((value) => value ?? null),
   defaultPaymentAccountId: optionalIdSchema,
+  defaultPersonId: optionalIdSchema.optional(),
 });
 
 export const cardPurchaseSchema = z.object({
   creditCardId: idSchema,
   categoryId: optionalIdSchema,
+  personId: inheritableIdSchema.optional(),
   description: requiredText(TEXT_LIMITS.description, "Descrição é obrigatória"),
   amount: positiveAmountSchema,
   currency: currencySchema,

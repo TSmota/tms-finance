@@ -74,12 +74,26 @@ export interface MaterializationResult {
 }
 
 type RecurringWithTargets = RecurringExpense & {
-  creditCard: { id: string; closingDay: number; dueDay: number; currency: Currency } | null;
+  creditCard: {
+    id: string;
+    closingDay: number;
+    dueDay: number;
+    currency: Currency;
+    defaultPersonId: string | null;
+  } | null;
   account: { id: string; currency: Currency } | null;
 };
 
 const materializeInclude = {
-  creditCard: { select: { id: true, closingDay: true, dueDay: true, currency: true } },
+  creditCard: {
+    select: {
+      id: true,
+      closingDay: true,
+      dueDay: true,
+      currency: true,
+      defaultPersonId: true,
+    },
+  },
   account: { select: { id: true, currency: true } },
 } as const;
 
@@ -388,6 +402,7 @@ async function insertCardOccurrences(
           creditCardId: card.id,
           invoiceId: invoice.id,
           categoryId: recurring.categoryId,
+          personId: card.defaultPersonId,
           recurringExpenseId: recurring.id,
         },
       ],

@@ -36,6 +36,7 @@ interface TransactionsTableProps {
   transactions: TransactionRow[];
   accounts: AccountOption[];
   categories: Option[];
+  people?: Option[];
   emptyMessage?: string;
   /** Botão oferecido quando não há lançamento nenhum. */
   emptyAction?: ReactNode;
@@ -54,6 +55,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
     transactions,
     accounts,
     categories,
+    people,
     emptyMessage = "Nenhuma transação ainda. Adicione a primeira para começar.",
     emptyAction,
   } = props;
@@ -301,6 +303,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
                               values={{
                                 accountId: transaction.accountId,
                                 categoryId: transaction.categoryId ?? "",
+                                personId: transaction.personId ?? "",
                                 type: transaction.type,
                                 amount: transaction.amount,
                                 currency: transaction.currency,
@@ -310,6 +313,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
                               }}
                               accounts={accounts}
                               categories={categories}
+                              people={people}
                             />
                             <DeleteEntityButton
                               id={transaction.id}

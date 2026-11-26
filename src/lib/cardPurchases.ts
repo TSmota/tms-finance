@@ -9,7 +9,7 @@ import { splitInstallments } from "@/lib/installments";
 import { consecutiveCompetencies, invoiceCompetencyFor } from "@/lib/invoiceCycle";
 import { recalcInvoiceTotals, resolveInvoice } from "@/lib/invoices";
 import { requireCreditCard } from "@/lib/creditCards";
-import { assertCategoryOwned } from "@/lib/ownership";
+import { assertCategoryOwned, assertPersonOwned } from "@/lib/ownership";
 import type { CardPurchaseInput } from "@/lib/validations";
 
 /**
@@ -45,6 +45,10 @@ export async function createCardPurchase(
 ): Promise<Transaction[]> {
   const card = await requireCreditCard(userId, input.creditCardId);
   await assertCategoryOwned(userId, input.categoryId);
+  const personId = input.personId === undefined ? card.defaultPersonId : input.personId;
+  if (personId !== null) {
+    await assertPersonOwned(userId, personId);
+  }
 
   const date = parseCalendarDate(input.date);
 
@@ -90,6 +94,7 @@ export async function createCardPurchase(
           creditCardId: card.id,
           invoiceId: invoice.id,
           categoryId: input.categoryId,
+          personId,
           installmentNumber: index + 1,
           totalInstallments: input.installments,
           // A 1ª parcela é a âncora; as seguintes apontam para ela.
@@ -163,6 +168,10 @@ export async function updateCardPurchase(
 
   const card = await requireCreditCard(userId, input.creditCardId);
   await assertCategoryOwned(userId, input.categoryId);
+  const personId = input.personId === undefined ? card.defaultPersonId : input.personId;
+  if (personId !== null) {
+    await assertPersonOwned(userId, personId);
+  }
 
   const date = parseCalendarDate(input.date);
 
@@ -221,6 +230,7 @@ export async function updateCardPurchase(
           creditCardId: card.id,
           invoiceId: invoice.id,
           categoryId: input.categoryId,
+          personId,
           installmentNumber: index + 1,
           totalInstallments: input.installments,
           parentInstallmentId,

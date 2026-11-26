@@ -3,7 +3,7 @@ import type { CreditCard, Currency } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { InvalidOperationError, NotFoundError } from "@/lib/errors";
 import { money, toStorage } from "@/lib/money";
-import { assertAccountOwned } from "@/lib/ownership";
+import { assertAccountOwned, assertPersonOwned } from "@/lib/ownership";
 import { byName } from "@/lib/sorting";
 import { assertValidCycle } from "@/lib/invoiceCycle";
 import type { CreditCardInput } from "@/lib/validations";
@@ -22,6 +22,9 @@ export async function createCreditCard(
 ): Promise<CreditCard> {
   assertValidCycle(input);
   await assertAccountOwned(userId, input.defaultPaymentAccountId);
+  if (input.defaultPersonId) {
+    await assertPersonOwned(userId, input.defaultPersonId);
+  }
 
   return prisma.creditCard.create({
     data: {
@@ -33,6 +36,7 @@ export async function createCreditCard(
       currency: input.currency,
       creditLimit: input.creditLimit === null ? null : toStorage(input.creditLimit),
       defaultPaymentAccountId: input.defaultPaymentAccountId,
+      defaultPersonId: input.defaultPersonId ?? null,
     },
   });
 }
@@ -58,6 +62,9 @@ export async function updateCreditCard(
   }
 
   await assertAccountOwned(userId, input.defaultPaymentAccountId);
+  if (input.defaultPersonId) {
+    await assertPersonOwned(userId, input.defaultPersonId);
+  }
 
   return prisma.creditCard.update({
     where: { id },
@@ -68,6 +75,7 @@ export async function updateCreditCard(
       dueDay: input.dueDay,
       creditLimit: input.creditLimit === null ? null : toStorage(input.creditLimit),
       defaultPaymentAccountId: input.defaultPaymentAccountId,
+      defaultPersonId: input.defaultPersonId ?? null,
     },
   });
 }
@@ -121,6 +129,8 @@ export interface CreditCardSummary {
   creditLimit: number | null;
   defaultPaymentAccountId: string | null;
   defaultPaymentAccountName: string | null;
+  defaultPersonId: string | null;
+  defaultPersonName: string | null;
   /** Soma das faturas ainda não pagas. */
   usedLimit: number;
   /** `null` quando o limite não foi informado. */
@@ -139,6 +149,7 @@ export async function listCreditCards(userId: string): Promise<CreditCardSummary
     where: { userId },
     include: {
       defaultPaymentAccount: { select: { name: true } },
+      defaultPerson: { select: { name: true } },
       invoices: {
         where: { status: { not: "PAID" } },
         select: { totalAmount: true },
@@ -164,6 +175,8 @@ export async function listCreditCards(userId: string): Promise<CreditCardSummary
         creditLimit: limit?.toNumber() ?? null,
         defaultPaymentAccountId: card.defaultPaymentAccountId,
         defaultPaymentAccountName: card.defaultPaymentAccount?.name ?? null,
+        defaultPersonId: card.defaultPersonId,
+        defaultPersonName: card.defaultPerson?.name ?? null,
         usedLimit: used.toNumber(),
         availableLimit: limit === null ? null : limit.minus(used).toNumber(),
         openInvoiceCount: card.invoices.length,
@@ -176,7 +189,14 @@ export async function listCreditCards(userId: string): Promise<CreditCardSummary
 export async function listCreditCardOptions(userId: string): Promise<CardOption[]> {
   const cards = await prisma.creditCard.findMany({
     where: { userId },
-    select: { id: true, name: true, currency: true, closingDay: true, dueDay: true },
+    select: {
+      id: true,
+      name: true,
+      currency: true,
+      closingDay: true,
+      dueDay: true,
+      defaultPersonId: true,
+    },
   });
 
   return cards.sort(byName).map((card) => ({
@@ -185,6 +205,7 @@ export async function listCreditCardOptions(userId: string): Promise<CardOption[
     currency: card.currency,
     closingDay: card.closingDay,
     dueDay: card.dueDay,
+    defaultPersonId: card.defaultPersonId,
   }));
 }
 

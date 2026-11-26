@@ -104,6 +104,8 @@ export async function getMonthSummary(
         userId,
         creditCardId: { not: null },
         type: { not: "INVOICE_PAYMENT" },
+        // Compras atribuídas a terceiros entram na fatura, mas não no gasto pessoal.
+        personId: null,
         date: window,
       },
       select: {

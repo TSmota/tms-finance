@@ -80,13 +80,24 @@ export async function personDeletionBlocker(
   userId: string,
   id: string,
 ): Promise<string | null> {
-  const openDebts = await prisma.debt.count({
-    where: { userId, personId: id, status: { not: "PAID" } },
-  });
+  const [openDebts, attributedTxs] = await Promise.all([
+    prisma.debt.count({
+      where: { userId, personId: id, status: { not: "PAID" } },
+    }),
+    prisma.transaction.count({
+      where: { userId, personId: id, debtId: null },
+    }),
+  ]);
 
-  return openDebts > 0
-    ? `Esta pessoa tem ${openDebts} dívida(s) em aberto. Quite ou remova as dívidas antes.`
-    : null;
+  if (openDebts > 0) {
+    return `Esta pessoa tem ${openDebts} dívida(s) em aberto. Quite ou remova as dívidas antes.`;
+  }
+
+  if (attributedTxs > 0) {
+    return `Esta pessoa tem ${attributedTxs} lançamento(s) atribuído(s). Remova ou reatribua os lançamentos antes.`;
+  }
+
+  return null;
 }
 
 export interface PersonPosition {
@@ -132,7 +143,7 @@ export async function getPeopleOverview(
   userId: string,
   baseCurrency: Currency,
 ): Promise<PeopleOverview> {
-  const [people, debts] = await Promise.all([
+  const [people, debts, attributedTxs] = await Promise.all([
     prisma.person.findMany({ where: { userId } }),
     prisma.debt.findMany({
       where: { userId },
@@ -145,12 +156,33 @@ export async function getPeopleOverview(
         currency: true,
       },
     }),
+    prisma.transaction.findMany({
+      where: {
+        userId,
+        personId: { not: null },
+        debtId: null,
+        status: "CONFIRMED",
+        OR: [
+          { creditCardId: { not: null }, type: "EXPENSE" },
+          { accountId: { not: null }, type: "INCOME" },
+        ],
+      },
+      select: {
+        personId: true,
+        type: true,
+        convertedAmount: true,
+        creditCard: { select: { currency: true } },
+        account: { select: { currency: true } },
+      },
+    }),
   ]);
 
-  const { rates, complete } = await resolveRatesToBase(
-    debts.map((debt) => debt.currency),
-    baseCurrency,
-  );
+  const currencies = [
+    ...debts.map((debt) => debt.currency),
+    ...attributedTxs.map((tx) => tx.creditCard?.currency ?? tx.account?.currency),
+  ].filter((currency): currency is Currency => currency !== undefined && currency !== null);
+
+  const { rates, complete } = await resolveRatesToBase(currencies, baseCurrency);
 
   interface Bucket {
     receivable: Money[];
@@ -227,11 +259,47 @@ export async function getPeopleOverview(
     }
   }
 
+  for (const tx of attributedTxs) {
+    if (!tx.personId) {
+      continue;
+    }
+
+    const bucket = bucketFor(tx.personId);
+    const currency = tx.creditCard?.currency ?? tx.account?.currency;
+
+    if (currency) {
+      bucket.currencies.add(currency);
+    }
+
+    const rate = currency ? rates.get(currency) : undefined;
+
+    if (rate === undefined) {
+      bucket.complete = false;
+      continue;
+    }
+
+    const value = money(tx.convertedAmount).times(rate);
+
+    if (tx.type === "EXPENSE") {
+      bucket.receivable.push(value);
+      bucket.originalReceivable.push(value);
+    } else {
+      // Reembolso/pagamento recebido em conta reduz o saldo a receber da pessoa.
+      bucket.receivable.push(value.negated());
+      bucket.settledReceivable.push(value);
+    }
+  }
+
   const positions = people
     .map((person) => {
       const bucket = buckets.get(person.id);
-      const receivable = sumMoney(bucket?.receivable ?? []);
-      const payable = sumMoney(bucket?.payable ?? []);
+      const rawReceivable = sumMoney(bucket?.receivable ?? []);
+      const rawPayable = sumMoney(bucket?.payable ?? []);
+      // Se o reembolso excedeu os gastos atribuídos, o excedente vira saldo a pagar.
+      const receivable = rawReceivable.isNegative() ? money(0) : rawReceivable;
+      const payable = rawReceivable.isNegative()
+        ? rawPayable.plus(rawReceivable.abs())
+        : rawPayable;
       const originalReceivable = sumMoney(bucket?.originalReceivable ?? []);
       const settledReceivable = sumMoney(bucket?.settledReceivable ?? []);
       const originalPayable = sumMoney(bucket?.originalPayable ?? []);
@@ -257,8 +325,11 @@ export async function getPeopleOverview(
     })
     // Quem tem posição em aberto primeiro; depois em ordem alfabética.
     .sort((a, b) => {
-      if ((a.openDebts > 0) !== (b.openDebts > 0)) {
-        return a.openDebts > 0 ? -1 : 1;
+      const aActive = a.openDebts > 0 || a.receivable !== 0 || a.payable !== 0;
+      const bActive = b.openDebts > 0 || b.receivable !== 0 || b.payable !== 0;
+
+      if (aActive !== bActive) {
+        return aActive ? -1 : 1;
       }
 
       return byName(a, b);

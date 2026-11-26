@@ -18,13 +18,14 @@ import type { AccountOption, Option } from "@/lib/options";
 interface AddTransactionButtonProps {
   accounts: AccountOption[];
   categories: Option[];
+  people?: Option[];
   /** Último recurso do campo de moeda: a moeda base do usuário. */
   baseCurrency: CurrencyCode;
   defaultAccountId?: string;
 }
 
 export function AddTransactionButton(props: AddTransactionButtonProps) {
-  const { accounts, categories, baseCurrency, defaultAccountId } = props;
+  const { accounts, categories, people, baseCurrency, defaultAccountId } = props;
 
   const { opened, open, close, loading, run } = useActionModal({
     successMessage: "Transação adicionada",
@@ -38,6 +39,7 @@ export function AddTransactionButton(props: AddTransactionButtonProps) {
   const initialValues: TransactionFormValues = {
     accountId: initialAccount?.value ?? "",
     categoryId: "",
+    personId: "",
     type: "EXPENSE",
     amount: 0,
     currency: initialAccount?.currency ?? baseCurrency,
@@ -88,6 +90,7 @@ export function AddTransactionButton(props: AddTransactionButtonProps) {
           form={form}
           accounts={accounts}
           categories={categories}
+          people={people}
           showManualFx={showManualFx}
         />
       </FormModal>

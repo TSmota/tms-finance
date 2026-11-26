@@ -15,17 +15,19 @@ export type CreditCardFormValues = {
   currency: string;
   creditLimit: number | null;
   defaultPaymentAccountId: string;
+  defaultPersonId?: string | null;
 };
 
 interface CreditCardFieldsProps {
   form: UseFormReturnType<CreditCardFormValues>;
   accounts: Option[];
+  people?: Option[];
   /** Definida ao editar: a moeda passa a ser exibida como imutável. */
   lockedCurrency?: CurrencyCode;
 }
 
 export function CreditCardFields(props: CreditCardFieldsProps) {
-  const { form, accounts, lockedCurrency } = props;
+  const { form, accounts, people = [], lockedCurrency } = props;
 
   return (
     <>
@@ -99,6 +101,18 @@ export function CreditCardFields(props: CreditCardFieldsProps) {
         key={form.key("defaultPaymentAccountId")}
         {...form.getInputProps("defaultPaymentAccountId")}
       />
+      {people.length > 0 && (
+        <Select
+          label="Pessoa padrão (terceiros)"
+          description="Opcional. Compras neste cartão serão atribuídas a esta pessoa por padrão."
+          placeholder="Nenhuma (pessoal)"
+          data={people}
+          clearable
+          searchable
+          key={form.key("defaultPersonId")}
+          {...form.getInputProps("defaultPersonId")}
+        />
+      )}
     </>
   );
 }

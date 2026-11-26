@@ -20,6 +20,7 @@ interface EditCardPurchaseButtonProps {
   values: CardPurchaseFormValues;
   cards: CardOption[];
   categories: Option[];
+  people?: Option[];
   /** Quantidade de parcelas atual, para avisar que todas serão reescritas. */
   totalInstallments: number | null;
   /** Cobrança gerada por um recorrente: o aviso muda de tom. */
@@ -33,7 +34,7 @@ interface EditCardPurchaseButtonProps {
  * **total** do grupo, não com o valor da parcela clicada.
  */
 export function EditCardPurchaseButton(props: EditCardPurchaseButtonProps) {
-  const { id, values, cards, categories, totalInstallments, fromRecurring } = props;
+  const { id, values, cards, categories, people, totalInstallments, fromRecurring } = props;
 
   const { opened, open, close, loading, run } = useActionModal({
     successMessage: "Compra atualizada",
@@ -96,6 +97,7 @@ export function EditCardPurchaseButton(props: EditCardPurchaseButtonProps) {
           form={form}
           cards={cards}
           categories={categories}
+          people={people}
           showManualFx={showManualFx}
         />
       </FormModal>

@@ -477,3 +477,35 @@ describe("debtSchema: destino da origem", () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe("cardPurchaseSchema — personId tri-state (inheritableIdSchema)", () => {
+  const base = {
+    creditCardId: UUID,
+    categoryId: null,
+    description: "Compra",
+    amount: 50,
+    currency: "BRL",
+    date: "2026-08-26",
+    installments: 1,
+    manualFxRate: null,
+  };
+
+  it("preserva undefined para herança do cartão, converte '' em null e aceita UUID", () => {
+    const omitted = cardPurchaseSchema.parse(base);
+    expect(omitted.personId).toBeUndefined();
+
+    const explicitNull = cardPurchaseSchema.parse({ ...base, personId: null });
+    expect(explicitNull.personId).toBeNull();
+
+    const emptyString = cardPurchaseSchema.parse({ ...base, personId: "" });
+    expect(emptyString.personId).toBeNull();
+
+    const withUuid = cardPurchaseSchema.parse({ ...base, personId: OTHER_UUID });
+    expect(withUuid.personId).toBe(OTHER_UUID);
+  });
+
+  it("recusa personId que não seja UUID válido", () => {
+    const result = cardPurchaseSchema.safeParse({ ...base, personId: "nao-uuid" });
+    expect(result.success).toBe(false);
+  });
+});
