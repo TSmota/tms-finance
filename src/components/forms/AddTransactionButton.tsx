@@ -20,22 +20,27 @@ interface AddTransactionButtonProps {
   categories: Option[];
   /** Último recurso do campo de moeda: a moeda base do usuário. */
   baseCurrency: CurrencyCode;
+  defaultAccountId?: string;
 }
 
 export function AddTransactionButton(props: AddTransactionButtonProps) {
-  const { accounts, categories, baseCurrency } = props;
+  const { accounts, categories, baseCurrency, defaultAccountId } = props;
 
   const { opened, open, close, loading, run } = useActionModal({
     successMessage: "Transação adicionada",
   });
   const [showManualFx, setShowManualFx] = useState(false);
 
+  const initialAccount =
+    (defaultAccountId ? accounts.find((a) => a.value === defaultAccountId) : undefined) ??
+    accounts[0];
+
   const initialValues: TransactionFormValues = {
-    accountId: accounts[0]?.value ?? "",
+    accountId: initialAccount?.value ?? "",
     categoryId: "",
     type: "EXPENSE",
     amount: 0,
-    currency: accounts[0]?.currency ?? baseCurrency,
+    currency: initialAccount?.currency ?? baseCurrency,
     date: todayCalendarDate(),
     description: "",
     manualFxRate: undefined,
