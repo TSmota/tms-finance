@@ -6,18 +6,20 @@ import {
   createAccount,
   deleteAccount,
   getAccountBalances,
+  getAccountDetail,
   listAccounts,
   updateAccount,
 } from "@/lib/accounts";
 import { reconcileBalance } from "@/lib/accountBalance";
 import { createTransaction } from "@/lib/transactions";
+import { createTransfer } from "@/lib/transfers";
 import { createDebt } from "@/lib/debts";
 import { createCardPurchase } from "@/lib/cardPurchases";
 import { listCardInvoices } from "@/lib/invoices";
 import { payInvoice } from "@/lib/invoicePayments";
 import { accountSchema } from "@/lib/validations";
 import { makeAccount, makeCategory, makeCreditCard, makePerson, makeUser } from "@tests/support/factories";
-import { accountInput } from "@tests/support/inputs";
+import { accountInput, transferInput } from "@tests/support/inputs";
 import { setFxAvailable, setRates } from "@tests/setup-fx";
 
 beforeEach(() => {
@@ -429,5 +431,199 @@ describe("tipo e instituição (multi-banco)", () => {
 
     const after = await prisma.creditCard.findUniqueOrThrow({ where: { id: card.id } });
     expect(after.defaultPaymentAccountId).toBeNull();
+  });
+});
+
+describe("getAccountDetail", () => {
+  it("lança NotFoundError quando a conta não existe ou pertence a outro usuário", async () => {
+    const user1 = await makeUser();
+    const user2 = await makeUser();
+    const account1 = await makeAccount(user1.id);
+
+    await expect(
+      getAccountDetail(user2.id, account1.id, 2026, 8, "BRL"),
+    ).rejects.toBeInstanceOf(NotFoundError);
+
+    await expect(
+      getAccountDetail(user1.id, "00000000-0000-0000-0000-000000000000", 2026, 8, "BRL"),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("retorna resumo da conta com saldo atual e inicial, além da conversão de moeda", async () => {
+    const user = await makeUser({ baseCurrency: "BRL" });
+    const account = await makeAccount(user.id, {
+      name: "Wise USD",
+      currency: "USD",
+      initialBalance: "500.00",
+    });
+
+    const detail = await getAccountDetail(user.id, account.id, 2026, 8, user.baseCurrency);
+
+    expect(detail.account.id).toBe(account.id);
+    expect(detail.account.name).toBe("Wise USD");
+    expect(detail.account.currency).toBe("USD");
+    expect(detail.account.initialBalance).toBe(500);
+    expect(detail.account.currentBalance).toBe(500);
+    // Cotação USD->BRL é 5.4 definida no beforeEach (500 * 5.4 = 2700)
+    expect(detail.account.convertedBalance).toBe(2700);
+  });
+
+  it("agrega transações do mês e calcula totais de receita, despesa e resultado líquido", async () => {
+    const user = await makeUser();
+    const account = await makeAccount(user.id, { initialBalance: "1000.00" });
+    const category = await makeCategory(user.id, { name: "Alimentação", color: "#e03131" });
+
+    // Transação de despesa em agosto/2026
+    await createTransaction(user.id, {
+      accountId: account.id,
+      categoryId: category.id,
+      type: "EXPENSE",
+      amount: 150.5,
+      currency: "BRL",
+      date: "2026-08-10",
+      description: "Supermercado",
+    });
+
+    // Transação de receita em agosto/2026
+    await createTransaction(user.id, {
+      accountId: account.id,
+      categoryId: null,
+      type: "INCOME",
+      amount: 500,
+      currency: "BRL",
+      date: "2026-08-15",
+      description: "Freelance",
+    });
+
+    // Transação de outro mês (julho) - não deve entrar no resumo do mês de agosto
+    await createTransaction(user.id, {
+      accountId: account.id,
+      categoryId: null,
+      type: "INCOME",
+      amount: 200,
+      currency: "BRL",
+      date: "2026-07-20",
+      description: "Outro mês",
+    });
+
+    const detail = await getAccountDetail(user.id, account.id, 2026, 8, user.baseCurrency);
+
+    expect(detail.monthSummary.totalIncome).toBe(500);
+    expect(detail.monthSummary.totalExpense).toBe(150.5);
+    expect(detail.monthSummary.net).toBe(349.5);
+    expect(detail.statement).toHaveLength(2);
+
+    const expenseItem = detail.statement.find((item) => item.description === "Supermercado");
+    expect(expenseItem).toBeDefined();
+    expect(expenseItem?.type).toBe("EXPENSE");
+    expect(expenseItem?.kind).toBe("TRANSACTION");
+    expect(expenseItem?.amount).toBe(150.5);
+    expect(expenseItem?.categoryName).toBe("Alimentação");
+    expect(expenseItem?.categoryColor).toBe("#e03131");
+  });
+
+  it("unifica transferências saintes e entrantes no extrato com a contraparte identificada", async () => {
+    const user = await makeUser();
+    const accountA = await makeAccount(user.id, { name: "Conta A", initialBalance: "1000.00" });
+    const accountB = await makeAccount(user.id, { name: "Conta B", initialBalance: "500.00" });
+
+    // Transferência de A para B: 200
+    await createTransfer(
+      user.id,
+      transferInput(accountA.id, accountB.id, {
+        amount: 200,
+        date: "2026-08-05",
+        description: "Envio para poupança",
+      }),
+    );
+
+    // Visão da Conta A: transferência sainte (EXPENSE)
+    const detailA = await getAccountDetail(user.id, accountA.id, 2026, 8, user.baseCurrency);
+    expect(detailA.monthSummary.totalExpense).toBe(200);
+    expect(detailA.monthSummary.net).toBe(-200);
+    expect(detailA.statement).toHaveLength(1);
+    expect(detailA.statement[0]).toMatchObject({
+      type: "EXPENSE",
+      kind: "TRANSFER_OUT",
+      amount: 200,
+      description: "Envio para poupança",
+      counterpartAccountName: "Conta B",
+    });
+
+    // Visão da Conta B: transferência entrante (INCOME)
+    const detailB = await getAccountDetail(user.id, accountB.id, 2026, 8, user.baseCurrency);
+    expect(detailB.monthSummary.totalIncome).toBe(200);
+    expect(detailB.monthSummary.net).toBe(200);
+    expect(detailB.statement).toHaveLength(1);
+    expect(detailB.statement[0]).toMatchObject({
+      type: "INCOME",
+      kind: "TRANSFER_IN",
+      amount: 200,
+      description: "Envio para poupança",
+      counterpartAccountName: "Conta A",
+    });
+  });
+
+  it("inclui cartões com débito padrão e despesas recorrentes ativas vinculadas", async () => {
+    const user = await makeUser();
+    const account = await makeAccount(user.id, { name: "Nubank Principal" });
+    const category = await makeCategory(user.id);
+
+    await makeCreditCard(user.id, {
+      name: "Cartão Ultravioleta",
+      defaultPaymentAccountId: account.id,
+    });
+
+    await prisma.recurringExpense.create({
+      data: {
+        userId: user.id,
+        accountId: account.id,
+        categoryId: category.id,
+        description: "Netflix",
+        amount: "55.90",
+        currency: "BRL",
+        frequency: "MONTHLY",
+        dueDay: 10,
+        startDate: new Date("2026-01-01"),
+        active: true,
+      },
+    });
+
+    // Despesa recorrente inativa não deve aparecer nos vínculos ativos
+    await prisma.recurringExpense.create({
+      data: {
+        userId: user.id,
+        accountId: account.id,
+        categoryId: category.id,
+        description: "Academia Cancelada",
+        amount: "100.00",
+        currency: "BRL",
+        frequency: "MONTHLY",
+        dueDay: 15,
+        startDate: new Date("2026-01-01"),
+        active: false,
+      },
+    });
+
+    const detail = await getAccountDetail(user.id, account.id, 2026, 8, user.baseCurrency);
+
+    expect(detail.linkedCreditCards).toHaveLength(1);
+    expect(detail.linkedCreditCards[0].name).toBe("Cartão Ultravioleta");
+
+    expect(detail.linkedRecurringExpenses).toHaveLength(1);
+    expect(detail.linkedRecurringExpenses[0].description).toBe("Netflix");
+    expect(detail.linkedRecurringExpenses[0].amount).toBe(55.9);
+  });
+
+  it("retorna extrato vazio e totais zerados para mês sem movimentações", async () => {
+    const user = await makeUser();
+    const account = await makeAccount(user.id, { initialBalance: "300.00" });
+
+    const detail = await getAccountDetail(user.id, account.id, 2026, 8, user.baseCurrency);
+
+    expect(detail.monthSummary.totalIncome).toBe(0);
+    expect(detail.monthSummary.totalExpense).toBe(0);
+    expect(detail.monthSummary.net).toBe(0);
+    expect(detail.statement).toEqual([]);
   });
 });

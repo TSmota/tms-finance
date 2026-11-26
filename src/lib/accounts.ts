@@ -6,6 +6,7 @@ import { InvalidOperationError, NotFoundError } from "@/lib/errors";
 import { resolveRatesToBase } from "@/lib/fxService";
 import { money, toStorage } from "@/lib/money";
 import { byName } from "@/lib/sorting";
+import { monthRange } from "@/lib/dates";
 import type { AccountInput } from "@/lib/validations";
 
 /**
@@ -211,4 +212,241 @@ export async function getAccountBalances(
   });
 
   return { accounts: result, netWorth: netWorth.toNumber(), netWorthComplete };
+}
+
+export interface AccountStatementItem {
+  id: string;
+  date: Date;
+  description: string;
+  amount: number;
+  currency: Currency;
+  type: "INCOME" | "EXPENSE";
+  kind: "TRANSACTION" | "TRANSFER_OUT" | "TRANSFER_IN";
+  categoryName?: string | null;
+  categoryColor?: string | null;
+  counterpartAccountName?: string | null;
+  creditCardName?: string | null;
+  debtDescription?: string | null;
+}
+
+export interface AccountDetail {
+  account: {
+    id: string;
+    name: string;
+    type: AccountType;
+    institution: string | null;
+    currency: Currency;
+    initialBalance: number;
+    currentBalance: number;
+    convertedBalance: number | null;
+  };
+  monthSummary: {
+    totalIncome: number;
+    totalExpense: number;
+    net: number;
+  };
+  statement: AccountStatementItem[];
+  linkedCreditCards: Array<{
+    id: string;
+    name: string;
+    institution: string | null;
+    creditLimit: number | null;
+    currency: Currency;
+    closingDay: number;
+    dueDay: number;
+  }>;
+  linkedRecurringExpenses: Array<{
+    id: string;
+    description: string;
+    amount: number;
+    currency: Currency;
+    frequency: string;
+  }>;
+}
+
+/**
+ * Detalhes de uma conta financeira específica em um determinado mês/ano.
+ * Retorna metadados da conta, resumo financeiro da competência, extrato
+ * cronológico unificado (transações e transferências) e vínculos ativos.
+ */
+export async function getAccountDetail(
+  userId: string,
+  id: string,
+  year: number,
+  month: number,
+  baseCurrency: Currency,
+): Promise<AccountDetail> {
+  const account = await prisma.financialAccount.findFirst({
+    where: { id, userId },
+  });
+
+  if (!account) {
+    throw new NotFoundError("Conta não encontrada");
+  }
+
+  const { start, end } = monthRange(year, month);
+
+  const [ratesResult, transactions, outgoingTransfers, incomingTransfers, linkedCards, linkedRecurring] =
+    await Promise.all([
+      resolveRatesToBase([account.currency], baseCurrency),
+      prisma.transaction.findMany({
+        where: {
+          userId,
+          accountId: id,
+          // Apenas movimentações efetivadas entram no extrato e nos totais do mês.
+          status: "CONFIRMED",
+          date: { gte: start, lt: end },
+        },
+        include: {
+          category: { select: { name: true, color: true } },
+          creditCard: { select: { name: true } },
+          debt: { select: { description: true } },
+        },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      }),
+      prisma.transfer.findMany({
+        where: {
+          userId,
+          sourceAccountId: id,
+          date: { gte: start, lt: end },
+        },
+        include: {
+          destinationAccount: { select: { name: true } },
+        },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      }),
+      prisma.transfer.findMany({
+        where: {
+          userId,
+          destinationAccountId: id,
+          date: { gte: start, lt: end },
+        },
+        include: {
+          sourceAccount: { select: { name: true } },
+        },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      }),
+      prisma.creditCard.findMany({
+        where: { userId, defaultPaymentAccountId: id },
+        select: {
+          id: true,
+          name: true,
+          institution: true,
+          currency: true,
+          creditLimit: true,
+          closingDay: true,
+          dueDay: true,
+        },
+        orderBy: { name: "asc" },
+      }),
+      prisma.recurringExpense.findMany({
+        where: { userId, accountId: id, active: true },
+        select: {
+          id: true,
+          description: true,
+          amount: true,
+          currency: true,
+          frequency: true,
+        },
+        orderBy: { description: "asc" },
+      }),
+    ]);
+
+  const rate = ratesResult.rates.get(account.currency);
+  const convertedBalance =
+    rate !== undefined ? money(account.currentBalance).times(rate).toNumber() : null;
+
+  const statement: AccountStatementItem[] = [];
+  let totalIncome = money(0);
+  let totalExpense = money(0);
+
+  for (const tx of transactions) {
+    const type = tx.type === "INCOME" ? "INCOME" : "EXPENSE";
+    if (type === "INCOME") {
+      totalIncome = totalIncome.plus(tx.convertedAmount);
+    } else {
+      totalExpense = totalExpense.plus(tx.convertedAmount);
+    }
+
+    statement.push({
+      id: tx.id,
+      date: tx.date,
+      description: tx.description,
+      amount: Number(tx.convertedAmount),
+      currency: account.currency,
+      type,
+      kind: "TRANSACTION",
+      categoryName: tx.category?.name,
+      categoryColor: tx.category?.color,
+      creditCardName: tx.creditCard?.name,
+      debtDescription: tx.debt?.description,
+    });
+  }
+
+  for (const tr of outgoingTransfers) {
+    totalExpense = totalExpense.plus(tr.amount);
+    statement.push({
+      id: tr.id,
+      date: tr.date,
+      description: tr.description,
+      amount: Number(tr.amount),
+      currency: tr.currency,
+      type: "EXPENSE",
+      kind: "TRANSFER_OUT",
+      counterpartAccountName: tr.destinationAccount.name,
+    });
+  }
+
+  for (const tr of incomingTransfers) {
+    totalIncome = totalIncome.plus(tr.amount);
+    statement.push({
+      id: tr.id,
+      date: tr.date,
+      description: tr.description,
+      amount: Number(tr.amount),
+      currency: tr.currency,
+      type: "INCOME",
+      kind: "TRANSFER_IN",
+      counterpartAccountName: tr.sourceAccount.name,
+    });
+  }
+
+  statement.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+  const net = totalIncome.minus(totalExpense);
+
+  return {
+    account: {
+      id: account.id,
+      name: account.name,
+      type: account.type,
+      institution: account.institution,
+      currency: account.currency,
+      initialBalance: Number(account.initialBalance),
+      currentBalance: Number(account.currentBalance),
+      convertedBalance,
+    },
+    monthSummary: {
+      totalIncome: totalIncome.toNumber(),
+      totalExpense: totalExpense.toNumber(),
+      net: net.toNumber(),
+    },
+    statement,
+    linkedCreditCards: linkedCards.map((c) => ({
+      id: c.id,
+      name: c.name,
+      institution: c.institution,
+      creditLimit: c.creditLimit !== null ? Number(c.creditLimit) : null,
+      currency: c.currency,
+      closingDay: c.closingDay,
+      dueDay: c.dueDay,
+    })),
+    linkedRecurringExpenses: linkedRecurring.map((r) => ({
+      id: r.id,
+      description: r.description,
+      amount: Number(r.amount),
+      currency: r.currency,
+      frequency: r.frequency,
+    })),
+  };
 }

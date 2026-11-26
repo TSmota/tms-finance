@@ -40,11 +40,11 @@ const ROUTES = [
 ];
 
 /**
- * Quantas rotas de detalhe `discoverDetailRoutes` tem de achar. Sem cartão nem
- * dívida no banco ela devolve zero, e a auditoria passaria medindo duas telas a
+ * Quantas rotas de detalhe `discoverDetailRoutes` tem de achar. Sem conta, cartão
+ * nem dívida no banco ela devolve menos, e a auditoria passaria medindo telas a
  * menos — um gate que degrada em silêncio não é gate.
  */
-const DETAIL_ROUTES = 2;
+const DETAIL_ROUTES = 3;
 
 /**
  * Todo formulário deste app vive dentro de um `Modal`, e o axe nunca tinha
@@ -302,6 +302,7 @@ async function discoverDetailRoutes(cdp: Cdp): Promise<string[]> {
   for (const [lista, prefixo] of [
     ["/dashboard/cards", "/dashboard/cards/"],
     ["/dashboard/debts", "/dashboard/debts/"],
+    ["/dashboard/accounts", "/dashboard/accounts/"],
   ] as const) {
     await cdp.goto(`${BASE}${lista}`);
     const href = (await cdp.evaluate(
